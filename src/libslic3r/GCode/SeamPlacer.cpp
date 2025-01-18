@@ -1574,7 +1574,7 @@ void SeamPlacer::place_seam(const Layer *layer, ExtrusionLoop &loop,
           ((perimeter_point.position - layer_perimeters.points[index_of_prev].position).head<2>().normalized()
            + (perimeter_point.position - layer_perimeters.points[index_of_next].position).head<2>().normalized())
           * 0.5;
-      depth = 1.4142 * depth / beta_angle;
+      depth = 2*1.4142 * depth / beta_angle;
       // There are some nice geometric identities in determination of the correct depth of new seam point.
       //overshoot the target depth, in concave angles it will correctly snap to the corner; TODO: find out why such big overshoot is needed.
       Vec2f final_pos = perimeter_point.position.head<2>() + depth * dir_to_middle;
@@ -1582,7 +1582,7 @@ void SeamPlacer::place_seam(const Layer *layer, ExtrusionLoop &loop,
     } else { // not concave angle, in that case the nearest point is the good candidate
       // but for staggering, we also need to recompute depth of the inner perimter, because in convex corners, the distance is larger than layer width
       // we want the perpendicular depth, not distance to nearest point
-      depth = depth * beta_angle / 1.4142;
+      depth = 2*depth * beta_angle / 1.4142;
     }
 
     seam_point = projected_point.foot_pt;
