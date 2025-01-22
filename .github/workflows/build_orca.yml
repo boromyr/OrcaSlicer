@@ -1,5 +1,3 @@
-name: Build OrcaSlicer
-
 on:
   workflow_call:
     inputs:
@@ -17,129 +15,116 @@ on:
         type: string
 
 jobs:
-  build_orca:
-    name: Build OrcaSlicer
-    runs-on: ${{ inputs.os }}
-    env:
-      date:
-      ver:
-      ver_pure:
+build_orca:
+  name: Build OrcaSlicer
+  runs-on: ${{ inputs.os }}
+  env:
+    date:
+    ver:
+    ver_pure:
 
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-        with:
-          lfs: 'true'
+  steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+      with:
+        lfs: 'true'
 
-      - name: load cached deps
-        uses: actions/cache@v4
-        with:
-          path: ${{ inputs.cache-path }}
-          key: ${{ inputs.cache-key }}
-          fail-on-cache-miss: true
+    - name: load cached deps
+      uses: actions/cache@v4
+      with:
+        path: ${{ inputs.cache-path }}
+        key: ${{ inputs.cache-key }}
+        fail-on-cache-miss: true
 
-      - uses: lukka/get-cmake@latest
-        with:
-          cmakeVersion: "~3.28.0"  # use most recent 3.28.x version
-          
-      - name: Get the version and date on Windows
-        if: inputs.os == 'windows-latest'
-        run: |
-          $date = Get-Date -Format 'yyyyMMdd'
-          $ref = "${{ github.ref }}"
-          $eventName = "${{ github.event_name }}"
-          $prNumber = "${{ github.event.number }}"
+    - uses: lukka/get-cmake@latest
+      with:
+        cmakeVersion: "~3.28.0"
 
-          if ($eventName -eq 'pull_request') {
-              $ver = "PR" + $prNumber
-          } else {
-              $versionContent = Get-Content version.inc -Raw
-              if ($versionContent -match 'set\(SoftFever_VERSION "(.*?)"\)') {
-                  $ver = $matches[1]
-              }
-              $ver = "V$ver"
-          }
+    - name: Get the version and date on Windows
+      if: inputs.os == 'windows-latest'
+      run: |
+        $date = Get-Date -Format 'yyyyMMdd'
+        $ref = "${{ github.ref }}"
+        $eventName = "${{ github.event_name }}"
+        $prNumber = "${{ github.event.number }}"
 
-          echo "ver=$ver" | Out-File -Append -FilePath $env:GITHUB_ENV -Encoding utf8
-          echo "date=$date" | Out-File -Append -FilePath $env:GITHUB_ENV -Encoding utf8
-          echo "date: ${{ env.date }} version: ${{ env.ver }}"
-        shell: pwsh
+        if ($eventName -eq 'pull_request') {
+            $ver = "PR" + $prNumber
+        } else {
+            $versionContent = Get-Content version.inc -Raw
+            if ($versionContent -match 'set\(SoftFever_VERSION "(.*?)"\)') {
+                $ver = $matches[1]
+            }
+            $ver = "V$ver"
+        }
 
-      - name: setup MSVC
-        if: inputs.os == 'windows-latest'
-        uses: microsoft/setup-msbuild@v2
+        echo "ver=$ver" | Out-File -Append -FilePath $env:GITHUB_ENV -Encoding utf8
+        echo "date=$date" | Out-File -Append -FilePath $env:GITHUB_ENV -Encoding utf8
+        echo "date: ${{ env.date }} version: ${{ env.ver }}"
+      shell: pwsh
 
-      - name: Install nsis
-        if: inputs.os == 'windows-latest'
-        run: |
-          dir "C:/Program Files (x86)/Windows Kits/10/Include"
-          choco install nsis
+    - name: setup MSVC
+      if: inputs.os == 'windows-latest'
+      uses: microsoft/setup-msbuild@v2
 
-      - name: Build slicer Win
-        if: inputs.os == 'windows-latest'
-        working-directory: ${{ github.workspace }}
-        env:
-          WindowsSdkDir: 'C:\Program Files (x86)\Windows Kits\10\'
-          WindowsSDKVersion: '10.0.22000.0\'
-        run: .\build_release_vs2022.bat slicer
+    - name: Install nsis
+      if: inputs.os == 'windows-latest'
+      run: |
+        dir "C:/Program Files (x86)/Windows Kits/10/Include"
+        choco install nsis
 
-      - name: Create installer Win
-        if: inputs.os == 'windows-latest'
-        working-directory: ${{ github.workspace }}/build
-        run: |
-          cpack -G NSIS
+    - name: Build slicer Win
+      if: inputs.os == 'windows-latest'
+      working-directory: ${{ github.workspace }}
+      env:
+        WindowsSdkDir: 'C:\Program Files (x86)\Windows Kits\10\'
+        WindowsSDKVersion: '10.0.22000.0\'
+      run: .\build_release_vs2022.bat slicer
 
-      - name: Pack app
-        if: inputs.os == 'windows-latest'
-        working-directory: ${{ github.workspace }}/build
-        shell: cmd
-        run: '"C:/Program Files/7-Zip/7z.exe" a -tzip OrcaSlicer_Windows_${{ env.ver }}_portable.zip ${{ github.workspace }}/build/OrcaSlicer'
+    - name: Create installer Win
+      if: inputs.os == 'windows-latest'
+      working-directory: ${{ github.workspace }}/build
+      run: |
+        cpack -G NSIS
 
-      - name: Pack PDB
-        if: inputs.os == 'windows-latest'
-        working-directory: ${{ github.workspace }}/build/src/Release
-        shell: cmd
-        run: '"C:/Program Files/7-Zip/7z.exe" a -m0=lzma2 -mx9 Debug_PDB_${{ env.ver }}_for_developers_only.7z  *.pdb'
+    - name: Pack app
+      if: inputs.os == 'windows-latest'
+      working-directory: ${{ github.workspace }}/build
+      shell: cmd
+      run: '"C:/Program Files/7-Zip/7z.exe" a -tzip OrcaSlicer_Windows_${{ env.ver }}_portable.zip ${{ github.workspace }}/build/OrcaSlicer'
 
-      - name: Upload artifacts Win zip
-        if: inputs.os == 'windows-latest'
-        uses: actions/upload-artifact@v4
-        with:
-          name: OrcaSlicer_Windows_${{ env.ver }}_portable
-          path: ${{ github.workspace }}/build/OrcaSlicer_Windows_${{ env.ver }}_portable.zip
+    - name: Upload artifacts Win zip
+      if: inputs.os == 'windows-latest'
+      uses: actions/upload-artifact@v4
+      with:
+        name: OrcaSlicer_Windows_${{ env.ver }}_portable
+        path: ${{ github.workspace }}/build/OrcaSlicer_Windows_${{ env.ver }}_portable.zip
 
-      - name: Upload artifacts Win installer
-        if: inputs.os == 'windows-latest'
-        uses: actions/upload-artifact@v4
-        with:
-          name: OrcaSlicer_Windows_${{ env.ver }}
-          path: ${{ github.workspace }}/build/OrcaSlicer*.exe
+    - name: Upload artifacts Win installer
+      if: inputs.os == 'windows-latest'
+      uses: actions/upload-artifact@v4
+      with:
+        name: OrcaSlicer_Windows_${{ env.ver }}
+        path: ${{ github.workspace }}/build/OrcaSlicer*.exe
 
-      - name: Upload artifacts Win PDB
-        if: inputs.os == 'windows-latest'
-        uses: actions/upload-artifact@v4
-        with:
-          name: PDB
-          path: ${{ github.workspace }}/build/src/Release/Debug_PDB_${{ env.ver }}_for_developers_only.7z
+    - name: Deploy Windows release portable
+      if: github.ref == 'refs/heads/main' && inputs.os == 'windows-latest'
+      uses: WebFreak001/deploy-nightly@v3.2.0
+      with:
+        upload_url: https://uploads.github.com/repos/SoftFever/OrcaSlicer/releases/137995723/assets{?name,label}
+        release_id: 137995723
+        asset_path: ${{ github.workspace }}/build/OrcaSlicer_Windows_${{ env.ver }}_portable.zip
+        asset_name: OrcaSlicer_Windows_${{ env.ver }}_portable.zip
+        asset_content_type: application/x-zip-compressed
+        max_releases: 1
 
-      - name: Deploy Windows release portable
-        if: github.ref == 'refs/heads/main' && inputs.os == 'windows-latest'
-        uses: WebFreak001/deploy-nightly@v3.2.0
-        with:
-          upload_url: https://uploads.github.com/repos/SoftFever/OrcaSlicer/releases/137995723/assets{?name,label}
-          release_id: 137995723
-          asset_path: ${{ github.workspace }}/build/OrcaSlicer_Windows_${{ env.ver }}_portable.zip
-          asset_name: OrcaSlicer_Windows_${{ env.ver }}_portable.zip
-          asset_content_type: application/x-zip-compressed
-          max_releases: 1
-
-      - name: Deploy Windows release installer
-        if: github.ref == 'refs/heads/main' && inputs.os == 'windows-latest'
-        uses: WebFreak001/deploy-nightly@v3.2.0
-        with:
-          upload_url: https://uploads.github.com/repos/SoftFever/OrcaSlicer/releases/137995723/assets{?name,label}
-          release_id: 137995723
-          asset_path: ${{ github.workspace }}/build/OrcaSlicer_Windows_Installer_${{ env.ver }}.exe
-          asset_name: OrcaSlicer_Windows_Installer_${{ env.ver }}.exe
-          asset_content_type: application/x-msdownload
-          max_releases: 1
+    - name: Deploy Windows release installer
+      if: github.ref == 'refs/heads/main' && inputs.os == 'windows-latest'
+      uses: WebFreak001/deploy-nightly@v3.2.0
+      with:
+        upload_url: https://uploads.github.com/repos/SoftFever/OrcaSlicer/releases/137995723/assets{?name,label}
+        release_id: 137995723
+        asset_path: ${{ github.workspace }}/build/OrcaSlicer_Windows_Installer_${{ env.ver }}.exe
+        asset_name: OrcaSlicer_Windows_Installer_${{ env.ver }}.exe
+        asset_content_type: application/x-msdownload
+        max_releases: 1
