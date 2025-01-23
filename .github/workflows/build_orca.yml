@@ -1,18 +1,18 @@
 on:
-    workflow_call:
-      inputs:
-        cache-key:
-          required: true
-          type: string
-        cache-path:
-          required: true
-          type: string
-        os:
-          required: true
-          type: string
-        arch:
-          required: false
-          type: string
+  workflow_call:
+    inputs:
+      cache-key:
+        required: true
+        type: string
+      cache-path:
+        required: true
+        type: string
+      os:
+        required: true
+        type: string
+      arch:
+        required: false
+        type: string
 
 jobs:
   build_orca:
@@ -27,7 +27,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          lfs: 'true'
+          lfs: "true"
 
       - name: load cached deps
         uses: actions/cache@v4
@@ -41,7 +41,6 @@ jobs:
           cmakeVersion: "~3.28.0"
 
       - name: Get the version and date on Windows
-        if: inputs.os == 'windows-latest'
         run: |
           $date = Get-Date -Format 'yyyyMMdd'
           $ref = "${{ github.ref }}"
@@ -64,17 +63,14 @@ jobs:
         shell: pwsh
 
       - name: setup MSVC
-        if: inputs.os == 'windows-latest'
         uses: microsoft/setup-msbuild@v2
 
       - name: Install nsis
-        if: inputs.os == 'windows-latest'
         run: |
           dir "C:/Program Files (x86)/Windows Kits/10/Include"
           choco install nsis
 
       - name: Build slicer Win
-        if: inputs.os == 'windows-latest'
         working-directory: ${{ github.workspace }}
         env:
           WindowsSdkDir: 'C:\Program Files (x86)\Windows Kits\10\'
@@ -82,33 +78,40 @@ jobs:
         run: .\build_release_vs2022.bat slicer
 
       - name: Create installer Win
-        if: inputs.os == 'windows-latest'
         working-directory: ${{ github.workspace }}/build
         run: |
           cpack -G NSIS
 
       - name: Pack app
-        if: inputs.os == 'windows-latest'
         working-directory: ${{ github.workspace }}/build
         shell: cmd
         run: '"C:/Program Files/7-Zip/7z.exe" a -tzip OrcaSlicer_Windows_${{ env.ver }}_portable.zip ${{ github.workspace }}/build/OrcaSlicer'
 
+      - name: Pack PDB
+        working-directory: ${{ github.workspace }}/build/src/Release
+        shell: cmd
+        run: '"C:/Program Files/7-Zip/7z.exe" a -m0=lzma2 -mx9 Debug_PDB_${{ env.ver }}_for_developers_only.7z  *.pdb'
+
       - name: Upload artifacts Win zip
-        if: inputs.os == 'windows-latest'
         uses: actions/upload-artifact@v4
         with:
           name: OrcaSlicer_Windows_${{ env.ver }}_portable
           path: ${{ github.workspace }}/build/OrcaSlicer_Windows_${{ env.ver }}_portable.zip
 
       - name: Upload artifacts Win installer
-        if: inputs.os == 'windows-latest'
         uses: actions/upload-artifact@v4
         with:
           name: OrcaSlicer_Windows_${{ env.ver }}
           path: ${{ github.workspace }}/build/OrcaSlicer*.exe
 
+      - name: Upload artifacts Win PDB
+        uses: actions/upload-artifact@v4
+        with:
+          name: PDB
+          path: ${{ github.workspace }}/build/src/Release/Debug_PDB_${{ env.ver }}_for_developers_only.7z
+
       - name: Deploy Windows release portable
-        if: github.ref == 'refs/heads/main' && inputs.os == 'windows-latest'
+        if: github.ref == 'refs/heads/main'
         uses: WebFreak001/deploy-nightly@v3.2.0
         with:
           upload_url: https://uploads.github.com/repos/SoftFever/OrcaSlicer/releases/137995723/assets{?name,label}
@@ -119,7 +122,7 @@ jobs:
           max_releases: 1
 
       - name: Deploy Windows release installer
-        if: github.ref == 'refs/heads/main' && inputs.os == 'windows-latest'
+        if: github.ref == 'refs/heads/main'
         uses: WebFreak001/deploy-nightly@v3.2.0
         with:
           upload_url: https://uploads.github.com/repos/SoftFever/OrcaSlicer/releases/137995723/assets{?name,label}
