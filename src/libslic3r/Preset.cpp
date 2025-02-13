@@ -784,7 +784,7 @@ static std::vector<std::string> s_Preset_print_options {
     "layer_height", "initial_layer_print_height", "wall_loops", "alternate_extra_wall", "slice_closing_radius", "spiral_mode", "spiral_mode_smooth", "spiral_mode_max_xy_smoothing", "slicing_mode",
     "top_shell_layers", "top_shell_thickness", "bottom_shell_layers", "bottom_shell_thickness",
     "extra_perimeters_on_overhangs", "ensure_vertical_shell_thickness", "reduce_crossing_wall", "detect_thin_wall", "detect_overhang_wall", "overhang_reverse", "overhang_reverse_threshold","overhang_reverse_internal_only", "wall_direction",
-    "seam_position", "staggered_inner_seams", "wall_sequence", "is_infill_first", "sparse_infill_density", "sparse_infill_pattern", "top_surface_pattern", "bottom_surface_pattern",
+    "seam_position", "staggered_inner_seams", "wall_sequence", "is_infill_first", "sparse_infill_density", "sparse_infill_pattern", "lattice_angle_1", "lattice_angle_2", "top_surface_pattern", "bottom_surface_pattern",
     "infill_direction", "solid_infill_direction", "rotate_solid_infill_direction",  "counterbore_hole_bridging",
     "minimum_sparse_infill_area", "reduce_infill_retraction","internal_solid_infill_pattern","gap_fill_target",
     "ironing_type", "ironing_pattern", "ironing_flow", "ironing_speed", "ironing_spacing", "ironing_angle", "ironing_inset",
@@ -801,7 +801,7 @@ static std::vector<std::string> s_Preset_print_options {
     "independent_support_layer_height",
     "support_angle", "support_interface_top_layers", "support_interface_bottom_layers",
     "support_interface_pattern", "support_interface_spacing", "support_interface_loop_pattern",
-    "support_top_z_distance", "support_on_build_plate_only","support_critical_regions_only", "bridge_no_support", "thick_bridges", "thick_internal_bridges","dont_filter_internal_bridges","second_internal_bridge_over_infill","second_external_bridge", "max_bridge_length", "print_sequence", "print_order", "support_remove_small_overhang",
+    "support_top_z_distance", "support_on_build_plate_only","support_critical_regions_only", "bridge_no_support", "thick_bridges", "thick_internal_bridges","dont_filter_internal_bridges","enable_extra_bridge_layer", "max_bridge_length", "print_sequence", "print_order", "support_remove_small_overhang",
     "filename_format", "wall_filament", "support_bottom_z_distance",
     "sparse_infill_filament", "solid_infill_filament", "support_filament", "support_interface_filament","support_interface_not_for_body",
     "ooze_prevention", "standby_temperature_delta", "preheat_time","preheat_steps", "interface_shells", "line_width", "initial_layer_line_width",
@@ -1165,13 +1165,9 @@ void PresetCollection::load_presets(
                     if (inherits_config) {
                         ConfigOptionString * option_str = dynamic_cast<ConfigOptionString *> (inherits_config);
                         std::string inherits_value = option_str->value;
-                        inherit_preset = this->find_preset(inherits_value, false, true);
                         // Orca: try to find if the parent preset has been renamed
-                        if (inherit_preset == nullptr) {
-                            auto it = this->find_preset_renamed(inherits_value);
-                            if (it != m_presets.end())
-                                inherit_preset = &(*it);
-                        }
+                        inherit_preset = this->find_preset2(inherits_value);
+
                     } else {
                         ;
                     }
@@ -2537,23 +2533,38 @@ const std::string& PresetCollection::get_suffix_modified() {
 
 // Return a preset by its name. If the preset is active, a temporary copy is returned.
 // If a preset is not found by its name, null is returned.
-Preset* PresetCollection::find_preset(const std::string &name, bool first_visible_if_not_found, bool real)
+Preset* PresetCollection::find_preset(const std::string &name, bool first_visible_if_not_found, bool real, bool only_from_library)
 {
     Preset key(m_type, name, false);
-    auto it = this->find_preset_internal(name);
+    auto it = this->find_preset_internal(name, only_from_library);
     // Ensure that a temporary copy is returned if the preset found is currently selected.
     return (it != m_presets.end() && it->name == key.name) ? &this->preset(it - m_presets.begin(), real) :
         first_visible_if_not_found ? &this->first_visible() : nullptr;
 }
 
-const Preset* PresetCollection::find_preset2(const std::string& name) const
+Preset* PresetCollection::find_preset2(const std::string& name, bool auto_match)
 {
-    auto preset = const_cast<PresetCollection*>(this)->find_preset(name, false, true);
+    auto preset = find_preset(name,false,true);
     if (preset == nullptr) {
         auto _name = get_preset_name_renamed(name);
-        if(_name != nullptr) 
-            preset     = const_cast<PresetCollection*>(this)->find_preset(*_name, false, true);
+        if (_name != nullptr)
+            preset = find_preset(*_name,false,true);
+        if (auto_match && preset == nullptr) {
+            //Orca: one more try, find the most likely preset in OrcaFilamentLibrary
+            if (name.find("Generic") != std::string::npos) {
+                // The regex pattern matches an optional prefix ending in '_' then "Generic" followed by the material name.
+                std::regex re(R"(^(?:.*?\b(?:\w+_)?)(Generic)\b\s+([^@]+?)\s*(?:@.*)?$)");
+                auto       alter_name = std::regex_replace(name, re, "Generic $2 @System");
+                preset                = find_preset2(alter_name, false);
+                // print preset file name
+                if (preset != nullptr) {
+                    BOOST_LOG_TRIVIAL(debug) << __FUNCTION__ << " " << "Failed to find: " << name
+                                               << ". fallback to library preset: " << preset->file;
+                }
+            }
+        }
     }
+
     return preset;
 }
 
