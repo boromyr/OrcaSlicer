@@ -41,13 +41,7 @@ concurrency:
 jobs:
   build_windows:
     name: Build Windows
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - os: windows-latest
-    uses: ./.github/workflows/build_check_cache.yml
+    uses: ./.github/workflows/build_check_cache_windows.yml
     with:
-      os: ${{ matrix.os }}
       build-deps-only: ${{ inputs.build-deps-only || false }}
     secrets: inherit

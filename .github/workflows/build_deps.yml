@@ -70,9 +70,8 @@ jobs:
     name: Build OrcaSlicer Windows
     needs: [build_deps]
     if: ${{ !cancelled() && !inputs.build-deps-only && (inputs.valid-cache == true && needs.build_deps.result == 'skipped') || (inputs.valid-cache != true && success()) }}
-    uses: ./.github/workflows/build_orca.yml
+    uses: ./.github/workflows/build_orca_windows.yml
     with:
       cache-key: ${{ inputs.cache-key }}
       cache-path: ${{ inputs.cache-path }}
-      os: windows-latest
     secrets: inherit
