@@ -40,7 +40,7 @@ jobs:
   build_deps: # call next step
     name: Build Dependencies Windows
     needs: [check_cache]
-    uses: ./.github/workflows/build_deps_windows.yml
+    uses: ./.github/workflows/build_deps.yml
     with:
       cache-key: ${{ needs.check_cache.outputs.cache-key }}
       cache-path: ${{ needs.check_cache.outputs.cache-path }}
