@@ -1,23 +1,21 @@
 on:
-    workflow_call:
-      inputs:
-        cache-key:
-          required: true
-          type: string
-        cache-path:
-          required: true
-          type: string
-        os:
-          required: true
-          type: string
+  workflow_call:
+    inputs:
+      cache-key:
+        required: true
+        type: string
+      cache-path:
+        required: true
+        type: string
 
 jobs:
-  build_orca:
-    name: Build OrcaSlicer
-    runs-on: ${{ inputs.os }}
+  build_orca_windows:
+    name: Build OrcaSlicer Windows
+    runs-on: windows-latest
     env:
       date:
       ver:
+      ver_pure:
 
     steps:
       - name: Checkout
@@ -25,76 +23,126 @@ jobs:
         with:
           lfs: 'true'
 
-      - name: load cached deps
+      - name: Load cached dependencies
         uses: actions/cache@v4
         with:
           path: ${{ inputs.cache-path }}
           key: ${{ inputs.cache-key }}
           fail-on-cache-miss: true
 
-      - uses: lukka/get-cmake@latest
+      - name: Get CMake
+        uses: lukka/get-cmake@latest
         with:
           cmakeVersion: "~3.28.0"
 
-      - name: Get the version and date
+      - name: Get version and date for Windows
         run: |
           $date = Get-Date -Format 'yyyyMMdd'
-          if ("${{ github.event_name }}" -eq 'pull_request') {
-              $ver = "PR${{ github.event.number }}"
+          $ref = "${{ github.ref }}"
+          $eventName = "${{ github.event_name }}"
+          $prNumber = "${{ github.event.number }}"
+
+          if ($eventName -eq 'pull_request') {
+              $ver = "PR" + $prNumber
           } else {
               $versionContent = Get-Content version.inc -Raw
               if ($versionContent -match 'set\(SoftFever_VERSION "(.*?)"\)') {
-                  $ver = "V$($matches[1])"
-              } else {
-                  $ver = "V0.0.0"
+                  $ver_pure = $matches[1]
+                  $ver = "V$ver_pure"
               }
           }
+
           echo "ver=$ver" | Out-File -Append -FilePath $env:GITHUB_ENV -Encoding utf8
+          echo "ver_pure=$ver_pure" | Out-File -Append -FilePath $env:GITHUB_ENV -Encoding utf8
           echo "date=$date" | Out-File -Append -FilePath $env:GITHUB_ENV -Encoding utf8
+          echo "date: $date version: $ver"
         shell: pwsh
 
-      - name: setup MSVC
+      - name: Setup MSVC
         uses: microsoft/setup-msbuild@v2
 
-      - name: Install nsis
-        run: choco install nsis
+      - name: Install NSIS
+        run: |
+          dir "C:/Program Files (x86)/Windows Kits/10/Include"
+          choco install nsis
 
-      - name: Build slicer
+      - name: Build OrcaSlicer for Windows
         working-directory: ${{ github.workspace }}
         env:
           WindowsSdkDir: 'C:\Program Files (x86)\Windows Kits\10\'
           WindowsSDKVersion: '10.0.22000.0\'
         run: .\build_release_vs2022.bat slicer
 
-      - name: Create installer
+      - name: Create Windows Installer
         working-directory: ${{ github.workspace }}/build
-        run: cpack -G NSIS
+        run: |
+          cpack -G NSIS
 
-      - name: Pack portable app
+      - name: Pack Portable App
         working-directory: ${{ github.workspace }}/build
         shell: cmd
         run: '"C:/Program Files/7-Zip/7z.exe" a -tzip OrcaSlicer_Windows_${{ env.ver }}_portable.zip ${{ github.workspace }}/build/OrcaSlicer'
 
-      - name: Pack PDB (debug symbols)
+      - name: Pack Debug PDB Files
         working-directory: ${{ github.workspace }}/build/src/Release
         shell: cmd
         run: '"C:/Program Files/7-Zip/7z.exe" a -m0=lzma2 -mx9 Debug_PDB_${{ env.ver }}_for_developers_only.7z  *.pdb'
 
-      # SOLO UPLOAD ARTIFACTS - Nessun deploy alle releases
-      - name: Upload portable version
+      # Upload Artifacts
+      - name: Upload Windows Portable
         uses: actions/upload-artifact@v4
         with:
           name: OrcaSlicer_Windows_${{ env.ver }}_portable
           path: ${{ github.workspace }}/build/OrcaSlicer
 
-      - name: Upload installer
+      - name: Upload Windows Installer
         uses: actions/upload-artifact@v4
         with:
-          name: OrcaSlicer_Windows_${{ env.ver }}_installer
+          name: OrcaSlicer_Windows_${{ env.ver }}
           path: ${{ github.workspace }}/build/OrcaSlicer*.exe
 
-      - name: Upload debug symbols
+      - name: Upload Debug PDB
         uses: actions/upload-artifact@v4
         with:
-          name: OrcaSlicer_PDB_${{ env.ver }}
+          name: PDB
           path: ${{ github.workspace }}/build/src/Release/Debug_PDB_${{ env.ver }}_for_developers_only.7z
+
+      - name: Upload Profile Validator
+        uses: actions/upload-artifact@v4
+        with:
+          name: OrcaSlicer_profile_validator_Windows_${{ env.ver }}
+          path: ${{ github.workspace }}/build/src/Release/OrcaSlicer_profile_validator.exe
+
+      # Deploy to Releases (only for main branch)
+      - name: Deploy Windows Portable Release
+        if: github.ref == 'refs/heads/main'
+        uses: WebFreak001/deploy-nightly@v3.2.0
+        with:
+          upload_url: https://uploads.github.com/repos/SoftFever/OrcaSlicer/releases/137995723/assets{?name,label}
+          release_id: 137995723
+          asset_path: ${{ github.workspace }}/build/OrcaSlicer_Windows_${{ env.ver }}_portable.zip
+          asset_name: OrcaSlicer_Windows_${{ env.ver }}_portable.zip
+          asset_content_type: application/x-zip-compressed
+          max_releases: 1
+
+      - name: Deploy Windows Installer Release
+        if: github.ref == 'refs/heads/main'
+        uses: WebFreak001/deploy-nightly@v3.2.0
+        with:
+          upload_url: https://uploads.github.com/repos/SoftFever/OrcaSlicer/releases/137995723/assets{?name,label}
+          release_id: 137995723
+          asset_path: ${{ github.workspace }}/build/OrcaSlicer_Windows_Installer_${{ env.ver }}.exe
+          asset_name: OrcaSlicer_Windows_Installer_${{ env.ver }}.exe
+          asset_content_type: application/x-msdownload
+          max_releases: 1
+
+      - name: Deploy Windows Profile Validator Release
+        if: github.ref == 'refs/heads/main'
+        uses: WebFreak001/deploy-nightly@v3.2.0
+        with:
+          upload_url: https://uploads.github.com/repos/SoftFever/OrcaSlicer/releases/137995723/assets{?name,label}
+          release_id: 137995723
+          asset_path: ${{ github.workspace }}/build/src/Release/OrcaSlicer_profile_validator.exe
+          asset_name: OrcaSlicer_profile_validator_Windows_${{ env.ver }}.exe
+          asset_content_type: application/x-msdownload
+          max_releases: 1
