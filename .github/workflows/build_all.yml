@@ -1,4 +1,4 @@
-name: Build Windows
+name: Build Windows Only
 
 on:
   push:
@@ -13,6 +13,7 @@ on:
      - 'localization/**'
      - 'resources/**'
      - ".github/workflows/build_*.yml"
+     - 'build_release_vs2022.bat'
 
   pull_request:
     branches:
@@ -40,8 +41,13 @@ concurrency:
 jobs:
   build_windows:
     name: Build Windows
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
     uses: ./.github/workflows/build_check_cache.yml
     with:
-      os: windows-latest
+      os: ${{ matrix.os }}
       build-deps-only: ${{ inputs.build-deps-only || false }}
     secrets: inherit

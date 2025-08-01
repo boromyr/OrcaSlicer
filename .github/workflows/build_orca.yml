@@ -9,7 +9,7 @@ on:
         type: string
 
 jobs:
-  build_orca_windows:
+  build_orca:
     name: Build OrcaSlicer Windows
     runs-on: windows-latest
     env:
@@ -44,6 +44,7 @@ jobs:
 
           if ($eventName -eq 'pull_request') {
               $ver = "PR" + $prNumber
+              $ver_pure = "PR" + $prNumber
           } else {
               $versionContent = Get-Content version.inc -Raw
               if ($versionContent -match 'set\(SoftFever_VERSION "(.*?)"\)') {
@@ -55,9 +56,10 @@ jobs:
           echo "ver=$ver" | Out-File -Append -FilePath $env:GITHUB_ENV -Encoding utf8
           echo "ver_pure=$ver_pure" | Out-File -Append -FilePath $env:GITHUB_ENV -Encoding utf8
           echo "date=$date" | Out-File -Append -FilePath $env:GITHUB_ENV -Encoding utf8
-          echo "date: $date version: $ver"
+          echo "Building version: $ver on date: $date"
         shell: pwsh
 
+      # Windows Build Process
       - name: Setup MSVC
         uses: microsoft/setup-msbuild@v2
 
@@ -75,10 +77,9 @@ jobs:
 
       - name: Create Windows Installer
         working-directory: ${{ github.workspace }}/build
-        run: |
-          cpack -G NSIS
+        run: cpack -G NSIS
 
-      - name: Pack Portable App
+      - name: Pack Portable Application
         working-directory: ${{ github.workspace }}/build
         shell: cmd
         run: '"C:/Program Files/7-Zip/7z.exe" a -tzip OrcaSlicer_Windows_${{ env.ver }}_portable.zip ${{ github.workspace }}/build/OrcaSlicer'
@@ -101,7 +102,7 @@ jobs:
           name: OrcaSlicer_Windows_${{ env.ver }}
           path: ${{ github.workspace }}/build/OrcaSlicer*.exe
 
-      - name: Upload Debug PDB
+      - name: Upload Debug PDB Files
         uses: actions/upload-artifact@v4
         with:
           name: PDB
@@ -113,7 +114,7 @@ jobs:
           name: OrcaSlicer_profile_validator_Windows_${{ env.ver }}
           path: ${{ github.workspace }}/build/src/Release/OrcaSlicer_profile_validator.exe
 
-      # Deploy to Releases (only for main branch)
+      # Deploy to GitHub Releases (only for main branch)
       - name: Deploy Windows Portable Release
         if: github.ref == 'refs/heads/main'
         uses: WebFreak001/deploy-nightly@v3.2.0
@@ -136,7 +137,7 @@ jobs:
           asset_content_type: application/x-msdownload
           max_releases: 1
 
-      - name: Deploy Windows Profile Validator Release
+      - name: Deploy Profile Validator Release
         if: github.ref == 'refs/heads/main'
         uses: WebFreak001/deploy-nightly@v3.2.0
         with:
