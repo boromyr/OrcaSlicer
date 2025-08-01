@@ -41,7 +41,7 @@ concurrency:
 jobs:
   build_windows:
     name: Build Windows
-    uses: ./.github/workflows/build_check_cache_windows.yml
+    uses: ./.github/workflows/build_check_cache.yml
     with:
       build-deps-only: ${{ inputs.build-deps-only || false }}
     secrets: inherit
