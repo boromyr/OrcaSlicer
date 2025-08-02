@@ -11,7 +11,7 @@ on:
 jobs:
   check_cache: # determines if there is a cache and outputs variables used in caching process
     name: Check Cache Windows
-    runs-on: windows-latest
+    runs-on: windows-2022  # Lock fino a test completo Windows 2025
     outputs:
       cache-key: ${{ steps.set_outputs.outputs.cache-key }}
       cache-path: ${{ steps.set_outputs.outputs.cache-path }}

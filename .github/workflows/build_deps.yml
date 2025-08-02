@@ -19,7 +19,7 @@ jobs:
   build_deps:
     name: Build Dependencies Windows
     if: inputs.build-deps-only || inputs.valid-cache != true
-    runs-on: windows-latest
+    runs-on: windows-2022  # Lock fino a test completo Windows 2025
     env:
       date:
     steps:

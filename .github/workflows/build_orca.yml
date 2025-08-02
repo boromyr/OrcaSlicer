@@ -11,7 +11,7 @@ on:
 jobs:
   build_orca:
     name: Build OrcaSlicer Windows
-    runs-on: windows-latest
+    runs-on: windows-2022  # Lock fino a test completo Windows 2025
     env:
       date:
       ver:
