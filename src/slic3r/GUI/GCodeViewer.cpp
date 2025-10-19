@@ -748,7 +748,7 @@ const std::vector<ColorRGBA> GCodeViewer::Range_Colors{ {
     decode_color_to_float_array("#942616")    // reddish
 }};
 
-const ColorRGBA GCodeViewer::Wipe_Color    = ColorRGBA::YELLOW();
+const ColorRGBA GCodeViewer::Wipe_Color    = ColorRGBA::WHITE();
 const ColorRGBA GCodeViewer::Neutral_Color = ColorRGBA::DARK_GRAY();
 
 GCodeViewer::GCodeViewer()
