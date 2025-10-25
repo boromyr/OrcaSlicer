@@ -179,7 +179,7 @@ bool Print::invalidate_state_by_config_options(const ConfigOptionResolver & /* n
         "z_hop",
         "travel_slope",
         "retract_lift_above",
-        "retract_lift_below", 
+        "retract_lift_below",
         "retract_lift_enforce",
         "retract_restart_extra",
         "retract_restart_extra_toolchange",
@@ -213,7 +213,7 @@ bool Print::invalidate_state_by_config_options(const ConfigOptionResolver & /* n
         "accel_to_decel_factor",
         "wipe_on_loops",
         "gcode_comments",
-        "gcode_label_objects", 
+        "gcode_label_objects",
         "exclude_object",
         "support_material_interface_fan_speed",
         "internal_bridge_fan_speed", // ORCA: Add support for separate internal bridge fan speed control
@@ -269,7 +269,8 @@ bool Print::invalidate_state_by_config_options(const ConfigOptionResolver & /* n
         } else if (
                opt_key == "initial_layer_print_height"
             || opt_key == "nozzle_diameter"
-            || opt_key == "filament_shrink"
+            || opt_key == "filament_shrinkage_compensation_x"
+            || opt_key == "filament_shrinkage_compensation_y"
             || opt_key == "filament_shrinkage_compensation_z"
             || opt_key == "resolution"
             || opt_key == "precise_z_height"
@@ -325,6 +326,7 @@ bool Print::invalidate_state_by_config_options(const ConfigOptionResolver & /* n
             || opt_key == "filament_map_mode"
             || opt_key == "filament_map"
             || opt_key == "filament_adhesiveness_category"
+            || opt_key == "other_layers_print_sequence_nums"
             || opt_key == "wipe_tower_bridging"
             || opt_key == "wipe_tower_extra_flow"
             || opt_key == "wipe_tower_no_sparse_layers"
@@ -1276,7 +1278,7 @@ StringObjectException Print::validate(StringObjectException *warning, Polygons* 
 
             Vec3d test =this->shrinkage_compensation();
             const double shrinkage_compensation_z = this->shrinkage_compensation().z();
-            
+
             if (shrinkage_compensation_z != 1. && layers.back() > (this->config().printable_height / shrinkage_compensation_z + EPSILON)) {
                 // The object exceeds the maximum build volume height because of shrinkage compensation.
                 return StringObjectException{
@@ -1299,14 +1301,14 @@ StringObjectException Print::validate(StringObjectException *warning, Polygons* 
     }
 
     // Some of the objects has variable layer height applied by painting or by a table.
-    bool has_custom_layering = std::find_if(m_objects.begin(), m_objects.end(), 
-        [](const PrintObject *object) { return object->model_object()->has_custom_layering(); }) 
+    bool has_custom_layering = std::find_if(m_objects.begin(), m_objects.end(),
+        [](const PrintObject *object) { return object->model_object()->has_custom_layering(); })
         != m_objects.end();
 
     // Custom layering is not allowed for tree supports as of now.
     for (size_t print_object_idx = 0; print_object_idx < m_objects.size(); ++ print_object_idx)
         if (const PrintObject &print_object = *m_objects[print_object_idx];
-            print_object.has_support_material() && is_tree(print_object.config().support_type.value) && (print_object.config().support_style.value == smsTreeOrganic || 
+            print_object.has_support_material() && is_tree(print_object.config().support_type.value) && (print_object.config().support_style.value == smsTreeOrganic ||
                 // Orca: use organic as default
                 print_object.config().support_style.value == smsDefault) &&
             print_object.model_object()->has_custom_layering()) {
@@ -1337,7 +1339,7 @@ StringObjectException Print::validate(StringObjectException *warning, Polygons* 
 
         if (m_config.ooze_prevention && m_config.single_extruder_multi_material)
             return {L("Ooze prevention is only supported with the wipe tower when 'single_extruder_multi_material' is off.")};
-            
+
 #if 0
         if (m_config.gcode_flavor != gcfRepRapSprinter && m_config.gcode_flavor != gcfRepRapFirmware &&
             m_config.gcode_flavor != gcfRepetier && m_config.gcode_flavor != gcfMarlinLegacy && m_config.gcode_flavor != gcfMarlinFirmware)
@@ -1395,7 +1397,7 @@ StringObjectException Print::validate(StringObjectException *warning, Polygons* 
             if (has_custom_layering) {
                 std::vector<std::vector<coordf_t>> layer_z_series;
                 layer_z_series.assign(m_objects.size(), std::vector<coordf_t>());
-               
+
                 for (size_t idx_object = 0; idx_object < m_objects.size(); ++idx_object) {
                     layer_z_series[idx_object] = generate_object_layers(m_objects[idx_object]->slicing_parameters(), layer_height_profiles[idx_object], m_objects[idx_object]->config().precise_z_height.value);
                 }
@@ -1666,7 +1668,7 @@ StringObjectException Print::validate(StringObjectException *warning, Polygons* 
                                       "machine_max_junction_deviation value in your printer's configuration to get higher limits.");
                 warning->opt_key = warning_key;
             }
-            
+
             // check acceleration
             const auto max_accel = m_config.machine_max_acceleration_extruding.values[0];
             if (warning_key.empty() && m_default_object_config.default_acceleration > 0 && max_accel > 0) {
@@ -2680,6 +2682,10 @@ Points Print::first_layer_wipe_tower_corners(bool check_wipe_tower_existance) co
         double depth = m_wipe_tower_data.bbx.max.y() -m_wipe_tower_data.bbx.min.y();
         Vec2d  pt0   = m_wipe_tower_data.bbx.min + m_wipe_tower_data.rib_offset.cast<double>();
         
+        double width = m_config.prime_tower_width + 2*m_wipe_tower_data.brim_width;
+        double depth = m_wipe_tower_data.depth + 2*m_wipe_tower_data.brim_width;
+        Vec2d pt0(-m_wipe_tower_data.brim_width, -m_wipe_tower_data.brim_width);
+
         // First the corners.
         std::vector<Vec2d> pts = { pt0,
                                    Vec2d(pt0.x()+width, pt0.y()),
@@ -3047,9 +3053,9 @@ const WipeTowerData &Print::wipe_tower_data(size_t filaments_cnt) const
                 max_wipe_volumes.emplace_back(*std::max_element(v.begin(), v.end()));
             float maximum = std::accumulate(max_wipe_volumes.begin(), max_wipe_volumes.end(), 0.f);
             maximum       = maximum * filaments_cnt / max_wipe_volumes.size();
-            
+
             // Orca: it's overshooting a bit, so let's reduce it a bit
-            maximum *= 0.6; 
+            maximum *= 0.6;
             const_cast<Print *>(this)->m_wipe_tower_data.depth = maximum / (layer_height * width);
         } else {
             double depth = volume / (layer_height * width) * extra_spacing;
@@ -3437,7 +3443,7 @@ std::tuple<float, float> Print::object_skirt_offset(double margin_height) const
 {
     if (config().skirt_loops == 0 || config().skirt_type != stPerObject)
         return std::make_tuple(0, 0);
-    
+
     float max_nozzle_diameter = *std::max_element(m_config.nozzle_diameter.values.begin(), m_config.nozzle_diameter.values.end());
     float max_layer_height    = *std::max_element(config().max_layer_height.values.begin(), config().max_layer_height.values.end());
     float line_width = m_config.initial_layer_line_width.get_abs_value(max_nozzle_diameter);
@@ -3509,11 +3515,13 @@ std::string PrintStatistics::finalize_output_path(const std::string &path_in) co
      if (extruders.empty())
          return false;
 
-     const double filament_shrinkage_compensation_xy = m_config.filament_shrink.get_at(extruders.front());
-     const double filament_shrinkage_compensation_z  = m_config.filament_shrinkage_compensation_z.get_at(extruders.front());
+     const double filament_shrinkage_compensation_x = m_config.filament_shrinkage_compensation_x.get_at(extruders.front());
+     const double filament_shrinkage_compensation_y = m_config.filament_shrinkage_compensation_y.get_at(extruders.front());
+     const double filament_shrinkage_compensation_z = m_config.filament_shrinkage_compensation_z.get_at(extruders.front());
 
      for (unsigned int extruder : extruders) {
-         if (filament_shrinkage_compensation_xy != m_config.filament_shrink.get_at(extruder) ||
+         if (filament_shrinkage_compensation_x  != m_config.filament_shrinkage_compensation_x.get_at(extruder) ||
+             filament_shrinkage_compensation_y  != m_config.filament_shrinkage_compensation_y.get_at(extruder) ||
              filament_shrinkage_compensation_z  != m_config.filament_shrinkage_compensation_z.get_at(extruder)) {
              return false;
          }
@@ -3531,13 +3539,15 @@ Vec3d Print::shrinkage_compensation() const
 
     const unsigned int first_extruder = this->extruders().front();
 
-    const double xy_shrinkage_percent = m_config.filament_shrink.get_at(first_extruder);
-    const double z_shrinkage_percent  = m_config.filament_shrinkage_compensation_z.get_at(first_extruder);
+    const double x_shrinkage_percent = m_config.filament_shrinkage_compensation_x.get_at(first_extruder);
+    const double y_shrinkage_percent = m_config.filament_shrinkage_compensation_y.get_at(first_extruder);
+    const double z_shrinkage_percent = m_config.filament_shrinkage_compensation_z.get_at(first_extruder);
 
-    const double xy_compensation = 100.0 / xy_shrinkage_percent;
-    const double z_compensation  = 100.0 / z_shrinkage_percent;
+    const double x_compensation = 100.0 / x_shrinkage_percent;
+    const double y_compensation = 100.0 / y_shrinkage_percent;
+    const double z_compensation = 100.0 / z_shrinkage_percent;
 
-    return { xy_compensation, xy_compensation, z_compensation };
+    return { x_compensation, y_compensation, z_compensation };
 }
 
 const std::string PrintStatistics::FilamentUsedG     = "filament used [g]";
