@@ -12,6 +12,7 @@
 #include "libslic3r/Config.hpp"
 #include "BitmapComboBox.hpp"
 #include "Widgets/ComboBox.hpp"
+#include "Widgets/DialogButtons.hpp"
 #include <wx/sizer.h>
 
 #include "libslic3r/ObjColorUtils.hpp"
@@ -128,22 +129,6 @@ wxBoxSizer* ObjColorDialog::create_btn_sizer(long flags,bool exist_error)
 
 void ObjColorDialog::on_dpi_changed(const wxRect &suggested_rect)
 {
-    for (auto button_item : m_button_list)
-    {
-        if (button_item.first == wxRESET)
-        {
-            button_item.second->SetMinSize(wxSize(FromDIP(75), FromDIP(24)));
-            button_item.second->SetCornerRadius(FromDIP(12));
-        }
-        if (button_item.first == wxOK) {
-            button_item.second->SetMinSize(BTN_SIZE);
-            button_item.second->SetCornerRadius(FromDIP(12));
-        }
-        if (button_item.first == wxCANCEL) {
-            button_item.second->SetMinSize(BTN_SIZE);
-            button_item.second->SetCornerRadius(FromDIP(12));
-        }
-    }
     m_panel_ObjColor->msw_rescale();
     this->Refresh();
 }
@@ -556,23 +541,12 @@ void ObjColorPanel::do_layout_callback() {
 wxBoxSizer *ObjColorPanel::create_approximate_match_btn_sizer(wxWindow *parent)
 {
     auto       btn_sizer = new wxBoxSizer(wxHORIZONTAL);
-    StateColor calc_btn_bg(std::pair<wxColour, int>(wxColour(0, 137, 123), StateColor::Pressed), std::pair<wxColour, int>(wxColour(38, 166, 154), StateColor::Hovered),
-                           std::pair<wxColour, int>(wxColour(0, 150, 136), StateColor::Normal));
-    StateColor calc_btn_bd(std::pair<wxColour, int>(wxColour(0, 150, 136), StateColor::Normal));
-    StateColor calc_btn_text(std::pair<wxColour, int>(wxColour(255, 255, 254), StateColor::Normal));
-    //create btn
     m_quick_approximate_match_btn = new Button(parent, _L("Color match"));
     m_quick_approximate_match_btn->SetToolTip(_L("Approximate color matching."));
-    auto cur_btn         = m_quick_approximate_match_btn;
-    cur_btn->SetFont(Label::Body_13);
-    cur_btn->SetMinSize(wxSize(FromDIP(60), FromDIP(20)));
-    cur_btn->SetCornerRadius(FromDIP(10));
-    cur_btn->SetBackgroundColor(calc_btn_bg);
-    cur_btn->SetBorderColor(calc_btn_bd);
-    cur_btn->SetTextColor(calc_btn_text);
-    cur_btn->SetFocus();
-    btn_sizer->Add(cur_btn, 0, wxRIGHT | wxALIGN_CENTER_VERTICAL, 0);
-    cur_btn->Bind(wxEVT_BUTTON, [this](wxCommandEvent &) {
+    m_quick_approximate_match_btn->SetStyle(ButtonStyle::Regular, ButtonType::Window);
+    m_quick_approximate_match_btn->SetFocus();
+    btn_sizer->Add(m_quick_approximate_match_btn, 0, wxRIGHT | wxALIGN_CENTER_VERTICAL, 0);
+    m_quick_approximate_match_btn->Bind(wxEVT_BUTTON, [this](wxCommandEvent &) {
         deal_approximate_match_btn();
         deal_thumbnail();
     });
@@ -582,20 +556,10 @@ wxBoxSizer *ObjColorPanel::create_approximate_match_btn_sizer(wxWindow *parent)
 wxBoxSizer *ObjColorPanel::create_add_btn_sizer(wxWindow *parent)
 {
     auto       btn_sizer = new wxBoxSizer(wxHORIZONTAL);
-    StateColor calc_btn_bg(std::pair<wxColour, int>(wxColour(0, 137, 123), StateColor::Pressed), std::pair<wxColour, int>(wxColour(38, 166, 154), StateColor::Hovered),
-                           std::pair<wxColour, int>(wxColour(0, 150, 136), StateColor::Normal));
-    StateColor calc_btn_bd(std::pair<wxColour, int>(wxColour(0, 150, 136), StateColor::Normal));
-    StateColor calc_btn_text(std::pair<wxColour, int>(wxColour(255, 255, 254), StateColor::Normal));
-    // create btn
     m_quick_add_btn = new Button(parent, _L("Append"));
     m_quick_add_btn->SetToolTip(_L("Append to existing filaments"));
     auto cur_btn    = m_quick_add_btn;
-    cur_btn->SetFont(Label::Body_13);
-    cur_btn->SetMinSize(wxSize(FromDIP(60), FromDIP(20)));
-    cur_btn->SetCornerRadius(FromDIP(10));
-    cur_btn->SetBackgroundColor(calc_btn_bg);
-    cur_btn->SetBorderColor(calc_btn_bd);
-    cur_btn->SetTextColor(calc_btn_text);
+    cur_btn->SetStyle(ButtonStyle::Regular, ButtonType::Window);
     cur_btn->SetFocus();
     btn_sizer->Add(cur_btn, 0, wxRIGHT | wxALIGN_CENTER_VERTICAL, 0);
     cur_btn->Bind(wxEVT_BUTTON, [this](wxCommandEvent &) {
@@ -608,20 +572,10 @@ wxBoxSizer *ObjColorPanel::create_add_btn_sizer(wxWindow *parent)
 wxBoxSizer *ObjColorPanel::create_reset_btn_sizer(wxWindow *parent)
 {
     auto       btn_sizer = new wxBoxSizer(wxHORIZONTAL);
-    StateColor calc_btn_bg(std::pair<wxColour, int>(wxColour(0, 137, 123), StateColor::Pressed), std::pair<wxColour, int>(wxColour(38, 166, 154), StateColor::Hovered),
-                           std::pair<wxColour, int>(wxColour(0, 150, 136), StateColor::Normal));
-    StateColor calc_btn_bd(std::pair<wxColour, int>(wxColour(0, 150, 136), StateColor::Normal));
-    StateColor calc_btn_text(std::pair<wxColour, int>(wxColour(255, 255, 254), StateColor::Normal));
-    // create btn
     m_quick_reset_btn = new Button(parent, _L("Reset"));
     m_quick_reset_btn->SetToolTip(_L("Reset mapped extruders."));
     auto cur_btn      = m_quick_reset_btn;
-    cur_btn->SetFont(Label::Body_13);
-    cur_btn->SetMinSize(wxSize(FromDIP(60), FromDIP(20)));
-    cur_btn->SetCornerRadius(FromDIP(10));
-    cur_btn->SetBackgroundColor(calc_btn_bg);
-    cur_btn->SetBorderColor(calc_btn_bd);
-    cur_btn->SetTextColor(calc_btn_text);
+    cur_btn->SetStyle(ButtonStyle::Regular, ButtonType::Window);
     cur_btn->SetFocus();
     btn_sizer->Add(cur_btn, 0, wxRIGHT | wxALIGN_CENTER_VERTICAL, 0);
     cur_btn->Bind(wxEVT_BUTTON, [this](wxCommandEvent &) {

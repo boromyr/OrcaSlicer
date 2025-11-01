@@ -184,8 +184,7 @@ Button *TipsDialog::add_button(wxWindowID btn_id, const wxString &label, bool se
 
 void TipsDialog::on_dpi_changed(const wxRect &suggested_rect)
 {
-    if (m_confirm) m_confirm->SetMinSize(TIPS_DIALOG_BUTTON_SIZE);
-    if (m_cancel) m_cancel->SetMinSize(TIPS_DIALOG_BUTTON_SIZE);
+    if (m_confirm) m_confirm->Rescale(); // ORCA
     Fit();
     Refresh();
 }
