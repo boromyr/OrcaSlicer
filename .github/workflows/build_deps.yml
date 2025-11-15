@@ -72,5 +72,5 @@ jobs:
     with:
       cache-key: ${{ inputs.cache-key }}
       cache-path: ${{ inputs.cache-path }}
-      os: windows-latest
+      # os: windows-latest
     secrets: inherit
