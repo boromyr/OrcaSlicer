@@ -543,7 +543,9 @@ void Sidebar::priv::layout_printer(bool isBBL, bool isDual)
         hsizer_printer->Add(panel_printer_bed, 0, wxLEFT, FromDIP(4));
         //hsizer_printer->Add(btn_sync_printer , 0, wxLEFT, FromDIP(4));
         vsizer_printer->AddSpacer(FromDIP(SidebarProps::ContentMarginV()));
+        vsizer_printer->AddSpacer(FromDIP(SidebarProps::ContentMarginV()));
         vsizer_printer->Add(hsizer_printer, 0, wxEXPAND | wxLEFT | wxRIGHT, FromDIP(SidebarProps::ContentMargin()));
+        vsizer_printer->AddSpacer(FromDIP(SidebarProps::ContentMarginV()));
         vsizer_printer->AddSpacer(FromDIP(SidebarProps::ContentMarginV()));
         // Printer - extruder
 
@@ -2104,6 +2106,7 @@ Sidebar::Sidebar(Plater *parent)
         min_size.y = p->m_panel_filament_content->GetMaxHeight();
     p->m_panel_filament_content->SetMinSize(min_size);
     scrolled_sizer->Add(p->m_panel_filament_content, 0, wxEXPAND | wxTOP | wxBOTTOM, FromDIP(SidebarProps::ContentMarginV())); // ORCA use vertical margin on parent otherwise it shows scrollbar even on 1 filament
+    scrolled_sizer->Add(p->m_panel_filament_content, 0, wxEXPAND | wxTOP | wxBOTTOM, FromDIP(SidebarProps::ContentMarginV())); // ORCA use vertical margin on parent otherwise it shows scrollbar even on 1 filament
     }
 
     {
@@ -2771,6 +2774,8 @@ void Sidebar::msw_rescale()
     p->m_flushing_volume_btn->Rescale();
     set_flushing_volume_warning(is_flush_config_modified()); // ORCA reapply appearance
 
+    set_flushing_volume_warning(is_flush_config_modified()); // ORCA reapply appearance
+
     //BBS
     p->left_extruder->Rescale();
     p->right_extruder->Rescale();
@@ -2851,6 +2856,7 @@ void Sidebar::sys_color_changed()
     p->m_bpButton_ams_filament->msw_rescale();
     p->m_bpButton_set_filament->msw_rescale();
     p->m_flushing_volume_btn->Rescale();
+    set_flushing_volume_warning(is_flush_config_modified()); // ORCA reapply appearance
     set_flushing_volume_warning(is_flush_config_modified()); // ORCA reapply appearance
 
     // BBS
@@ -3573,6 +3579,12 @@ wxButton* Sidebar::get_wiping_dialog_button()
 
 void Sidebar::set_flushing_volume_warning(const bool flushing_volume_modify)
 {
+    if(flushing_volume_modify){
+        p->m_flushing_volume_btn->SetStyle(ButtonStyle::Regular, ButtonType::Compact);
+        p->m_flushing_volume_btn->SetBorderColor(wxColour("#FF6F00"));
+    }
+    else
+        p->m_flushing_volume_btn->SetStyle(ButtonStyle::Confirm, ButtonType::Compact);
     if(flushing_volume_modify){
         p->m_flushing_volume_btn->SetStyle(ButtonStyle::Regular, ButtonType::Compact);
         p->m_flushing_volume_btn->SetBorderColor(wxColour("#FF6F00"));
