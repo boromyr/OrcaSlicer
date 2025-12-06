@@ -305,7 +305,7 @@ static const std::array<Color, size_t(EGCodeExtrusionRole::COUNT)> DEFAULT_EXTRU
 
 static const std::array<Color, size_t(EOptionType::COUNT)> DEFAULT_OPTIONS_COLORS{ {
     {  56,  72, 155 }, // Travels
-    { 255, 255,   0 }, // Wipes
+    { 255, 255, 255 }, // Wipes
     { 205,  34, 214 }, // Retractions
     {  73, 173, 207 }, // Unretractions
     { 230, 230, 230 }, // Seams
