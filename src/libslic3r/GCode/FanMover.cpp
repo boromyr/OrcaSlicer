@@ -271,7 +271,7 @@ void FanMover::_process_T(const std::string_view command)
 
 void FanMover::_process_gcode_line(GCodeReader& reader, const GCodeReader::GCodeLine& line)
 {
-    // Check for overhang hint from CoolingBuffer
+    // ORCA: Check for overhang hint from CoolingBuffer
     if (line.raw().find(";_FAN_MOVER_HINT_OVERHANG") != std::string::npos) {
         m_is_overhang_hint = true;
         return; // Don't output the hint line
@@ -429,7 +429,7 @@ void FanMover::_process_gcode_line(GCodeReader& reader, const GCodeReader::GCode
             if (line.raw().size() > 10 && line.raw().rfind(";TYPE:", 0) == 0) {
                 // get the type of the next extrusions
                 std::string extrusion_string = line.raw().substr(6, line.raw().size() - 6);
-                // trim trailing newline/carriage return
+                // ORCA: trim trailing newline/carriage return
                 while (!extrusion_string.empty() && (extrusion_string.back() == '\r' || extrusion_string.back() == '\n')) {
                     extrusion_string.pop_back();
                 }
