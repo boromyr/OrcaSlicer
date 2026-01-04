@@ -5902,6 +5902,10 @@ bool GCode::_needSAFC(const ExtrusionPath &path)
     };
 
     return std::any_of(std::begin(supported_patterns), std::end(supported_patterns), [&](const InfillPattern pattern) {
+        // ORCA: Fix compilation errors: add explicit parentheses
+        // return this->on_first_layer() && this->config().bottom_surface_pattern == pattern ||
+        //        path.role() == erSolidInfill && this->config().internal_solid_infill_pattern == pattern ||
+        //        path.role() == erTopSolidInfill && this->config().top_surface_pattern == pattern;
         return (this->on_first_layer() && this->config().bottom_surface_pattern == pattern) ||
                (path.role() == erSolidInfill && this->config().internal_solid_infill_pattern == pattern) ||
                (path.role() == erTopSolidInfill && this->config().top_surface_pattern == pattern);
@@ -6433,11 +6437,14 @@ std::string GCode::_extrude(const ExtrusionPath &path, std::string description, 
     }
 
     // Change fan speed based on current extrusion role
+    // ORCA: Fix compilation errors: capture path in lambda
+    // auto append_role_based_fan_marker = [this, &gcode](const ExtrusionRole role, const std::string_view& marker_prefix, const bool fan_on) {
     auto append_role_based_fan_marker = [this, &gcode, &path](const ExtrusionRole role, const std::string_view& marker_prefix, const bool fan_on) {
         assert(m_enable_cooling_markers);
 
         if (fan_on) {
             if (!m_is_role_based_fan_on[role]) {
+                // ORCA: Improve overhang detection: Move hint generation to GCode.cpp and restrict to perimeters
                 if (marker_prefix == "_OVERHANG"sv && is_perimeter(path.role())) {
                     gcode += ";_FAN_MOVER_HINT_OVERHANG\n";
                 }
@@ -7045,6 +7052,8 @@ bool GCode::needs_retraction(const Polyline &travel, ExtrusionRole role, LiftTyp
                     continue;
 
                 Polygons temp;
+                // ORCA: Fix compilation errors: remove std::move
+                // temp.emplace_back(std::move(instance_bbox.polygon()));
                 temp.emplace_back(instance_bbox.polygon());
                 if (intersection_pl(travel, temp).empty())
                     continue;
