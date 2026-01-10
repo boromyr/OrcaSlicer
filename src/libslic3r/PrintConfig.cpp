@@ -2548,7 +2548,7 @@ void PrintConfigDef::init_fff_params()
     def->label = L("Number of cooling moves");
     def->tooltip = L("Filament is cooled by being moved back and forth in the "
                    "cooling tubes. Specify desired number of these moves.");
-    def->max = 0;
+    def->min = 0;
     def->max = 20;
     def->mode = comAdvanced;
     def->set_default_value(new ConfigOptionInts { 4 });
@@ -6644,6 +6644,27 @@ void PrintConfigDef::init_fff_params()
     def->min = 0.0;
     def->max = 25.0;
     def->set_default_value(new ConfigOptionFloat(0.5));
+
+    def = this->add("wall_maximum_resolution", coFloat);
+    def->label = L("Maximum wall resolution");
+    def->category = L("Quality");
+    def->tooltip  = L("This value determines the smallest wall line segment length in mm.");
+    def->sidetext = L("mm");	// milimeters, CIS languages need translation
+    def->mode = comAdvanced;
+    def->min = 0;
+    def->max = 1;
+    def->set_default_value(new ConfigOptionFloat(0.5));
+
+    def = this->add("wall_maximum_deviation", coFloat);
+    def->label = L("Maximum wall deviation");
+    def->category = L("Quality");
+    def->tooltip = L("The maximum deviation allowed when reducing the resolution for the `Maximum wall resolution` setting. If you increase this, "
+        "the print will be less accurate, but the G-Code will be smaller. The `Maximum wall deviation` is a limit for the `Maximum wall resolution`, "
+        "so if the two conflict the `Maximum wall deviation` will always be held true.");
+    def->mode = comAdvanced;
+    def->min = 0;
+    def->max = 1;
+    def->set_default_value(new ConfigOptionFloat(0.025));
 
     def = this->add("initial_layer_min_bead_width", coPercent);
     def->label = L("First layer minimum wall width");

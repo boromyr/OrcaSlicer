@@ -106,7 +106,11 @@ void ExtrusionLine::simplify(const int64_t smallest_line_segment_squared, const 
         accumulated_area_removed += removed_area_next;
 
         const int64_t length2 = (current - previous).cast<int64_t>().squaredNorm();
-        if (length2 < scaled<coord_t>(0.025))
+
+        // Orca:
+        // Checking if the segment's length is smaller than 5 microns (0.005mm). 
+        // The value of `length2` is scaled and squared, so we need to compare it with the squared value of 5 microns (0.000025)
+        if (length2 < scaled<coord_t>(0.000025))
         {
             // We're allowed to always delete segments of less than 5 micron. The width in this case doesn't matter that much.
             continue;
