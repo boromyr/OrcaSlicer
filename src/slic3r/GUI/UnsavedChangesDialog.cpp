@@ -213,8 +213,25 @@ void ModelNode::UpdateIcons()
 
 #ifdef __linux__
     m_icon.CopyFromBitmap(create_scaled_bitmap(m_icon_name, m_parent_win, 16, !m_toggle));
+    //ORCA: Create rotated icon for collapsed state
+    wxBitmap tmp_bmp;
+    tmp_bmp.CopyFromIcon(m_icon);
+    wxImage img = tmp_bmp.ConvertToImage();
+    if (img.IsOk()) {
+        img = img.Rotate180();
+        wxBitmap rotated_bmp(img);
+        m_icon_collapsed.CopyFromBitmap(rotated_bmp);
+    }
 #else
     m_icon = create_scaled_bitmap(m_icon_name, m_parent_win, 16, !m_toggle);
+    //ORCA: Create rotated icon for collapsed state
+    if (m_icon.IsOk()) {
+        wxImage img = m_icon.ConvertToImage();
+        if (img.IsOk()) {
+            img = img.Rotate180();
+            m_icon_collapsed = wxBitmap(img);
+        }
+    }
 #endif //__linux__
 }
 
@@ -363,9 +380,14 @@ void DiffModel::GetValue(wxVariant& variant, const wxDataViewItem& item, unsigne
         variant = node->m_toggle;
         break;
 #ifdef __linux__
-    case colIconText:
-        variant << wxDataViewIconText(node->m_text, node->m_icon);
+    case colIconText: {
+        auto icon = node->m_icon;
+        //ORCA: Switch icon for collapsed state
+        if (m_ctrl && node->IsContainer() && !m_ctrl->IsExpanded(item) && node->m_icon_collapsed.IsOk())
+             icon = node->m_icon_collapsed;
+        variant << wxDataViewIconText(node->m_text, icon);
         break;
+    }
     case colOldValue:
         variant << wxDataViewIconText(node->m_old_value, node->m_old_color_bmp);
         break;
@@ -373,9 +395,14 @@ void DiffModel::GetValue(wxVariant& variant, const wxDataViewItem& item, unsigne
         variant << wxDataViewIconText(node->m_new_value, node->m_new_color_bmp);
         break;
 #else
-    case colIconText:
-        variant << DataViewBitmapText(node->m_text, node->m_icon);
+    case colIconText: {
+        auto icon = node->m_icon;
+        //ORCA: Switch icon for collapsed state
+        if (m_ctrl && node->IsContainer() && !m_ctrl->IsExpanded(item) && node->m_icon_collapsed.IsOk())
+             icon = node->m_icon_collapsed;
+        variant << DataViewBitmapText(node->m_text, icon);
         break;
+    }
     case colOldValue:
         variant << DataViewBitmapText(node->m_old_value, node->m_old_color_bmp);
         break;
@@ -597,8 +624,29 @@ DiffViewCtrl::DiffViewCtrl(wxWindow* parent, wxSize size)
     model->SetAssociatedControl(this);
 
     this->Bind(wxEVT_DATAVIEW_ITEM_CONTEXT_MENU, &DiffViewCtrl::context_menu, this);
-    this->Bind(wxEVT_DATAVIEW_ITEM_ACTIVATED,    &DiffViewCtrl::context_menu, this);
+    
+    //ORCA: Handle double click (Activated) to toggle expansion for container items
+    this->Bind(wxEVT_DATAVIEW_ITEM_ACTIVATED, [this](wxDataViewEvent& event) {
+        wxDataViewItem item = event.GetItem();
+        if (item.IsOk() && model->IsContainer(item)) {
+            if (this->IsExpanded(item))
+                this->Collapse(item);
+            else
+                this->Expand(item);
+        } else {
+            this->context_menu(event);
+        }
+    });
+    
     this->Bind(wxEVT_DATAVIEW_ITEM_VALUE_CHANGED, &DiffViewCtrl::item_value_changed, this);
+
+    //ORCA: Refresh item on expand/collapse to update rotated icon
+    auto refresh_node = [this](wxDataViewEvent& event) {
+        wxDataViewItem item = event.GetItem();
+        if (item.IsOk()) model->ItemChanged(item);
+    };
+    this->Bind(wxEVT_DATAVIEW_ITEM_COLLAPSED, refresh_node);
+    this->Bind(wxEVT_DATAVIEW_ITEM_EXPANDED, refresh_node);
 }
 
 DiffViewCtrl::~DiffViewCtrl() { 

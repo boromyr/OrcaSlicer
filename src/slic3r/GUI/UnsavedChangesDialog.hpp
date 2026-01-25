@@ -59,10 +59,12 @@ public:
     bool        m_toggle {true};
 #ifdef __linux__
     wxIcon      m_icon;
+    wxIcon      m_icon_collapsed; //ORCA: Icon for collapsed state
     wxIcon      m_old_color_bmp;
     wxIcon      m_new_color_bmp;
 #else
     wxBitmap    m_icon;
+    wxBitmap    m_icon_collapsed; //ORCA: Icon for collapsed state
     wxBitmap    m_old_color_bmp;
     wxBitmap    m_new_color_bmp;
 #endif //__linux__
