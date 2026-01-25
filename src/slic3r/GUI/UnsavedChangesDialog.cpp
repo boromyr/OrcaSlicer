@@ -107,6 +107,7 @@ ModelNode::ModelNode(ModelNode* parent, const wxString& text) :
     m_icon_name("node_dot"),
     m_text(text)
 {
+    m_collapsible = true;
     UpdateIcons();
 }
 
@@ -218,7 +219,7 @@ void ModelNode::UpdateIcons()
     tmp_bmp.CopyFromIcon(m_icon);
     wxImage img = tmp_bmp.ConvertToImage();
     if (img.IsOk()) {
-        img = img.Rotate180();
+        img = img.Mirror(false);
         wxBitmap rotated_bmp(img);
         m_icon_collapsed.CopyFromBitmap(rotated_bmp);
     }
@@ -228,7 +229,7 @@ void ModelNode::UpdateIcons()
     if (m_icon.IsOk()) {
         wxImage img = m_icon.ConvertToImage();
         if (img.IsOk()) {
-            img = img.Rotate180();
+            img = img.Mirror(false);
             m_icon_collapsed = wxBitmap(img);
         }
     }
@@ -629,12 +630,26 @@ DiffViewCtrl::DiffViewCtrl(wxWindow* parent, wxSize size)
     this->Bind(wxEVT_DATAVIEW_ITEM_ACTIVATED, [this](wxDataViewEvent& event) {
         wxDataViewItem item = event.GetItem();
         if (item.IsOk() && model->IsContainer(item)) {
+            ModelNode* node = static_cast<ModelNode*>(item.GetID());
+            if (node && !node->IsCollapsible())
+                return;
+
             if (this->IsExpanded(item))
                 this->Collapse(item);
             else
                 this->Expand(item);
         } else {
             this->context_menu(event);
+        }
+    });
+
+    //ORCA: Prevent collapsing of non-collapsible items (Presets, Categories)
+    this->Bind(wxEVT_DATAVIEW_ITEM_COLLAPSING, [this](wxDataViewEvent& event) {
+        wxDataViewItem item = event.GetItem();
+        if (item.IsOk()) {
+            ModelNode* node = static_cast<ModelNode*>(item.GetID());
+            if (node && !node->IsCollapsible())
+                event.Veto();
         }
     });
     
