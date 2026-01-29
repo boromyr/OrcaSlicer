@@ -188,6 +188,18 @@ void GLVolume::load_render_colors()
     RenderColor::colors[RenderCol_Model_Unprintable] = GUI::ImGuiWrapper::to_ImVec4(GLVolume::UNPRINTABLE_COLOR);
 }
 
+ColorRGBA GLVolume::brighten_color(const ColorRGBA& color, float multiplier)
+{
+    // Multiply RGB by brightness factor, clamping to 1.0
+    // Alpha channel remains unchanged
+    return ColorRGBA(
+        std::min(color.r() * multiplier, 1.0f),
+        std::min(color.g() * multiplier, 1.0f),
+        std::min(color.b() * multiplier, 1.0f),
+        color.a()
+    );
+}
+
 GLVolume::GLVolume(float r, float g, float b, float a)
     : m_sla_shift_z(0.0)
     , m_sinking_contours(*this)
@@ -253,16 +265,28 @@ void GLVolume::set_render_color()
             set_render_color(outside ? SELECTED_OUTSIDE_COLOR : SELECTED_COLOR);
         else if (disabled)
         */
-        if (disabled)
-            set_render_color(DISABLED_COLOR);
+        // Determine base color first
+        ColorRGBA base_color;
+
+        if (disabled) {
+            base_color = DISABLED_COLOR;
+        }
 #ifdef ENABLE_OUTSIDE_COLOR
-        else if (is_outside && shader_outside_printer_detection_enabled)
-            set_render_color(OUTSIDE_COLOR);
+        else if (is_outside && shader_outside_printer_detection_enabled) {
+            base_color = OUTSIDE_COLOR;
+        }
 #endif
         else {
-            //to make black not too hard too see
-            ColorRGBA new_color = adjust_color_for_rendering(color);
-            set_render_color(new_color);
+            // to make black not too hard too see
+            base_color = adjust_color_for_rendering(color);
+        }
+
+        // Apply selection brightening AFTER determining base color
+        if (selected && !disabled) {
+            set_render_color(brighten_color(base_color, 1.25f));
+        }
+        else {
+            set_render_color(base_color);
         }
     }
 
