@@ -6210,8 +6210,10 @@ void GLCanvas3D::render_thumbnail_internal(ThumbnailData& thumbnail_data, const 
 
     glsafe(::glDisable(GL_DEPTH_TEST));
 
-    //don't render plate in thumbnail
-    //plate->render( false, true, true);
+    if (thumbnail_params.show_bed) {
+        // Render the plate grid and texture into the thumbnail (no UI icons)
+        partplate_list.render(view_matrix, projection_matrix, !camera.is_looking_downward(), false, false, -1, false, true, true, thumbnail_params.plate_id, &camera);
+    }
 
     // restore background color
     //if (thumbnail_params.transparent_background)
@@ -7453,7 +7455,7 @@ void GLCanvas3D::_render_bed(const Transform3d& view_matrix, const Transform3d& 
 
 void GLCanvas3D::_render_platelist(const Transform3d& view_matrix, const Transform3d& projection_matrix, bool bottom, bool only_current, bool only_body, int hover_id, bool render_cali, bool show_grid)
 {
-    wxGetApp().plater()->get_partplate_list().render(view_matrix, projection_matrix, bottom, only_current, only_body, hover_id, render_cali, show_grid);
+    wxGetApp().plater()->get_partplate_list().render(view_matrix, projection_matrix, bottom, only_current, only_body, hover_id, render_cali, show_grid, false, -1, nullptr);
 }
 
 void GLCanvas3D::_render_plane() const
