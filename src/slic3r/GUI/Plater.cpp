@@ -14989,6 +14989,8 @@ int Plater::export_3mf(const boost::filesystem::path& output_path, SaveStrategy 
     BOOST_LOG_TRIVIAL(info) << __FUNCTION__ << boost::format(": path=%1%, backup=%2%, export_plate_idx=%3%, SaveStrategy=%4%")
         % std::string("") % (strategy & SaveStrategy::Backup) % export_plate_idx % (unsigned int)strategy;
 
+    bool show_bed_in_3mf = wxGetApp().app_config->get_bool("thumbnails_with_bed_3mf");
+
     //BBS: add plate logic for thumbnail generate
     std::vector<ThumbnailData*> thumbnails;
     std::vector<ThumbnailData*> no_light_thumbnails;
@@ -15006,7 +15008,7 @@ int Plater::export_3mf(const boost::filesystem::path& output_path, SaveStrategy 
             }
             else {
                 BOOST_LOG_TRIVIAL(info) << __FUNCTION__ << boost::format(": re-generate thumbnail for plate %1%") % i;
-                const ThumbnailsParams thumbnail_params = { {}, false, true, true, true, i };
+                const ThumbnailsParams thumbnail_params = { {}, false, true, show_bed_in_3mf, true, i };
                 p->generate_thumbnail(p->partplate_list.get_plate(i)->thumbnail_data, THUMBNAIL_SIZE_3MF.first, THUMBNAIL_SIZE_3MF.second,
                                     thumbnail_params, Camera::EType::Ortho);
             }
@@ -15018,7 +15020,7 @@ int Plater::export_3mf(const boost::filesystem::path& output_path, SaveStrategy 
                 BOOST_LOG_TRIVIAL(info) << __FUNCTION__ << boost::format(": non need to re-generate thumbnail for gcode/exported mode of plate %1%") % i;
             } else {
                 BOOST_LOG_TRIVIAL(info) << __FUNCTION__ << boost::format(": re-generate thumbnail for plate %1%") % i;
-                const ThumbnailsParams thumbnail_params = {{}, false, true, true, true, i};
+                const ThumbnailsParams thumbnail_params = {{}, false, true, show_bed_in_3mf, true, i};
                 p->generate_thumbnail(p->partplate_list.get_plate(i)->no_light_thumbnail_data, THUMBNAIL_SIZE_3MF.first, THUMBNAIL_SIZE_3MF.second, thumbnail_params,
                                       Camera::EType::Ortho,  Camera::ViewAngleType::Iso, false, true);
             }
@@ -15060,7 +15062,7 @@ int Plater::export_3mf(const boost::filesystem::path& output_path, SaveStrategy 
             //BBS generate BBS calibration thumbnails
             int index = p->partplate_list.get_curr_plate_index();
             //ThumbnailData* calibration_data = calibration_thumbnails[index];
-            //const ThumbnailsParams calibration_params = { {}, false, true, true, true, p->partplate_list.get_curr_plate_index() };
+            //const ThumbnailsParams calibration_params = { {}, false, true, show_bed_in_3mf, true, p->partplate_list.get_curr_plate_index() };
             //p->generate_calibration_thumbnail(*calibration_data, PartPlate::cali_thumbnail_width, PartPlate::cali_thumbnail_height, calibration_params);
             if (using_exported_file()) {
                 //do nothing
