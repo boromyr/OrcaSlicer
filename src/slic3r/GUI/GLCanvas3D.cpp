@@ -8357,10 +8357,19 @@ void GLCanvas3D::_render_imgui_select_plate_toolbar()
             ImGui::GetWindowDrawList()->AddRectFilled(start_pos, end_pos, plate_bg, button_radius);
         }
 
-        // draw text
+        // ORCA draw text with a colored background box sized to the text
         GImGui->FontSize = 18.0f * f_scale; // ORCA fix font scaling
         ImVec2 text_start_pos = ImVec2(start_pos.x + 4.0f * f_scale, start_pos.y + 2.0f * f_scale); // ORCA move close to corner to prevent overlapping with preview
-        ImGui::RenderText(text_start_pos, std::to_string(i + 1).c_str());
+        std::string thumb_text = std::to_string(i + 1);
+        ImVec2 text_size = ImGui::CalcTextSize(thumb_text.c_str());
+        float pad = 2.0f * f_scale;
+        ImVec2 box_start = text_start_pos - ImVec2(pad, pad);
+        ImVec2 box_end   = text_start_pos + text_size + ImVec2(pad, pad);
+        ImDrawList* draw_list = ImGui::GetWindowDrawList();
+        ImU32 box_color = m_is_dark ? IM_COL32(66, 66, 71, 191) : IM_COL32(238, 238, 238, 191);
+        float round_r = 3.0f * f_scale;
+        draw_list->AddRectFilled(box_start, box_end, box_color, round_r);
+        ImGui::RenderText(text_start_pos, thumb_text.c_str());
         ImGui::SetWindowFontScale(1.2f); // ORCA fix font scaling
 
         ImGui::PopID();
