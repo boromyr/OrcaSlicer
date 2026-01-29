@@ -6211,6 +6211,21 @@ void GLCanvas3D::render_thumbnail_internal(ThumbnailData& thumbnail_data, const 
     glsafe(::glDisable(GL_DEPTH_TEST));
 
     if (thumbnail_params.show_bed) {
+        // Render the plate model into the thumbnail
+        if (wxGetApp().plater() != nullptr) {
+            GLCanvas3D* canvas          = wxGetApp().plater()->get_view3D_canvas3D();
+            PartPlate*  current_plate   = partplate_list.get_curr_plate();
+            PartPlate*  thumbnail_plate = partplate_list.get_plate(thumbnail_params.plate_id);
+            if ((canvas != nullptr) && (current_plate != nullptr) && (thumbnail_plate != nullptr)) {
+                Vec3d       current_origin = current_plate->get_origin();
+                Vec3d       target_origin  = thumbnail_plate->get_origin();
+                Vec3d       delta          = target_origin - current_origin;
+                Transform3d plate_offset   = Transform3d::Identity();
+                plate_offset.translation() = delta;
+                canvas->_render_bed(view_matrix * plate_offset, projection_matrix, !camera.is_looking_downward(), false);
+            }
+        }
+
         // Render the plate grid and texture into the thumbnail (no UI icons)
         partplate_list.render(view_matrix, projection_matrix, !camera.is_looking_downward(), false, false, -1, false, true, true, thumbnail_params.plate_id, &camera);
     }
