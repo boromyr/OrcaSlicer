@@ -13138,7 +13138,8 @@ void Plater::update_all_plate_thumbnails(bool force_update)
 {
     for (int i = 0; i < get_partplate_list().get_plate_count(); i++) {
         PartPlate* plate = get_partplate_list().get_plate(i);
-        ThumbnailsParams thumbnail_params = { {}, false, true, true, true, i};
+        bool show_bed_in_gui = wxGetApp().app_config->get_bool("thumbnails_with_bed_gui");
+        ThumbnailsParams thumbnail_params = { {}, false, true, show_bed_in_gui, true, i};
         if (force_update || !plate->thumbnail_data.is_valid()) {
             get_view3D_canvas3D()->render_thumbnail(plate->thumbnail_data, plate->plate_thumbnail_width, plate->plate_thumbnail_height, thumbnail_params, Camera::EType::Ortho);
         }
@@ -13152,7 +13153,8 @@ void Plater::update_all_plate_thumbnails(bool force_update)
 void Plater::update_obj_preview_thumbnail(ModelObject *mo, int obj_idx, int vol_idx, std::vector<Slic3r::ColorRGBA> colors, int camera_view_angle_type)
 {
     PartPlate *      plate            = get_partplate_list().get_plate(0);
-    ThumbnailsParams thumbnail_params = {{}, false, true, true, true, 0, false};
+    bool show_bed_in_gui = wxGetApp().app_config->get_bool("thumbnails_with_bed_gui");
+    ThumbnailsParams thumbnail_params = {{}, false, true, show_bed_in_gui, true, 0, false};
     GLVolumeCollection cur_volumes;
     cur_volumes.load_object_volume(mo, obj_idx, vol_idx, 0, "volume", true, false, false, false);
     ModelObjectPtrs model_objects;

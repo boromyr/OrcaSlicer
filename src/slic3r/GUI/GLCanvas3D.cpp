@@ -1798,6 +1798,12 @@ void GLCanvas3D::reset_select_plate_toolbar_selection() {
         wxGetApp().mainframe->update_slice_print_status(MainFrame::eEventSliceUpdate, true, true);
 }
 
+void GLCanvas3D::force_toolbar_render_update()
+{
+    m_sel_plate_toolbar.is_render_finish = false;
+    set_as_dirty();
+}
+
 void GLCanvas3D::enable_select_plate_toolbar(bool enable)
 {
     m_sel_plate_toolbar.set_enabled(enable);

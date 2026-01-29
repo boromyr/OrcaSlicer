@@ -838,6 +838,15 @@ wxBoxSizer *PreferencesDialog::create_item_checkbox(wxString title, wxString too
         app_config->set_bool(param, checkbox->GetValue());
         app_config->save();
 
+        if (param == "thumbnails_with_bed_gui") {
+            if (wxGetApp().plater()) {
+                wxGetApp().plater()->force_update_all_plate_thumbnails();
+                if (wxGetApp().plater()->get_preview_canvas3D()) {
+                    wxGetApp().plater()->get_preview_canvas3D()->force_toolbar_render_update();
+                }
+            }
+        }
+
         // if (param == "staff_pick_switch") {
         //     bool pbool = app_config->get("staff_pick_switch") == "true";
         //     wxGetApp().switch_staff_pick(pbool);
