@@ -1248,6 +1248,12 @@ void PreferencesDialog::create_items()
     auto item_show_splash_scr  = create_item_checkbox(_L("Show splash screen"), _L("Show the splash screen during startup."), "show_splash_screen");
     g_sizer->Add(item_show_splash_scr);
 
+    auto item_thumbnails_with_bed_gui_scr  = create_item_checkbox(_L("Show bed in plate selector toolbar"), _L("Show the bed texture in the GUIs preview plate selector toolbar."), "thumbnails_with_bed_gui");
+    g_sizer->Add(item_thumbnails_with_bed_gui_scr);
+
+    auto item_thumbnails_with_bed_3mf_scr  = create_item_checkbox(_L("Show bed in 3mf file metadata pictures"), _L("Show the bed texture in the 3mf file metadata pictures used for icons."), "thumbnails_with_bed_3mf");
+    g_sizer->Add(item_thumbnails_with_bed_3mf_scr);
+
     //auto item_hints            = create_item_checkbox(_L("Show \"Daily Tips\" after start"), page, _L("If enabled, useful hints are displayed at startup."), "show_daily_tips");
     //g_sizer->Add(item_hints);
 
