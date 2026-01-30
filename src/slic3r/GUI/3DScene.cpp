@@ -190,14 +190,54 @@ void GLVolume::load_render_colors()
 
 ColorRGBA GLVolume::brighten_color(const ColorRGBA& color, float multiplier)
 {
-    // Multiply RGB by brightness factor, clamping to 1.0
-    // Alpha channel remains unchanged
-    return ColorRGBA(
-        std::min(color.r() * multiplier, 1.0f),
-        std::min(color.g() * multiplier, 1.0f),
-        std::min(color.b() * multiplier, 1.0f),
-        color.a()
-    );
+    // Convert RGB to HSL, increase lightness, convert back
+
+    float r = color.r(), g = color.g(), b = color.b();
+
+    // RGB to HSL conversion
+    float max_val = std::max({r, g, b});
+    float min_val = std::min({r, g, b});
+    float l = (max_val + min_val) / 2.0f;
+    float h = 0.0f, s = 0.0f;
+
+    if (max_val != min_val) {
+        float delta = max_val - min_val;
+        s = l > 0.5f ? delta / (2.0f - max_val - min_val) : delta / (max_val + min_val);
+
+        if (max_val == r)
+            h = (g - b) / delta + (g < b ? 6.0f : 0.0f);
+        else if (max_val == g)
+            h = (b - r) / delta + 2.0f;
+        else
+            h = (r - g) / delta + 4.0f;
+        h /= 6.0f;
+    }
+
+    // Increase lightness by a fixed amount (0.25)
+    // Ensures even saturated colors become visibly brighter
+    l = std::min(l + 0.25f, 1.0f);
+
+    // HSL to RGB conversion
+    auto hue_to_rgb = [](float p, float q, float t) {
+        if (t < 0.0f) t += 1.0f;
+        if (t > 1.0f) t -= 1.0f;
+        if (t < 1.0f / 6.0f) return p + (q - p) * 6.0f * t;
+        if (t < 1.0f / 2.0f) return q;
+        if (t < 2.0f / 3.0f) return p + (q - p) * (2.0f / 3.0f - t) * 6.0f;
+        return p;
+    };
+
+    if (s == 0.0f) {
+        r = g = b = l; // achromatic (gray)
+    } else {
+        float q = l < 0.5f ? l * (1.0f + s) : l + s - l * s;
+        float p = 2.0f * l - q;
+        r = hue_to_rgb(p, q, h + 1.0f / 3.0f);
+        g = hue_to_rgb(p, q, h);
+        b = hue_to_rgb(p, q, h - 1.0f / 3.0f);
+    }
+
+    return ColorRGBA(r, g, b, color.a());
 }
 
 GLVolume::GLVolume(float r, float g, float b, float a)
@@ -300,7 +340,11 @@ void GLVolume::set_render_color()
 
     //BBS set unprintable color
     if (!printable) {
-        render_color = UNPRINTABLE_COLOR;
+        if (selected) {
+            render_color = brighten_color(UNPRINTABLE_COLOR, 1.25f);
+        } else {
+            render_color = UNPRINTABLE_COLOR;
+        }
     }
 
     //BBS set invisible color
