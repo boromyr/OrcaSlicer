@@ -2041,7 +2041,7 @@ void GLCanvas3D::render(bool only_init)
         if (!no_partplate)
             _render_bed(camera.get_view_matrix(), camera.get_projection_matrix(), !camera.is_looking_downward(), m_show_world_axes);
         if (!no_partplate) //BBS: add outline logic
-            _render_platelist(camera.get_view_matrix(), camera.get_projection_matrix(), !camera.is_looking_downward(), only_current, only_body, hover_id, true, show_grid);
+            _render_platelist(camera.get_view_matrix(), camera.get_projection_matrix(), camera.get_viewport(), !camera.is_looking_downward(), only_current, only_body, hover_id, true, show_grid);
         _render_objects(GLVolumeCollection::ERenderType::Transparent, !m_gizmos.is_running());
     }
     /* preview render */
@@ -2050,7 +2050,7 @@ void GLCanvas3D::render(bool only_init)
         _render_sla_slices();
         _render_selection();
         _render_bed(camera.get_view_matrix(), camera.get_projection_matrix(), !camera.is_looking_downward(), m_show_world_axes);
-        _render_platelist(camera.get_view_matrix(), camera.get_projection_matrix(), !camera.is_looking_downward(), only_current, true, hover_id);
+        _render_platelist(camera.get_view_matrix(), camera.get_projection_matrix(), camera.get_viewport(), !camera.is_looking_downward(), only_current, true, hover_id);
         // BBS: GUI refactor: add canvas size as parameters
         _render_gcode(cnv_size.get_width(), cnv_size.get_height());
     }
@@ -6233,7 +6233,7 @@ void GLCanvas3D::render_thumbnail_internal(ThumbnailData& thumbnail_data, const 
         }
 
         // Render the plate grid and texture into the thumbnail (no UI icons)
-        partplate_list.render(view_matrix, projection_matrix, !camera.is_looking_downward(), false, false, -1, false, true, true, thumbnail_params.plate_id, &camera);
+        partplate_list.render(view_matrix, projection_matrix, camera.get_viewport(), !camera.is_looking_downward(), false, false, -1, false, true, true, thumbnail_params.plate_id);
     }
 
     // restore background color
@@ -7474,9 +7474,9 @@ void GLCanvas3D::_render_bed(const Transform3d& view_matrix, const Transform3d& 
     m_bed.render(*this, view_matrix, projection_matrix, bottom, scale_factor, show_axes);
 }
 
-void GLCanvas3D::_render_platelist(const Transform3d& view_matrix, const Transform3d& projection_matrix, bool bottom, bool only_current, bool only_body, int hover_id, bool render_cali, bool show_grid)
+void GLCanvas3D::_render_platelist(const Transform3d& view_matrix, const Transform3d& projection_matrix, const std::array<int, 4>& viewport, bool bottom, bool only_current, bool only_body, int hover_id, bool render_cali, bool show_grid)
 {
-    wxGetApp().plater()->get_partplate_list().render(view_matrix, projection_matrix, bottom, only_current, only_body, hover_id, render_cali, show_grid, false, -1, nullptr);
+    wxGetApp().plater()->get_partplate_list().render(view_matrix, projection_matrix, viewport, bottom, only_current, only_body, hover_id, render_cali, show_grid, false, -1);
 }
 
 void GLCanvas3D::_render_plane() const

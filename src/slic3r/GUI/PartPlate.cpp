@@ -727,7 +727,7 @@ void PartPlate::render_background(bool force_default_color, bool thumbnail)
 	glsafe(::glDepthMask(GL_TRUE));
 }
 
-void PartPlate::render_logo_texture(GLTexture &logo_texture, GLModel& logo_buffer, bool bottom, const Camera* camera_override)
+void PartPlate::render_logo_texture(const Transform3d& view_matrix, const Transform3d& projection_matrix, GLTexture &logo_texture, GLModel& logo_buffer, bool bottom)
 {
 	//check valid
 	if (logo_texture.unsent_compressed_data_available()) {
@@ -739,9 +739,10 @@ void PartPlate::render_logo_texture(GLTexture &logo_texture, GLModel& logo_buffe
 		GLShaderProgram* shader = wxGetApp().get_shader("printbed");
 		if (shader != nullptr) {
 			shader->start_using();
-            const Camera &camera = (camera_override != nullptr) ? *camera_override : wxGetApp().plater()->get_camera();
-            shader->set_uniform("view_model_matrix", camera.get_view_matrix());
-            shader->set_uniform("projection_matrix", camera.get_projection_matrix());
+		    // ORCA: Using passed in camera parameters
+            //const Camera &camera = wxGetApp().plater()->get_camera();
+            shader->set_uniform("view_model_matrix", view_matrix);
+            shader->set_uniform("projection_matrix", projection_matrix);
 			shader->set_uniform("transparent_background", 0);
 			shader->set_uniform("svg_source", 0);
 
@@ -773,7 +774,7 @@ void PartPlate::render_logo_texture(GLTexture &logo_texture, GLModel& logo_buffe
 	}
 }
 
-void PartPlate::render_logo(bool bottom, bool render_cali, const Camera* camera_override)
+void PartPlate::render_logo(const Transform3d& view_matrix, const Transform3d& projection_matrix, bool bottom, bool render_cali)
 {
 	if (!m_partplate_list->render_bedtype_logo) {
 		// render third-party printer texture logo
@@ -840,7 +841,7 @@ void PartPlate::render_logo(bool bottom, bool render_cali, const Camera* camera_
 		}
 
 		if (m_logo_triangles.is_initialized())
-			render_logo_texture(m_partplate_list->m_logo_texture, m_logo_triangles, bottom, camera_override);
+			render_logo_texture(view_matrix, projection_matrix, m_partplate_list->m_logo_texture, m_logo_triangles, bottom);
 		return;
 	}
 
@@ -871,10 +872,11 @@ void PartPlate::render_logo(bool bottom, bool render_cali, const Camera* camera_
 					part.offset = Vec2d(m_origin.x(), m_origin.y());
 					part.update_buffer();
 				}
-				render_logo_texture(*(part.texture),
+				render_logo_texture(view_matrix,
+									projection_matrix,
+									*(part.texture),
 									*(part.buffer),
-									bottom,
-									camera_override);
+									bottom);
 			}
 		}
 	}
@@ -888,10 +890,11 @@ void PartPlate::render_logo(bool bottom, bool render_cali, const Camera* camera_
 						part.offset = Vec2d(m_origin.x(), m_origin.y());
 						part.update_buffer();
 					}
-					render_logo_texture(*(part.texture),
+					render_logo_texture(view_matrix,
+						projection_matrix,
+						*(part.texture),
 						*(part.buffer),
-						bottom,
-						camera_override);
+						bottom);
 				}
 			}
 		}
@@ -908,7 +911,7 @@ void PartPlate::render_logo(bool bottom, bool render_cali, const Camera* camera_
                         part.offset = Vec2d(m_origin.x(), m_origin.y());
                         part.update_buffer();
                     }
-                    render_logo_texture(*(part.texture), *(part.buffer), bottom, camera_override);
+                    render_logo_texture(view_matrix, projection_matrix, *(part.texture), *(part.buffer), bottom);
                 }
             }
         }
@@ -959,7 +962,7 @@ void PartPlate::render_exclude_area(bool force_default_color) {
 	glsafe(::glDepthMask(GL_TRUE));
 }*/
 
-void PartPlate::render_grid(bool bottom, bool thumbnail, const Camera* camera_override) {
+void PartPlate::render_grid(const Transform3d& view_matrix, const Transform3d& projection_matrix, const std::array<int, 4>& viewport, bool bottom, bool thumbnail) {
 	//glsafe(::glEnable(GL_MULTISAMPLE));
 	// draw grid
 
@@ -974,10 +977,11 @@ void PartPlate::render_grid(bool bottom, bool thumbnail, const Camera* camera_ov
     glsafe(::glEnable(GL_BLEND));
     glsafe(::glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA));
 
-    const Camera& camera = (camera_override != nullptr) ? *camera_override : wxGetApp().plater()->get_camera();
-    const std::array<int, 4>& viewport = camera.get_viewport();
-    const Transform3d& view_matrix = camera.get_view_matrix();
-    const Transform3d& projection_matrix = camera.get_projection_matrix();
+    // ORCA: Using passed in camera parameters
+    //const Camera& camera = wxGetApp().plater()->get_camera();
+    //const std::array<int, 4>& viewport = camera.get_viewport();
+    //const Transform3d& view_matrix = camera.get_view_matrix();
+    //const Transform3d& projection_matrix = camera.get_projection_matrix();
 
     shader->set_uniform("view_model_matrix", view_matrix);
     shader->set_uniform("projection_matrix", projection_matrix);
@@ -3192,7 +3196,7 @@ bool PartPlate::intersects(const BoundingBoxf3& bb) const
 	return print_volume.intersects(bb);
 }
 
-void PartPlate::render(const Transform3d& view_matrix, const Transform3d& projection_matrix, bool bottom, bool only_body, bool force_background_color, HeightLimitMode mode, int hover_id, bool render_cali, bool show_grid, bool thumbnail, const Camera* camera)
+void PartPlate::render(const Transform3d& view_matrix, const Transform3d& projection_matrix, const std::array<int, 4>& viewport, bool bottom, bool only_body, bool force_background_color, HeightLimitMode mode, int hover_id, bool render_cali, bool show_grid, bool thumbnail)
 {
     glsafe(::glEnable(GL_DEPTH_TEST));
 
@@ -3246,13 +3250,13 @@ void PartPlate::render(const Transform3d& view_matrix, const Transform3d& projec
     }
 
     if (show_grid)
-        render_grid(bottom, thumbnail, camera);
+        render_grid(view_matrix, projection_matrix, viewport, bottom, thumbnail);
 
     if (!bottom && (m_selected || thumbnail) && !force_background_color) {
         if (m_partplate_list)
-            render_logo(bottom, m_partplate_list->render_cali_logo && render_cali, camera);
+            render_logo(view_matrix, projection_matrix, bottom, m_partplate_list->render_cali_logo && render_cali);
         else
-            render_logo(bottom, true, camera);
+            render_logo(view_matrix, projection_matrix, bottom, true);
     }
 
     if (!thumbnail){
@@ -5485,7 +5489,7 @@ void PartPlateList::postprocess_arrange_polygon(arrangement::ArrangePolygon& arr
 
 /*rendering related functions*/
 //render
-void PartPlateList::render(const Transform3d& view_matrix, const Transform3d& projection_matrix, bool bottom, bool only_current, bool only_body, int hover_id, bool render_cali, bool show_grid, bool thumbnail, int plate_id, const Camera* camera)
+void PartPlateList::render(const Transform3d& view_matrix, const Transform3d& projection_matrix, const std::array<int, 4>& viewport, bool bottom, bool only_current, bool only_body, int hover_id, bool render_cali, bool show_grid, bool thumbnail, int plate_id)
 {
 	const std::lock_guard<std::mutex> local_lock(m_plates_mutex);
 	std::vector<PartPlate*>::iterator it = m_plate_list.begin();
@@ -5515,15 +5519,15 @@ void PartPlateList::render(const Transform3d& view_matrix, const Transform3d& pr
 		if (current_index == m_current_plate) {
 			PartPlate::HeightLimitMode height_mode = (only_current)?PartPlate::HEIGHT_LIMIT_NONE:m_height_limit_mode;
 			if (plate_hover_index == current_index)
-                (*it)->render(view_matrix, projection_matrix, bottom, only_body, false, height_mode, plate_hover_action, render_cali, show_grid, thumbnail, camera);
+                (*it)->render(view_matrix, projection_matrix, viewport, bottom, only_body, false, height_mode, plate_hover_action, render_cali, show_grid, thumbnail);
 			else
-                (*it)->render(view_matrix, projection_matrix, bottom, only_body, false, height_mode, -1, render_cali, show_grid, thumbnail, camera);
+                (*it)->render(view_matrix, projection_matrix, viewport, bottom, only_body, false, height_mode, -1, render_cali, show_grid, thumbnail);
 		}
 		else {
 			if (plate_hover_index == current_index)
-				(*it)->render(view_matrix, projection_matrix, bottom, only_body, false, PartPlate::HEIGHT_LIMIT_NONE, plate_hover_action, render_cali, show_grid, thumbnail, camera);
+				(*it)->render(view_matrix, projection_matrix, viewport, bottom, only_body, false, PartPlate::HEIGHT_LIMIT_NONE, plate_hover_action, render_cali, show_grid, thumbnail);
 			else
-                (*it)->render(view_matrix, projection_matrix, bottom, only_body, false, PartPlate::HEIGHT_LIMIT_NONE, -1, render_cali, show_grid, thumbnail, camera);
+                (*it)->render(view_matrix, projection_matrix, viewport, bottom, only_body, false, PartPlate::HEIGHT_LIMIT_NONE, -1, render_cali, show_grid, thumbnail);
 		}
 	}
 }
