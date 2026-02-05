@@ -1358,6 +1358,22 @@ void PrintConfigDef::init_fff_params()
     def->tooltip = L("Use only one wall on flat top surfaces, to give more space to the top infill pattern.");
     def->set_default_value(new ConfigOptionBool(false));
 
+    def = this->add("top_surface_ignore_small_upper_islands", coBool);
+    def->label = L("Ignore small upper-layer features");
+    def->category = L("Quality");
+    def->tooltip = L("When enabled, small or thin features on the next layer (for example embossed / raised text) are ignored when determining top-surface regions on the current layer. This can prevent a top surface from being split into fragments below raised details.");
+    def->mode = comAdvanced;
+    def->set_default_value(new ConfigOptionBool(false));
+
+    def = this->add("top_surface_ignore_small_upper_islands_max_ratio", coFloat);
+    def->label = L("Max upper coverage ratio");
+    def->category = L("Quality");
+    def->tooltip = L("Upper-layer coverage is ignored only if the covered area is at most this fraction of the current surface area (0.0 - 1.0). Increase this value if raised text still interrupts the top surface below.");
+    def->min = 0;
+    def->max = 1;
+    def->mode = comAdvanced;
+    def->set_default_value(new ConfigOptionFloat(0.15));
+
     // the tooltip is copied from SuperStudio
     def = this->add("min_width_top_surface", coFloatOrPercent);
     def->label = L("One wall threshold");
