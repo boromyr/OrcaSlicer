@@ -7,6 +7,7 @@
 #include "I18N.hpp"
 #include "Layer.hpp"
 #include "MutablePolygon.hpp"
+#include "PerimeterGenerator.hpp"
 #include "PrintConfig.hpp"
 #include "Support/SupportMaterial.hpp"
 #include "Support/SupportSpotsGenerator.hpp"
@@ -1466,47 +1467,15 @@ void PrintObject::detect_surfaces_type()
                     // of current layer and upper one)
                     Surfaces top;
                     if (upper_layer) {
-                        const PrintRegionConfig &region_config = layerm->region().config();
-
-                        const ExPolygons upper_cover_raw = interface_shells ?
-                            to_expolygons(upper_layer->m_regions[region_id]->slices.surfaces) :
-                            upper_layer->lslices;
-
-                        ExPolygons upper_cover_filtered = upper_cover_raw;
-                        if (region_config.top_surface_ignore_small_upper_islands && !upper_cover_raw.empty()) {
-                            const ExPolygons upper_islands = union_ex(upper_cover_raw);
-
-                            double current_area = 0.0;
-                            for (const ExPolygon &p : layerm_slices_surfaces)
-                                current_area += std::abs(p.area());
-
-                            const double max_ratio = region_config.top_surface_ignore_small_upper_islands_max_ratio;
-                            const double shrink = std::max(0.0, double(layerm->flow(frExternalPerimeter).scaled_width()) * 0.5);
-
-                            ExPolygons kept_islands;
-                            kept_islands.reserve(upper_islands.size());
-                            for (const ExPolygon &island : upper_islands) {
-                                const ExPolygons island_ex{ island };
-                                const ExPolygons covered = intersection_ex(layerm_slices_surfaces, island_ex, ApplySafetyOffset::Yes);
-
-                                double covered_area = 0.0;
-                                for (const ExPolygon &p : covered)
-                                    covered_area += std::abs(p.area());
-
-                                const bool ignore_by_ratio = (current_area > 0.0) && (covered_area > 0.0) &&
-                                    (covered_area / current_area <= max_ratio);
-                                const bool ignore_by_thickness = (shrink > 0.0) && offset_ex(island_ex, -shrink).empty();
-
-                                if (! (ignore_by_ratio || ignore_by_thickness))
-                                    kept_islands.push_back(island);
-                            }
-
-                            // Subtract only the *kept* (non-ignored) islands from the current layer.
-                            // Ignored islands (typically thin text strokes) should not carve the top surface below.
-                            upper_cover_filtered = kept_islands;
-                        }
-
-                        ExPolygons top_exposed = diff_ex(layerm_slices_surfaces, upper_cover_filtered, ApplySafetyOffset::Yes);
+                        Polygons upper_cover = interface_shells ?
+                            to_polygons(upper_layer->m_regions[region_id]->slices.surfaces) :
+                            to_polygons(upper_layer->lslices);
+                        // Orca: filter out small/thin upper features (e.g. raised text) so they
+                        // don't fragment the top-surface classification below.
+                        upper_cover = top_surface_filter_upper_islands(
+                            layerm->region().config(), layerm_slices_surfaces, upper_cover,
+                            coord_t(layerm->flow(frExternalPerimeter).scaled_width()));
+                        ExPolygons top_exposed = diff_ex(layerm_slices_surfaces, upper_cover, ApplySafetyOffset::Yes);
                         surfaces_append(top, opening_ex(top_exposed, offset), stTop);
                     } else {
                         // if no upper layer, all surfaces of this one are solid

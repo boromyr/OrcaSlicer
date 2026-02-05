@@ -30,7 +30,7 @@ namespace Slic3r {
     
 using namespace Slic3r::Feature::FuzzySkin;
 
-static Polygons top_surface_filter_upper_islands(const PrintRegionConfig &config, const ExPolygons &current_contour, const Polygons &upper_slices_clipped,
+Polygons top_surface_filter_upper_islands(const PrintRegionConfig &config, const ExPolygons &current_contour, const Polygons &upper_slices_clipped,
     coord_t perimeter_width)
 {
     if (!config.top_surface_ignore_small_upper_islands || upper_slices_clipped.empty() || current_contour.empty())
