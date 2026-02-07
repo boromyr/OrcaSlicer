@@ -1133,8 +1133,8 @@ PRINT_CONFIG_CLASS_DEFINE(
     ((ConfigOptionBool,                 only_one_wall_top))
 
     // Orca: Ignore small upper-layer features when determining top surfaces (e.g. embossed / raised text).
-    ((ConfigOptionBool,                 top_surface_ignore_small_upper_islands))
-    ((ConfigOptionFloat,                top_surface_ignore_small_upper_islands_max_ratio))
+    ((ConfigOptionBool,                 top_surface_ignore_small_features))
+    ((ConfigOptionFloat,                top_surface_ignore_small_features_area))
 
     //SoftFever
     ((ConfigOptionFloatOrPercent,       min_width_top_surface))
