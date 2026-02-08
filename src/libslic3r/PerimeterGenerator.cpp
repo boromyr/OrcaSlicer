@@ -57,7 +57,31 @@ Polygons top_surface_filter_features(const PrintRegionConfig &config, const ExPo
 
         const bool ignore_by_area = (covered_area > 0.0) && (covered_area <= max_island_area_scaled);
 
-        if (!ignore_by_area)
+        bool keep = !ignore_by_area;
+        if (!keep) {
+            // Only ignore if the island is a small Detail on a Larger surface.
+            // If the island covers a significant portion of the surface below (e.g. a small tower),
+            // then it is structural and should be kept to avoid converting the entire tower to Top Surface.
+            constexpr double structural_coverage_threshold = 0.75;
+
+            for (const ExPolygon &base_poly : current_contour) {
+                if (!base_poly.contour.bounding_box().overlap(island.contour.bounding_box()))
+                    continue;
+
+                double base_area = std::abs(base_poly.area());
+
+                // If base is large, ratio is small -> ignore.
+                // We want covered / base > threshold
+                // so covered > base * threshold
+                if (base_area * structural_coverage_threshold > covered_area)
+                    continue;
+
+                keep = true;
+                break;
+            }
+        }
+
+        if (keep)
             kept_islands.push_back(island);
     }
 
