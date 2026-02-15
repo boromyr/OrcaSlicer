@@ -1404,6 +1404,22 @@ void PrintConfigDef::init_fff_params()
     def->tooltip = L("Use only one wall on flat top surfaces, to give more space to the top infill pattern.");
     def->set_default_value(new ConfigOptionBool(false));
 
+    def = this->add("top_surface_ignore_small_features", coBool);
+    def->label = L("Make top surface continuous");
+    def->category = L("Quality");
+    def->tooltip = L("If enabled, the top surface fill pattern will cover the area below small features on the layer above, rather than being interrupted by them. Useful for surfaces with embossed text or small details on top.");
+    def->mode = comAdvanced;
+    def->set_default_value(new ConfigOptionBool(false));
+
+    def = this->add("top_surface_ignore_small_features_area", coFloat);
+    def->label = L("Small feature threshold");
+    def->category = L("Quality");
+    def->tooltip = L("Features on the layer above with an area smaller than this value (mm²) will be ignored, preserving the continuity of the top surface below them.");
+    def->min = 0;
+    def->max = 10000;
+    def->mode = comAdvanced;
+    def->set_default_value(new ConfigOptionFloat(10.0));
+
     // the tooltip is copied from SuperStudio
     def = this->add("min_width_top_surface", coFloatOrPercent);
     def->label = L("One wall threshold");

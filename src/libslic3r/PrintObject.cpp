@@ -7,6 +7,7 @@
 #include "I18N.hpp"
 #include "Layer.hpp"
 #include "MutablePolygon.hpp"
+#include "TopSurface.hpp"
 #include "PrintConfig.hpp"
 #include "Support/SupportMaterial.hpp"
 #include "Support/SupportSpotsGenerator.hpp"
@@ -1034,6 +1035,8 @@ bool PrintObject::invalidate_state_by_config_options(
             || opt_key == "alternate_extra_wall"
             || opt_key == "top_one_wall_type"
             || opt_key == "min_width_top_surface"
+            || opt_key == "top_surface_ignore_small_features"
+            || opt_key == "top_surface_ignore_small_features_area"
             || opt_key == "only_one_wall_first_layer"
             || opt_key == "extra_perimeters_on_overhangs"
             || opt_key == "detect_overhang_wall"
@@ -1468,10 +1471,15 @@ void PrintObject::detect_surfaces_type()
                     // of current layer and upper one)
                     Surfaces top;
                     if (upper_layer) {
-                        ExPolygons upper_slices = interface_shells ?
-                            diff_ex(layerm_slices_surfaces, upper_layer->m_regions[region_id]->slices.surfaces, ApplySafetyOffset::Yes) :
-                            diff_ex(layerm_slices_surfaces, upper_layer->lslices, ApplySafetyOffset::Yes);
-                        surfaces_append(top, opening_ex(upper_slices, offset), stTop);
+                        Polygons upper_cover = interface_shells ?
+                            to_polygons(upper_layer->m_regions[region_id]->slices.surfaces) :
+                            to_polygons(upper_layer->lslices);
+                        // Orca: filter out small/thin upper features (e.g. raised text) so they
+                        // don't fragment the top-surface classification below.
+                        upper_cover = top_surface_filter_features(
+                            layerm->region().config(), layerm_slices_surfaces, upper_cover);
+                        ExPolygons top_exposed = diff_ex(layerm_slices_surfaces, upper_cover, ApplySafetyOffset::Yes);
+                        surfaces_append(top, opening_ex(top_exposed, offset), stTop);
                     } else {
                         // if no upper layer, all surfaces of this one are solid
                         // we clone surfaces because we're going to clear the slices collection

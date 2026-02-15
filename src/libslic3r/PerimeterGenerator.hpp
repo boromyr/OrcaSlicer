@@ -59,6 +59,7 @@ template<> struct hash<Slic3r::FuzzySkinConfig>
 
 namespace Slic3r {
 
+
 class PerimeterGenerator {
 public:
     // Inputs:
