@@ -1601,7 +1601,7 @@ void SeamPlacer::place_seam(const Layer *layer, ExtrusionLoop &loop,
     //lastly, for internal perimeters, do the staggering if requested
     if (po->config().staggered_inner_seams && loop.length() > 0.0) {
       //fix depth, it is sometimes strongly underestimated
-      depth = std::max(loop.paths[projected_point.path_idx].width, depth);
+      depth = std::max(loop.paths[projected_point.path_idx].width, depth) * 1.3f;
 
       while (depth > 0.0f) {
         auto next_point = get_next_loop_point(projected_point);
