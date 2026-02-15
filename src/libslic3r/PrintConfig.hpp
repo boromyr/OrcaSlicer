@@ -35,7 +35,6 @@ enum GCodeFlavor : unsigned char {
     gcfSmoothie, gcfNoExtrusion
 };
 
-
 enum class FuzzySkinType {
     None,
     External,
