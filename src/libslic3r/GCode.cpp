@@ -7039,9 +7039,9 @@ std::string GCode::travel_to(const Point& point, ExtrusionRole role, std::string
         }
     } else {
         if (m_config.default_acceleration.value > 0) {
-            if (role == erExternalPerimeter && travel.length() < scale_(EXTRUDER_CONFIG(retraction_minimum_travel))) {
+            if (role == erExternalPerimeter && travel.length() < scale_(EXTRUDER_CONFIG(retraction_minimum_travel)) * 2) {
                 if (m_config.outer_wall_acceleration.value > 0)
-                    acceleration_to_set = (unsigned int) floor(m_config.outer_wall_acceleration.value + 0.5);
+                    acceleration_to_set = (unsigned int) 400;
             } else {
                 if (m_config.travel_acceleration.value > 0)
                     acceleration_to_set = (unsigned int) floor(m_config.travel_acceleration.value + 0.5);
@@ -7049,9 +7049,9 @@ std::string GCode::travel_to(const Point& point, ExtrusionRole role, std::string
         }
 
         if (m_config.default_jerk.value > 0) {
-            if (role == erExternalPerimeter && travel.length() < scale_(EXTRUDER_CONFIG(retraction_minimum_travel))) {
+            if (role == erExternalPerimeter && travel.length() < scale_(EXTRUDER_CONFIG(retraction_minimum_travel)) * 2) {
                 if (m_config.outer_wall_jerk.value > 0)
-                    jerk_to_set = m_config.outer_wall_jerk.value;
+                    jerk_to_set = m_config.outer_wall_jerk.value/2;
             } else {
                 if (m_config.travel_jerk.value > 0)
                     jerk_to_set = m_config.travel_jerk.value;

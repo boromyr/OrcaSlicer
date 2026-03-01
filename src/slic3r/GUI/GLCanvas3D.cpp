@@ -3916,7 +3916,7 @@ void GLCanvas3D::on_mouse_wheel(wxMouseEvent& evt)
             // A volume is selected. Test, whether hovering over a layer thickness bar.
             if (m_layers_editing.bar_rect_contains(*this, (float)evt.GetX(), (float)evt.GetY())) {
                 // Adjust the width of the selection.
-                m_layers_editing.band_width = std::max(std::min(m_layers_editing.band_width * (1.0f + 0.1f * (float)evt.GetWheelRotation() / (float)evt.GetWheelDelta()), 10.0f), 1.5f);
+                m_layers_editing.band_width = std::max(std::min(m_layers_editing.band_width * (1.0f + 0.1f * (float)evt.GetWheelRotation() / (float)evt.GetWheelDelta()), 10.0f), 0.5f);
                 if (m_canvas != nullptr)
                     m_canvas->Refresh();
 

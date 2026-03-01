@@ -28,6 +28,8 @@ void GLGizmoSeam::on_shutdown()
 bool GLGizmoSeam::on_init()
 {
     m_shortcut_key = WXK_CONTROL_P;
+    m_cursor_radius = 0.25f;
+    m_vertical_only = true;
 
     // FIXME: maybe should be using GUI::shortkey_ctrl_prefix() or equivalent?
     const wxString ctrl  = _L("Ctrl+");
@@ -252,7 +254,7 @@ void GLGizmoSeam::on_render_input_window(float x, float y, float bottom_limit)
     ImGui::SameLine(sliders_left_width);
 
     ImGui::PushItemWidth(sliders_width);
-    m_imgui->bbl_slider_float_style("##cursor_radius", &m_cursor_radius, CursorRadiusMin, CursorRadiusMax, "%.2f", 1.0f, true);
+    m_imgui->bbl_slider_float_style("##cursor_radius", &m_cursor_radius, CursorRadiusMin, 10.0f, "%.2f", 1.0f, true);
     ImGui::SameLine(drag_left_width);
     ImGui::PushItemWidth(1.5 * slider_icon_width);
     ImGui::BBLDragFloat("##cursor_radius_input", &m_cursor_radius, 0.05f, 0.0f, 0.0f, "%.2f");
