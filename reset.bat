@@ -1,0 +1,2 @@
+git fetch upstream & git checkout main & git reset --hard upstream/main & git commit --amend -m "Reset [skip ci]" --no-edit & git push origin main --force & git apply "D:\Users\PC\Documents\GitHub\reset.patch" & git apply "D:\Users\PC\Documents\GitHub\mod.patch" & git add -A & git commit -m ". [skip ci]" & git push origin main --force
+@REM & xcopy D:\Users\PC\Desktop\.github\workflows\ D:\Users\PC\Documents\GitHub\OrcaSlicer\.github\workflows /s /e /y & git format-patch -1 --stdout > D:\Users\PC\Documents\GitHub\reset.patch

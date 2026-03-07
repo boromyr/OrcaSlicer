@@ -1573,7 +1573,7 @@ void PrintConfigDef::init_fff_params()
     def->category = L("Support");
     def->tooltip = L("A gap between innermost brim line and object can make brim be removed more easily.");
     def->sidetext = L("mm");	// milimeters, CIS languages need translation
-    def->min = 0;
+    def->min = -1;
     def->max = 2;
     def->mode = comAdvanced;
     def->set_default_value(new ConfigOptionFloat(0.));
