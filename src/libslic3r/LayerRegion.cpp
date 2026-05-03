@@ -530,6 +530,118 @@ void LayerRegion::process_external_surfaces(const Layer *lower_layer, const Poly
 #endif
     }
 
+    // bridge_infill_wall_overlap: extend each bridge fill surface along the bridge line direction
+    // so that bridge lines anchor further at protrusion/hole edges (where the bridge meets a
+    // wall surrounding a void below — internal cavities, windows, ledges/protrusions). Extension
+    // is clipped to this region's outer hull so it never overshoots the part edge.
+    //
+    // The permitted extension territory ("hole zone") is the union of:
+    //   1. literal holes in this layer's slice (covers ring-shaped layers during progressive caps),
+    //   2. areas of this layer that are over VOID in the lower layer (covers final cap layers,
+    //      flat ledges, overhanging perimeters — i.e. all bridge regions plus their neighborhood),
+    // expanded outward by the wall thickness so the buffer reaches across the wall zone between
+    // the bridge polygon and the hole/void perimeter. Without (2) only the (1)-style cases work,
+    // which is why flat caps and protrusions previously got no extension.
+    {
+        const double inner_wall_width    = unscale<double>(this->flow(frPerimeter).scaled_width());
+        const float  bridge_ovlp_scaled  = scaled<float>(this->region().config().bridge_infill_wall_overlap.get_abs_value(inner_wall_width));
+        const float  infill_ovlp_scaled  = scaled<float>(this->region().config().infill_wall_overlap.get_abs_value(inner_wall_width));
+        const float  extra_offset        = bridge_ovlp_scaled - infill_ovlp_scaled;
+        if (extra_offset > 0.f && !bridges.surfaces.empty()) {
+            // Region's outer hull (holes filled)
+            Polygons region_outer_contours;
+            region_outer_contours.reserve(this->slices.surfaces.size());
+            for (const Surface& s : this->slices.surfaces)
+                region_outer_contours.push_back(s.expolygon.contour);
+            ExPolygons region_outer_hull = union_ex(region_outer_contours);
+
+            // Region's own area (with holes subtracted)
+            ExPolygons own_region;
+            own_region.reserve(this->slices.surfaces.size());
+            for (const Surface& s : this->slices.surfaces)
+                own_region.push_back(s.expolygon);
+            own_region = union_ex(own_region);
+
+            // (1) Literal holes in this layer's slice (rings during progressive caps, etc.)
+            ExPolygons region_internal_holes = diff_ex(region_outer_hull, own_region);
+
+            // (2) Areas of this region that are over VOID in the lower layer. The bridge
+            // polygons themselves are by definition over void; including this term means
+            // the wall zone immediately around every bridge becomes a valid extension target,
+            // which is the geometric counterpart of "this is a wall that hangs over a hole below".
+            ExPolygons over_lower_void;
+            if (lower_layer != nullptr) {
+                Polygons lower_solid_polys = to_polygons(lower_layer->lslices);
+                ExPolygons lower_solid = union_ex(lower_solid_polys);
+                over_lower_void = diff_ex(region_outer_hull, lower_solid);
+            }
+
+            ExPolygons protrusion_zones = union_ex(region_internal_holes, over_lower_void);
+
+            const int   wall_loops   = std::max(1, this->region().config().wall_loops.value);
+            const float wall_buffer  = scaled<float>(inner_wall_width) * float(wall_loops + 1);
+            ExPolygons  hole_zone    = protrusion_zones.empty()
+                                       ? ExPolygons{}
+                                       : intersection_ex(offset_ex(protrusion_zones, wall_buffer),
+                                                         region_outer_hull);
+
+            if (!hole_zone.empty()) {
+                Surfaces new_bridges;
+                new_bridges.reserve(bridges.surfaces.size());
+                for (Surface& bridge_surf : bridges.surfaces) {
+                    if (bridge_surf.bridge_angle < 0) {
+                        new_bridges.push_back(std::move(bridge_surf));
+                        continue;
+                    }
+
+                    const ExPolygons orig{ bridge_surf.expolygon };
+
+                    // Shift the bridge polygon ±extra_offset along the bridge line direction.
+                    // Union of original + fwd shift + bwd shift is equivalent to the Minkowski
+                    // sum with a line segment — material is added only at the endpoints with
+                    // no lateral widening.
+                    const double cos_a = std::cos(bridge_surf.bridge_angle);
+                    const double sin_a = std::sin(bridge_surf.bridge_angle);
+                    const coord_t dx = static_cast<coord_t>(extra_offset * cos_a);
+                    const coord_t dy = static_cast<coord_t>(extra_offset * sin_a);
+
+                    ExPolygons shifted_fwd = orig;
+                    ExPolygons shifted_bwd = orig;
+                    for (ExPolygon& ep : shifted_fwd) ep.translate( dx,  dy);
+                    for (ExPolygon& ep : shifted_bwd) ep.translate(-dx, -dy);
+
+                    // Allowed territory: original bridge ∪ hole_zone (holes inside the region
+                    // plus the wall zone around them). The anchor wall zone (near the region's
+                    // outer contour) is NOT in hole_zone, so extension can't reach it.
+                    ExPolygons allowed = union_ex(orig, hole_zone);
+                    ExPolygons expanded = intersection_ex(
+                        union_ex(union_ex(orig, shifted_fwd), shifted_bwd),
+                        allowed);
+
+                    if (expanded.empty()) {
+                        new_bridges.push_back(std::move(bridge_surf));
+                        continue;
+                    }
+
+                    // Subtract the gained area from remaining expansion zones to prevent double coverage.
+                    const ExPolygons gained = diff_ex(expanded, orig);
+                    for (ExpansionZone& zone : expansion_zones)
+                        zone.expolygons = diff_ex(zone.expolygons, gained);
+
+                    // Emit one Surface per connected component. Normally the extension touches
+                    // orig through a shared edge and union_ex produces a single piece, but
+                    // numerical clipping can occasionally disconnect a tab — keep them all.
+                    for (ExPolygon& ep : expanded) {
+                        Surface s = bridge_surf;
+                        s.expolygon = std::move(ep);
+                        new_bridges.push_back(std::move(s));
+                    }
+                }
+                bridges.surfaces = std::move(new_bridges);
+            }
+        }
+    }
+
     this->fill_surfaces.remove_types({stTop});
     {
         Surface top_templ(stTop, {});

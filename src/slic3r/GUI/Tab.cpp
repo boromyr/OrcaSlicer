@@ -2435,6 +2435,7 @@ void TabPrint::build()
         optgroup->append_single_option_line("gap_fill_target", "strength_settings_infill#apply-gap-fill");
         optgroup->append_single_option_line("filter_out_gap_fill", "strength_settings_infill#filter-out-tiny-gaps");
         optgroup->append_single_option_line("infill_wall_overlap", "strength_settings_infill#infill-wall-overlap");
+        optgroup->append_single_option_line("bridge_infill_wall_overlap", "strength_settings_infill#bridge-infill-wall-overlap");
 
         optgroup = page->new_optgroup(L("Advanced"), L"param_advanced");
         optgroup->append_single_option_line("align_infill_direction_to_model", "strength_settings_advanced#align-infill-direction-to-model");
@@ -3843,7 +3844,8 @@ void TabFilament::build()
         optgroup->append_single_option_line("filament_adhesiveness_category", "material_basic_information#adhesiveness-category");
 
         optgroup->append_single_option_line("filament_density", "material_basic_information#density");
-        optgroup->append_single_option_line("filament_shrink", "material_basic_information#shrinkage-xy");
+        optgroup->append_single_option_line("filament_shrinkage_compensation_x", "material_basic_information#shrinkage-x");
+        optgroup->append_single_option_line("filament_shrinkage_compensation_y", "material_basic_information#shrinkage-y");
         optgroup->append_single_option_line("filament_shrinkage_compensation_z", "material_basic_information#shrinkage-z");
         optgroup->append_single_option_line("filament_cost", "material_basic_information#price");
         //BBS

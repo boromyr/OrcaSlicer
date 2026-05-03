@@ -2382,10 +2382,82 @@ void Sidebar::init_filament_combo(PlaterPresetComboBox **combo, const int filame
     combo_and_btn_sizer->Add(32 * em / 10, 0, 0, 0, 0);
     combo_and_btn_sizer->Add(del_btn, 0, wxALIGN_CENTER_VERTICAL, 5 * em / 10);
     */
+    // ORCA: edit button — hidden until hover, floats over the right side of the combo (not in sizer)
+    // so the combo width is unaffected when the button appears/disappears.
+    // Position is lazily computed the first time wxEVT_SIZE fires on the combo (i.e. after the first
+    // layout pass), because GetBestSize() returns 0×0 before the window is realized.
+    ScalableButton* preset_edit_btn = new ScalableButton(p->m_panel_filament_content, wxID_ANY, "edit");
+    preset_edit_btn->SetToolTip(_L("Click to edit preset"));
+    preset_edit_btn->Hide();
+
+    PlaterPresetComboBox* combobox = (*combo);
+
+    // Place the button at the right edge of the combo, vertically centred.
+    // Falls back to combo height if GetBestSize() is still unrealized.
+    auto reposition_preset_edit = [preset_edit_btn, combobox]() {
+        wxSize btn_sz = preset_edit_btn->GetBestSize();
+        if (btn_sz.GetWidth() <= 0)
+            btn_sz = wxSize(combobox->GetSize().GetHeight(), combobox->GetSize().GetHeight());
+        preset_edit_btn->SetSize(btn_sz);
+        const wxPoint combo_pos = combobox->GetPosition();
+        const wxSize  combo_sz  = combobox->GetSize();
+        const int x = -7 + combo_pos.x + combo_sz.GetWidth() - btn_sz.GetWidth() - preset_edit_btn->FromDIP(2);
+        const int y = 2 + combo_pos.y + (combo_sz.GetHeight() - btn_sz.GetHeight()) / 2;
+        preset_edit_btn->SetPosition(wxPoint(x, y));
+    };
+
+    // First layout pass: set button size/position while it is still hidden
+    combobox->Bind(wxEVT_SIZE, [reposition_preset_edit](wxSizeEvent& e) {
+        reposition_preset_edit();
+        e.Skip();
+    });
+
+    preset_edit_btn->Bind(wxEVT_BUTTON, [this, filament_idx, preset_edit_btn](wxCommandEvent) {
+        p->editing_filament = -1;
+        if (filament_idx < (int)p->combos_filament.size() && p->combos_filament[filament_idx]->switch_to_tab())
+            p->editing_filament = filament_idx;
+        // ORCA: FIX crash on wxGTK — defer UI modifications out of button event handler
+        wxGetApp().CallAfter([preset_edit_btn]() {
+            if (!preset_edit_btn) return;
+            preset_edit_btn->Hide();
+        });
+    });
+
+    // wxEVT_ENTER_WINDOW does NOT bubble to parent windows — combo's internal children (text field,
+    // dropdown button) absorb the event before it reaches the combobox itself. Bind recursively to
+    // all children so entering any part of the row triggers show/hide.
+    auto show_preset_edit = [preset_edit_btn, reposition_preset_edit]() {
+        if (!preset_edit_btn->IsShown()) {
+            reposition_preset_edit(); // re-check position in case SIZE was missed while hidden
+            preset_edit_btn->Show();
+            preset_edit_btn->Raise(); // z-order above combo
+        }
+    };
+    auto hide_preset_edit_if_leaving = [preset_edit_btn, combobox]() {
+        wxWindow* next_w = wxFindWindowAtPoint(wxGetMousePosition());
+        const bool still_in_row = next_w && (
+            next_w == combobox             || combobox->IsDescendant(next_w)             ||
+            next_w == preset_edit_btn      || preset_edit_btn->IsDescendant(next_w)      ||
+            next_w == combobox->clr_picker || combobox->clr_picker->IsDescendant(next_w)
+        );
+        if (!still_in_row)
+            preset_edit_btn->Hide();
+    };
+    std::function<void(wxWindow*)> bind_hover = [&](wxWindow* w) {
+        w->Bind(wxEVT_ENTER_WINDOW, [show_preset_edit](wxMouseEvent& e) { show_preset_edit(); e.Skip(); });
+        w->Bind(wxEVT_LEAVE_WINDOW, [hide_preset_edit_if_leaving](wxMouseEvent& e) { hide_preset_edit_if_leaving(); e.Skip(); });
+        for (wxWindow* child : w->GetChildren())
+            bind_hover(child);
+    };
+    bind_hover(combobox);
+    bind_hover(combobox->clr_picker);
+    bind_hover(preset_edit_btn);
+    // preset_edit_btn is intentionally NOT added to combo_and_btn_sizer
+
+    // existing context-menu button (kept as-is)
     ScalableButton* edit_btn = new ScalableButton(p->m_panel_filament_content, wxID_ANY, "menu_filament");
     edit_btn->SetToolTip(_L("Click to edit preset"));
 
-    PlaterPresetComboBox* combobox = (*combo);
     edit_btn->Bind(wxEVT_BUTTON, [this, edit_btn, filament_idx](wxCommandEvent) {
         auto menu = p->plater->filament_action_menu(filament_idx);
         wxPoint pt { 0, edit_btn->GetSize().GetHeight() + 10 };

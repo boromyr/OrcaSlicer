@@ -1089,6 +1089,7 @@ PRINT_CONFIG_CLASS_DEFINE(
     ((ConfigOptionFloatOrPercent,       sparse_infill_line_width))
     ((ConfigOptionPercent,              infill_wall_overlap))
     ((ConfigOptionPercent,              top_bottom_infill_wall_overlap))
+    ((ConfigOptionPercent,              bridge_infill_wall_overlap))
     ((ConfigOptionFloat,                sparse_infill_speed))
     ((ConfigOptionPercent, skeleton_infill_density))
     ((ConfigOptionPercent, skin_infill_density))
@@ -1567,7 +1568,8 @@ PRINT_CONFIG_CLASS_DERIVED_DEFINE(
     ((ConfigOptionBool, independent_support_layer_height))
     ((ConfigOptionBool,               combine_brims))
     // SoftFever
-    ((ConfigOptionPercents,            filament_shrink))
+    ((ConfigOptionPercents,            filament_shrinkage_compensation_x))
+    ((ConfigOptionPercents,            filament_shrinkage_compensation_y))
     ((ConfigOptionPercents,            filament_shrinkage_compensation_z))
     ((ConfigOptionBool,                gcode_label_objects))
     ((ConfigOptionBool,                exclude_object))

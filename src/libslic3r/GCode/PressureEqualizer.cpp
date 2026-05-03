@@ -31,7 +31,7 @@ static constexpr int max_look_back_limit = 128;
 // lines where some extruder pressure will remain (so we should equalize between these small travels)
 static constexpr long max_ignored_gap_between_extruding_segments = 3;
 
-PressureEqualizer::PressureEqualizer(const Slic3r::GCodeConfig &config) : m_use_relative_e_distances(config.use_relative_e_distances.value)
+PressureEqualizer::PressureEqualizer(const Slic3r::PrintConfig &config, float outer_wall_acceleration) : m_use_relative_e_distances(config.use_relative_e_distances.value)
 {
     // Preallocate some data, so that output_buffer.data() will return an empty string.
     output_buffer.assign(32, 0);
@@ -77,6 +77,9 @@ PressureEqualizer::PressureEqualizer(const Slic3r::GCodeConfig &config) : m_use_
     }
 
     opened_extrude_set_speed_block = false;
+
+    m_seam_ramp_acceleration = 400.f;
+    m_outer_wall_acceleration = outer_wall_acceleration;
 
 #ifdef PRESSURE_EQUALIZER_STATISTIC
     m_stat.reset();
@@ -135,6 +138,49 @@ void PressureEqualizer::process_layer(const std::string &gcode)
                 // gap to next extrude is too big, stop looking forward. We've found end of this segment
                 break;
             }
+        }
+        static constexpr float SEAM_RAMP_SLOPE = 200.f * 60.f * 60.f;
+        static constexpr float SEAM_RAMP_MIN_RATE_FRACTION = 0.25f;
+        // Force flow ramp-up at seam start for external perimeter.
+        // Apply slope to all consecutive external perimeter segments until ramp completes.
+        long idx_ext_first = -1;
+        for (long i = idx_begin_current_extrusion; i < idx_end_current_extrusion; i++) {
+            if (m_gcode_lines[i].extruding() &&
+                m_gcode_lines[i].extrusion_role == ExtrusionRole::erExternalPerimeter) {
+                idx_ext_first = i;
+                break;
+            }
+        }
+        if (idx_ext_first != -1) {
+            // Emit the acceleration command one G1 before the ramp begins.
+            long idx_pre = idx_ext_first - 1;
+            if (idx_pre >= idx_begin_current_extrusion)
+                m_gcode_lines[idx_pre].seam_ramp_accel_before = true;
+            else
+                m_gcode_lines[idx_ext_first].seam_ramp_accel_before = true;
+
+            // Propagate ramp across all consecutive external perimeter segments.
+            float ramp_rate = m_gcode_lines[idx_ext_first].volumetric_extrusion_rate * SEAM_RAMP_MIN_RATE_FRACTION;
+            long idx_ramp_last = idx_ext_first;
+            for (long i = idx_ext_first; i < idx_end_current_extrusion; i++) {
+                GCodeLine &seg = m_gcode_lines[i];
+                if (!seg.extruding() || seg.extrusion_role != ExtrusionRole::erExternalPerimeter)
+                    break;
+                const float normal_rate = seg.volumetric_extrusion_rate;
+                if (ramp_rate >= normal_rate)
+                    break; // Ramp complete before this segment
+                seg.volumetric_extrusion_rate_start = ramp_rate;
+                seg.max_volumetric_extrusion_rate_slope_positive = SEAM_RAMP_SLOPE;
+                seg.modified = true;
+                idx_ramp_last = i;
+                // Advance ramp_rate by the achievable increase over this segment's length.
+                const float rate_sq = ramp_rate * ramp_rate +
+                    2.f * normal_rate * seg.dist_xyz() * SEAM_RAMP_SLOPE / seg.feedrate();
+                ramp_rate = std::min(sqrtf(rate_sq), normal_rate);
+            }
+
+            // Mark last ramp segment to restore outer-wall acceleration when the ramp finishes.
+            m_gcode_lines[idx_ramp_last].seam_ramp_start = true;
         }
 
         // now run the pressure equalizer across the segment like a streamroller
@@ -471,6 +517,12 @@ bool PressureEqualizer::process_line(const char *line, const char *line_end, GCo
 void PressureEqualizer::output_gcode_line(const size_t line_idx)
 {
     GCodeLine &line = m_gcode_lines[line_idx];
+
+    // Seam ramp: emit acceleration command BEFORE this line (one G1 ahead of the ramp).
+    // Must be checked before the !modified early-return so it fires on non-modified lines too.
+    if (line.seam_ramp_accel_before)
+        push_to_output("SET_VELOCITY_LIMIT ACCEL=" + std::to_string(int(m_seam_ramp_acceleration)), true);
+
     if (!line.modified) {
         push_to_output(line.raw.data(), line.raw_length, true);
         return;
@@ -506,6 +558,9 @@ void PressureEqualizer::output_gcode_line(const size_t line_idx)
     constexpr int NON_TRIVIAL_RATE_DELTA = 10;
     if (nSegments == 1 || delta_volumetric_rate < NON_TRIVIAL_RATE_DELTA) {
         push_line_to_output(line_idx, line.feedrate() * line.volumetric_correction_avg(), comment);
+        // Trivial/single-segment ramp: restore after the only segment.
+        if (line.seam_ramp_start && m_outer_wall_acceleration > 0)
+            push_to_output("SET_VELOCITY_LIMIT ACCEL=" + std::to_string(int(m_outer_wall_acceleration)), true);
     } else // The line needs to be split the line into segments and apply extrusion rate smoothing
     {
         const float original_feedrate = line.feedrate();
@@ -628,8 +683,10 @@ void PressureEqualizer::output_gcode_line(const size_t line_idx)
                 for (int i = 0; i < 4; ++i) {
                     line.pos_end[i] = pos_end_bak[i];
                 }
+                // Seam ramp: restore outer wall acceleration before the final steady-speed segment.
+                if (line.seam_ramp_start && m_outer_wall_acceleration > 0)
+                    push_to_output("SET_VELOCITY_LIMIT ACCEL=" + std::to_string(int(m_outer_wall_acceleration)), true);
                 push_line_to_output(line_idx, pos_end_bak[4], nullptr);
-
                 return;
             }
         }
@@ -703,6 +760,9 @@ single_slope_fallback:
             comment = nullptr;
             memcpy(line.pos_start, line.pos_end, sizeof(float)*5);
         }
+        // Seam ramp: restore outer wall acceleration before the final segment (ramp already at full speed).
+        if (line.seam_ramp_start && m_outer_wall_acceleration > 0)
+            push_to_output("SET_VELOCITY_LIMIT ACCEL=" + std::to_string(int(m_outer_wall_acceleration)), true);
 		if (l_steady > 0.f && accelerating) {
             for (int i = 0; i < 4; ++ i) {
                 line.pos_end[i] = pos_end2[i];

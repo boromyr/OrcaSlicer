@@ -136,6 +136,7 @@ std::map<std::string, std::vector<SimpleSettingData>> SettingsFactory::PART_CATE
        {"infill_combination_max_layer_height", "", 1},
        {"infill_wall_overlap", "", 1},
        {"top_bottom_infill_wall_overlap", "", 1},
+       {"bridge_infill_wall_overlap", "", 1},
        {"solid_infill_direction", "", 1},
        {"infill_direction", "", 1},
        {"bridge_angle", "", 1},

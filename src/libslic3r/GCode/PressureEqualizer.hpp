@@ -21,7 +21,7 @@ class PressureEqualizer
 {
 public:
     PressureEqualizer() = delete;
-    explicit PressureEqualizer(const Slic3r::GCodeConfig &config);
+    explicit PressureEqualizer(const Slic3r::PrintConfig &config, float outer_wall_acceleration = 0.f);
     ~PressureEqualizer() = default;
 
     // Process a next batch of G-code lines.
@@ -86,6 +86,10 @@ private:
     
     // Apply ERS only on external perimeters and overhangs
     bool                           m_extrusion_rate_smoothing_external_perimeter_only;
+
+    // Seam ramp acceleration control
+    float                          m_seam_ramp_acceleration;   // acceleration to set at seam ramp start (mm/s²)
+    float                          m_outer_wall_acceleration;  // outer wall acceleration to restore after ramp (mm/s²)
 
     // Indicate if extrude set speed block was opened using the tag ";_EXTRUDE_SET_SPEED"
     // or not (not opened, or it was closed using the tag ";_EXTRUDE_END").
@@ -173,6 +177,13 @@ private:
 
         bool        extrude_set_speed_tag = false;
         bool        extrude_end_tag       = false;
+
+        // If true, this is the first external perimeter line of a seam ramp.
+        // Used to restore the outer-wall acceleration after the ramp completes.
+        bool        seam_ramp_start       = false;
+        // If true, emit the seam-ramp acceleration command BEFORE this line
+        // (set on the line just before the ramp so the command arrives one G1 earlier).
+        bool        seam_ramp_accel_before = false;
     };
 
     // Output buffer will only grow. It will not be reallocated over and over.
