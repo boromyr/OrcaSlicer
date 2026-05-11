@@ -119,6 +119,10 @@ public:
 	// specifically, this is supported with OpenSSL and NOT supported with Windows and OS X native certificate store.
 	// See also ca_file_supported().
 	Http& ca_file(const std::string &filename);
+	// Enables TLS certificate verification (peer + hostname). Off by default in the
+	// shared client for compatibility with self-signed print hosts; opt in for any
+	// request carrying authentication credentials or sensitive user data.
+	Http& tls_verify(bool enable);
 
 	Http& form_clear();
 	// Add a HTTP multipart form field
@@ -182,6 +186,9 @@ public:
 	void perform_sync();
 	// Cancels a request in progress
 	void cancel();
+
+	// Print the request as a curl command for debugging
+	void print() const;
 
 	// Tells whether current backend supports seting up a CA file using ca_file()
 	static bool ca_file_supported();

@@ -30,7 +30,21 @@ void GCodeWriter::apply_print_config(const PrintConfig &print_config)
     m_single_extruder_multi_material = print_config.single_extruder_multi_material.value;
     bool use_mach_limits = print_config.gcode_flavor.value == gcfMarlinLegacy || print_config.gcode_flavor.value == gcfMarlinFirmware ||
                            print_config.gcode_flavor.value == gcfKlipper || print_config.gcode_flavor.value == gcfRepRapFirmware;
-    m_max_acceleration = std::lrint(use_mach_limits ? print_config.machine_max_acceleration_extruding.values.front() : 0);
+    if (use_mach_limits) {
+        // For Klipper, SET_VELOCITY_LIMIT ACCEL= applies to all moves, so the effective cap
+        // is the minimum of the extruding limit and the per-axis X/Y limits.
+        // This ensures user-configured Motion Ability limits are honoured (#12244).
+        unsigned int extruding_limit = std::lrint(print_config.machine_max_acceleration_extruding.values.front());
+        if (print_config.gcode_flavor.value == gcfKlipper) {
+            unsigned int x_limit = std::lrint(print_config.machine_max_acceleration_x.values.front());
+            unsigned int y_limit = std::lrint(print_config.machine_max_acceleration_y.values.front());
+            if (x_limit > 0) extruding_limit = std::min(extruding_limit, x_limit);
+            if (y_limit > 0) extruding_limit = std::min(extruding_limit, y_limit);
+        }
+        m_max_acceleration = extruding_limit;
+    } else {
+        m_max_acceleration = 0;
+    }
     m_max_travel_acceleration = static_cast<unsigned int>(
         std::round((use_mach_limits && supports_separate_travel_acceleration(print_config.gcode_flavor.value)) ?
                        print_config.machine_max_acceleration_travel.values.front() :
@@ -49,6 +63,9 @@ void GCodeWriter::set_extruders(std::vector<unsigned int> extruder_ids)
 {
     std::sort(extruder_ids.begin(), extruder_ids.end());
     m_filament_extruders.clear();
+    //ORCA: Reset current extruder ID and clear pointers to prevent dangling pointers when extruders are recreated.
+    m_curr_extruder_id = -1;
+    std::fill(m_curr_filament_extruder.begin(), m_curr_filament_extruder.end(), nullptr);
     m_filament_extruders.reserve(extruder_ids.size());
     for (unsigned int extruder_id : extruder_ids)
         m_filament_extruders.emplace_back(Extruder(extruder_id, &this->config, config.single_extruder_multi_material.value));
@@ -56,7 +73,8 @@ void GCodeWriter::set_extruders(std::vector<unsigned int> extruder_ids)
     /*  we enable support for multiple extruder if any extruder greater than 0 is used
         (even if prints only uses that one) since we need to output Tx commands
         first extruder has index 0 */
-    this->multiple_extruders = (*std::max_element(extruder_ids.begin(), extruder_ids.end())) > 0;
+    //ORCA: Fix undefined behavior by checking if the vector is empty before taking max_element.
+    this->multiple_extruders = !extruder_ids.empty() && (*std::max_element(extruder_ids.begin(), extruder_ids.end())) > 0;
 }
 
 std::string GCodeWriter::preamble()
@@ -249,6 +267,21 @@ std::string GCodeWriter::set_jerk_xy(double jerk)
             jerk = m_max_jerk_y;
         
         gcode << "SET_VELOCITY_LIMIT SQUARE_CORNER_VELOCITY=" << jerk;
+        
+    } else if (FLAVOR_IS(gcfRepetier)) {
+        // Repetier uses M207 for temporary Jerk and combines X/Y into a single 'X' parameter.
+        double jerk_xy = jerk;
+        
+        // Clamp against the X machine limit
+        if (m_max_jerk_x > 0 && jerk_xy > m_max_jerk_x)
+            jerk_xy = m_max_jerk_x;
+            
+        // Clamp against the Y machine limit as well to be safe
+        if (m_max_jerk_y > 0 && jerk_xy > m_max_jerk_y)
+            jerk_xy = m_max_jerk_y;
+            
+        // Output the lowest safe limit using ONLY the X parameter
+        gcode << "M207 X" << jerk_xy;
     } else {
         double jerk_x = jerk;
         double jerk_y = jerk;
@@ -260,7 +293,7 @@ std::string GCodeWriter::set_jerk_xy(double jerk)
         
         gcode << "M205 X" << jerk_x << " Y" << jerk_y;
     }
-      
+    //the is_bbl check should be in the else statement above so that it doesn't inadverently added Z & E to klipper  
     if (m_is_bbl_printers)
         gcode << std::setprecision(2) << " Z" << m_max_jerk_z << " E" << m_max_jerk_e;
 
@@ -347,6 +380,10 @@ std::string GCodeWriter::set_pressure_advance(double pa) const
             gcode << "SET_PRESSURE_ADVANCE ADVANCE=" << std::setprecision(4) << pa << "; Override pressure advance value\n";
         else if(FLAVOR_IS(gcfRepRapFirmware))
             gcode << ("M572 D0 S") << std::setprecision(4) << pa << "; Override pressure advance value\n";
+        else if (FLAVOR_IS(gcfRepetier))
+            // Repetier M233: X is quadratic (K), Y is linear (L).
+            // Applying the value to both parameters simultaneously.
+            gcode << "M233 X" << std::setprecision(4) << pa << " Y" << std::setprecision(4) << pa << " ; Override pressure advance value\n";
         else
             gcode << "M900 K" <<std::setprecision(4)<< pa << "; Override pressure advance value\n";
     }
@@ -444,22 +481,27 @@ std::string GCodeWriter::reset_e(bool force)
     }
 }
 
-std::string GCodeWriter::enable_power_loss_recovery(bool enable)
+std::string GCodeWriter::enable_power_loss_recovery(PowerLossRecoveryMode mode)
 {
     std::ostringstream gcode;
-    
+
+    if (mode == PowerLossRecoveryMode::PrinterConfiguration)
+        return std::string();
+
+    const bool enable = mode == PowerLossRecoveryMode::Enable;
+
     if (m_is_bbl_printers) {
-        gcode << "; start tracking Power Loss Recovery https://wiki.bambulab.com/en/knowledge-sharing/power-loss-recovery\n";
-        gcode << "M1003 S" << (enable ? "1" : "0") << "\n";
+        gcode << "M1003 S" << (enable ? "1" : "0");
     }
     else if (FLAVOR_IS(gcfMarlinFirmware)) {
-        gcode << "; start tracking Power-loss Recovery https://marlinfw.org/docs/gcode/M413.html\n";
-        gcode << "M413 S" << (enable ? "1" : "0") << "\n";
+        gcode << "M413 S" << (enable ? "1" : "0");
+    } else {
+        return std::string();
     }
-    
+    if (GCodeWriter::full_gcode_comment) gcode << " ; set Power-loss Recovery";
+    gcode << "\n";
     return gcode.str();
 }
-
 
 std::string GCodeWriter::update_progress(unsigned int num, unsigned int tot, bool allow_100) const
 {
@@ -483,9 +525,20 @@ std::string GCodeWriter::update_progress(unsigned int num, unsigned int tot, boo
 
 std::string GCodeWriter::toolchange_prefix() const
 {
-    return config.manual_filament_change ? ";" + GCodeProcessor::reserved_tag(GCodeProcessor::ETags::Manual_Tool_Change) + "T":
-           FLAVOR_IS(gcfMakerWare) ? "M135 T" :
-           FLAVOR_IS(gcfSailfish)  ? "M108 T" : "T";
+    std::string gcode = "T";
+    if (config.manual_filament_change)
+        gcode = ";" + GCodeProcessor::reserved_tag(GCodeProcessor::ETags::Manual_Tool_Change) + "T";
+    else {
+        if (m_is_bbl_printers)
+            gcode = "M1020 S";
+        else {
+            if (FLAVOR_IS(gcfMakerWare))
+                gcode = "M135 T";
+            else if (FLAVOR_IS(gcfSailfish))
+                gcode = "M108 T";
+        }
+    }
+    return gcode;
 }
 
 std::string GCodeWriter::toolchange(unsigned int filament_id)
@@ -500,12 +553,8 @@ std::string GCodeWriter::toolchange(unsigned int filament_id)
     // if we are running a single-extruder setup, just set the extruder and return nothing
     std::ostringstream gcode;
     if (this->multiple_extruders || (this->config.filament_diameter.values.size() > 1 && !is_bbl_printers())) {
-        // BBS
-        if (this->m_is_bbl_printers)
-            gcode << "M1020 S" << filament_id;
-        else
-            gcode << this->toolchange_prefix() << filament_id;
-        //BBS
+        // Orca: call toolchange_prefix() to get the correct command prefix based on the configuration and flavor.
+        gcode << this->toolchange_prefix() << filament_id;
         if (GCodeWriter::full_gcode_comment)
             gcode << " ; change extruder";
         gcode << "\n";
@@ -560,7 +609,7 @@ std::string GCodeWriter::lazy_lift(LiftType lift_type, bool spiral_vase)
         int filament_id = filament()->id();
         double above = this->config.retract_lift_above.get_at(extruder_id);
         double below = this->config.retract_lift_below.get_at(extruder_id);
-        if (m_pos.z() >= above && m_pos.z() <= below)
+        if (m_pos.z() >= above && (m_pos.z() <= below || below == 0.))
             target_lift = this->config.z_hop.get_at(filament_id);
     }
     // BBS
@@ -588,7 +637,7 @@ std::string GCodeWriter::eager_lift(const LiftType type) {
         int filament_id = filament()->id();
         double above = this->config.retract_lift_above.get_at(extruder_id);
         double below = this->config.retract_lift_below.get_at(extruder_id);
-        if (m_pos.z() >= above && m_pos.z() <= below)
+        if (m_pos.z() >= above && (m_pos.z() <= below || below == 0.))
             target_lift = this->config.z_hop.get_at(filament_id);
     }
 
@@ -906,6 +955,11 @@ std::string GCodeWriter::extrude_arc_to_xy(const Vec2d& point, const Vec2d& cent
 
 std::string GCodeWriter::extrude_to_xyz(const Vec3d &point, double dE, const std::string &comment, bool force_no_extrusion)
 {
+    // Check if Z actually changes (at export precision) before emitting it.
+    // ZAA sloped extrusions call this for every segment, but many consecutive
+    // segments share the same quantized Z — emitting it every time is redundant.
+    bool z_changed = (GCodeG1Formatter::quantize_xyzf(point(2)) != GCodeG1Formatter::quantize_xyzf(m_pos(2)));
+
     m_pos = point;
     m_lifted = 0;
     if (!force_no_extrusion)
@@ -915,7 +969,10 @@ std::string GCodeWriter::extrude_to_xyz(const Vec3d &point, double dE, const std
     Vec3d point_on_plate = { point(0) - m_x_offset, point(1) - m_y_offset, point(2) };
 
     GCodeG1Formatter w;
-    w.emit_xyz(point_on_plate);
+    if (z_changed)
+        w.emit_xyz(point_on_plate);
+    else
+        w.emit_xy(Vec2d(point_on_plate.x(), point_on_plate.y()));
     if (!force_no_extrusion)
         w.emit_e(filament()->E());
     //BBS

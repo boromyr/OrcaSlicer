@@ -636,7 +636,8 @@ void compute_global_occlusion(GlobalModelInfo &result, const PrintObject *po,
         || model_volume->type() == ModelVolumeType::NEGATIVE_VOLUME) {
       auto model_transformation = model_volume->get_matrix();
       indexed_triangle_set model_its = model_volume->mesh().its;
-      its_transform(model_its, model_transformation);
+      // ORCA: Mirrored transforms flip winding, keep normals outward
+      its_transform(model_its, model_transformation, true);
       if (model_volume->type() == ModelVolumeType::MODEL_PART) {
         its_merge(triangle_set, model_its);
       } else {
@@ -656,7 +657,8 @@ void compute_global_occlusion(GlobalModelInfo &result, const PrintObject *po,
 
   size_t negative_volumes_start_index = triangle_set.indices.size();
   its_merge(triangle_set, negative_volumes_set);
-  its_transform(triangle_set, obj_transform);
+  // ORCA: Mirroring flips normals, keep them outward for visibility sampling
+  its_transform(triangle_set, obj_transform, true);
   BOOST_LOG_TRIVIAL(debug)
       << "SeamPlacer: decimate: end";
 
@@ -717,11 +719,13 @@ void gather_enforcers_blockers(GlobalModelInfo &result, const PrintObject *po) {
       auto model_transformation = obj_transform * mv->get_matrix();
 
       indexed_triangle_set enforcers = mv->seam_facets.get_facets(*mv, EnforcerBlockerType::ENFORCER);
-      its_transform(enforcers, model_transformation);
+      // ORCA: Keep normals outward when mirroring seam enforcers
+      its_transform(enforcers, model_transformation, true);
       its_merge(result.enforcers, enforcers);
 
       indexed_triangle_set blockers = mv->seam_facets.get_facets(*mv, EnforcerBlockerType::BLOCKER);
-      its_transform(blockers, model_transformation);
+      // ORCA: Keep normals outward when mirroring seam blockers
+      its_transform(blockers, model_transformation, true);
       its_merge(result.blockers, blockers);
     }
   }
@@ -1510,7 +1514,7 @@ void SeamPlacer::place_seam(const Layer *layer, ExtrusionLoop &loop,
       current.path_idx = next_idx_modulo(current.path_idx, loop.paths.size());
       current.segment_idx = 0;
     }
-    current.foot_pt = loop.paths[current.path_idx].polyline.points[current.segment_idx];
+    current.foot_pt = loop.paths[current.path_idx].polyline.points[current.segment_idx].to_point();
     return current;
   };
 
@@ -1523,7 +1527,7 @@ void SeamPlacer::place_seam(const Layer *layer, ExtrusionLoop &loop,
   size_t closest_perimeter_point_index = 0;
   { // local space for the closest_perimeter_point_index
     Perimeter *closest_perimeter = nullptr;
-    ExtrusionLoop::ClosestPathPoint closest_point{0,0,loop.paths[0].polyline.points[0]};
+    ExtrusionLoop::ClosestPathPoint closest_point{0, 0, loop.paths[0].polyline.points[0].to_point()};
     size_t points_count = std::accumulate(loop.paths.begin(), loop.paths.end(), 0, [](size_t acc,const ExtrusionPath& p) {
       return acc + p.polyline.points.size();
     });

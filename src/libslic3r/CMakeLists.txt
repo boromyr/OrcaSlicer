@@ -100,6 +100,7 @@ set(lisbslic3r_sources
     CommonDefs.hpp
     Config.cpp
     Config.hpp
+    ContourZ.cpp
     CustomGCode.cpp
     CustomGCode.hpp
     CutUtils.cpp
@@ -183,6 +184,8 @@ set(lisbslic3r_sources
     Format/3mf.hpp
     Format/AMF.cpp
     Format/AMF.hpp
+    Format/DRC.cpp
+    Format/DRC.hpp
     Format/bbs_3mf.cpp
     Format/bbs_3mf.hpp
     format.hpp
@@ -251,6 +254,8 @@ set(lisbslic3r_sources
     GCode/WipeTower.hpp
     GCodeWriter.cpp
     GCodeWriter.hpp
+    Geometry/ArcWelder.hpp
+    Geometry/ArcWelder.cpp
     Geometry/Bicubic.hpp
     Geometry/Circle.cpp
     Geometry/Circle.hpp
@@ -445,6 +450,8 @@ set(lisbslic3r_sources
     Timer.hpp
     TriangleMesh.cpp
     TriangleMesh.hpp
+    TriangleMeshDeal.cpp
+    TriangleMeshDeal.hpp
     TriangleMeshSlicer.cpp
     TriangleMeshSlicer.hpp
     TriangleSelector.cpp
@@ -536,6 +543,7 @@ find_package(OpenCASCADE REQUIRED)
 target_include_directories(libslic3r SYSTEM PUBLIC ${OpenCASCADE_INCLUDE_DIR})
 
 find_package(JPEG REQUIRED)
+find_package(draco REQUIRED)
 
 set(OCCT_LIBS
     TKXDESTEP
@@ -581,6 +589,7 @@ target_link_libraries(libslic3r
         cereal::cereal
         clipper
         Clipper2
+        draco::draco
         eigen
         glu-libtess
         JPEG::JPEG
