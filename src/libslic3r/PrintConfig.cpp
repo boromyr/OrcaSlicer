@@ -5695,6 +5695,37 @@ void PrintConfigDef::init_fff_params()
     def->mode = comAdvanced;
     def->set_default_value(new ConfigOptionBool(false));
 
+    def = this->add("wo_enable", coBool);
+    def->label = L("Wave overhangs enabled");
+    def->category = L("Quality");
+    def->tooltip = L("Enable wave overhangs");
+    def->mode = comExpert;
+    def->set_default_value(new ConfigOptionBool(false));
+
+    def = this->add("wo_spacing", coFloat);
+    def->label = L("Spacing between waves");
+    def->category = L("Quality");
+    def->tooltip = L("A higher value will increase the distance between waves. 0 will use the nozzle diameter. Can be a percentage of the nozzle diameter.");
+    def->sidetext = L("mm/s or %");
+    def->ratio_over = "nozzle_diameter";
+    def->min = 0;
+    def->mode = comExpert;
+    def->set_default_value(new ConfigOptionFloatOrPercent(0, false));
+
+    def = this->add("wo_pattern", coEnum);
+    def->label = L("Pattern");
+    def->category = L("Quality");
+    def->tooltip = L("The pattern to use when printing wave overhangs. Repeating monotonic will start each wave from the end that has spent the most time cooling.");
+    def->enum_keys_map = &ConfigOptionEnum<WaveOverhangPattern>::get_enum_values();
+    def->enum_values.push_back("monotonic");
+    def->enum_values.push_back("zigzag");
+    def->enum_values.push_back("repeat");
+    def->enum_labels.push_back(L("Monotonic"));
+    def->enum_labels.push_back(L("Zigzag"));
+    def->enum_labels.push_back(L("Repeating monotonic"));
+    def->mode = comExpert;
+    def->set_default_value(new ConfigOptionEnum<WaveOverhangPattern>(WaveOverhangPattern::Repeat));
+
     def = this->add("outer_wall_filament_id", coInt);
     def->gui_type = ConfigOptionDef::GUIType::i_enum_open;
     def->label = L("Outer walls");

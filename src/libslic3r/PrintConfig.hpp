@@ -23,6 +23,7 @@
 #include "Polygon.hpp"
 #include <boost/container_hash/hash.hpp>
 #include <algorithm>
+#include <boost/mp11/algorithm.hpp>
 #include <boost/preprocessor/facilities/empty.hpp>
 #include <boost/preprocessor/punctuation/comma_if.hpp>
 #include <boost/preprocessor/seq/for_each.hpp>
@@ -1529,9 +1530,14 @@ PRINT_CONFIG_CLASS_DEFINE(
 
     // Orca: Wave Overhangs
     ((ConfigOptionBool, wo_enabled))
+<<<<<<< HEAD
     ((ConfigOptionPercent, wo_density))
     ((ConfigOptionEnum<WaveOverhangPattern>, wo_pattern))
     ((ConfigOptionFloatsNullable, wo_bridge_speed))
+=======
+    ((ConfigOptionFloatOrPercent, wo_spacing))
+    ((ConfigOptionEnum<WaveOverhangPattern>, wo_pattern))
+>>>>>>> 03b5001bbf (start to add options)
     )
 
 PRINT_CONFIG_CLASS_DEFINE(
