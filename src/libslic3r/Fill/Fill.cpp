@@ -8,6 +8,7 @@
 #include <math.h>
 #include <set>
 #include <map>
+#include <libslic3r/ExtrusionEntity.hpp>
 #include <stdio.h>
 #include <memory>
 #include <string>
