@@ -1530,14 +1530,9 @@ PRINT_CONFIG_CLASS_DEFINE(
 
     // Orca: Wave Overhangs
     ((ConfigOptionBool, wo_enabled))
-<<<<<<< HEAD
     ((ConfigOptionPercent, wo_density))
     ((ConfigOptionEnum<WaveOverhangPattern>, wo_pattern))
     ((ConfigOptionFloatsNullable, wo_bridge_speed))
-=======
-    ((ConfigOptionFloatOrPercent, wo_spacing))
-    ((ConfigOptionEnum<WaveOverhangPattern>, wo_pattern))
->>>>>>> 03b5001bbf (start to add options)
     )
 
 PRINT_CONFIG_CLASS_DEFINE(
