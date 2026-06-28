@@ -12919,7 +12919,7 @@ msgid "Filament price, for statistical purposes only."
 msgstr "Prezzo del filamento, solo a fini statistici."
 
 msgid "money/kg"
-msgstr "soldi/kg"
+msgstr "€/kg"
 
 msgid "Vendor"
 msgstr "Produttore"
@@ -13615,7 +13615,7 @@ msgid "The printer cost per hour."
 msgstr "Costo orario della stampante."
 
 msgid "money/h"
-msgstr "soldi/h"
+msgstr "€/h"
 
 # TODO: Review, changed by lang refactor. PR 14254
 msgid "Support controlling chamber temperature"

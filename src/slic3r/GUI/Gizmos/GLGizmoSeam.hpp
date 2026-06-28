@@ -31,9 +31,11 @@ protected:
     std::string get_gizmo_entering_text() const override { return _u8L("Entering seam painting"); }
     std::string get_gizmo_leaving_text() const override { return _u8L("Leaving Seam painting"); }
     std::string get_action_snapshot_name() const override { return _u8L("Paint-on seam editing"); }
-    static const constexpr float      CursorRadiusMin = 0.05f; // cannot be zero
+    static const constexpr float      CursorRadiusMin  = 0.05f; // cannot be zero
+    static const constexpr float      CursorRadiusStep = 0.03f;
 
-    const float get_cursor_radius_min() const override { return CursorRadiusMin; }
+    const float get_cursor_radius_min()  const override { return CursorRadiusMin; }
+    const float get_cursor_radius_step() const override { return CursorRadiusStep; }
 
 private:
     bool on_init() override;

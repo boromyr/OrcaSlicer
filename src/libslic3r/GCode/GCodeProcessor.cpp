@@ -4145,7 +4145,7 @@ void GCodeProcessor::process_G1(const std::array<std::optional<double>, 4>& axes
             const std::optional<Vec3f> first_vertex = m_seams_detector.get_first_vertex();
             // the threshold value = 0.0625f == 0.25 * 0.25 is arbitrary, we may find some smarter condition later
 
-            if ((new_pos - *first_vertex).squaredNorm() < 0.0625f) {
+            if ((new_pos - *first_vertex).squaredNorm() < 1.0625f) {
                 set_end_position(0.5f * (new_pos + *first_vertex) + m_z_offset * Vec3f::UnitZ());
                 store_move_vertex(EMoveType::Seam);
                 set_end_position(curr_pos);

@@ -2829,6 +2829,7 @@ const ImWchar* ImFontAtlas::GetGlyphRangesEnglish()
     static const ImWchar ranges[] =
     {
         0x0020, 0x00FF, // Basic Latin + Latin Supplement
+        0x20A0, 0x20CF, // Currency Symbols (includes €)
         0,
     };
     return &ranges[0];
@@ -2842,6 +2843,7 @@ const ImWchar* ImFontAtlas::GetGlyphRangesOthers()
         0x0020, 0x00FF, // Basic Latin + Latin Supplement
         0x0100, 0x017F, // Latin Extended-A
         0x0180, 0x024F, // Latin Extended-B
+        0x20A0, 0x20CF, // Currency Symbols (includes €)
         0x2000, 0x206F, // General Punctuation
         0xFF00, 0xFFEF, // Half-width characters
         0,
@@ -2855,6 +2857,7 @@ const ImWchar*   ImFontAtlas::GetGlyphRangesDefault()
     static const ImWchar ranges[] =
     {
         0x0020, 0x00FF, // Basic Latin + Latin Supplement
+        0x20A0, 0x20CF, // Currency Symbols (includes €)
         0x2000, 0x206F, // General Punctuation
         0x3000, 0x30FF, // CJK Symbols and Punctuations, Hiragana, Katakana
         0x31F0, 0x31FF, // Katakana Phonetic Extensions

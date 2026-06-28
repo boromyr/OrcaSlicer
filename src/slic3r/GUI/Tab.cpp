@@ -4193,7 +4193,8 @@ void TabFilament::build()
         optgroup->append_single_option_line("filament_adhesiveness_category", "material_basic_information#adhesiveness-category");
 
         optgroup->append_single_option_line("filament_density", "material_basic_information#density");
-        optgroup->append_single_option_line("filament_shrink", "material_basic_information#shrinkage-xy");
+        optgroup->append_single_option_line("filament_shrinkage_compensation_x", "material_basic_information#shrinkage-x");
+        optgroup->append_single_option_line("filament_shrinkage_compensation_y", "material_basic_information#shrinkage-y");
         optgroup->append_single_option_line("filament_shrinkage_compensation_z", "material_basic_information#shrinkage-z");
         optgroup->append_single_option_line("filament_cost", "material_basic_information#price");
         //BBS

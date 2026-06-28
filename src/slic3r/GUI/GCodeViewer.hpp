@@ -338,6 +338,8 @@ public:
     bool is_legend_shown() const { return m_legend_visible && m_legend_enabled; }
     void show_legend(bool show) { m_legend_visible = show; }
     void enable_legend(bool enable) { m_legend_enabled = enable; }
+    bool is_legend_folded() const { return m_fold; }
+    void toggle_legend_fold() { m_fold = !m_fold; }
     float get_legend_height() { return m_legend_height; }
 
     void export_toolpaths_to_obj(const char* filename) const;
