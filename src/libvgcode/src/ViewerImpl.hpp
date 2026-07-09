@@ -15,6 +15,7 @@
 #include <cstdint>
 #include <map>
 #include <array>
+#include <libvgcode/include/Types.hpp>
 #if VGCODE_ENABLE_COG_AND_TOOL_MARKERS
 #include "CogMarker.hpp"
 #include "ToolMarker.hpp"
