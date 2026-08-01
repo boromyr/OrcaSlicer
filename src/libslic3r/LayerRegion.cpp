@@ -564,6 +564,103 @@ void LayerRegion::process_external_surfaces(const Layer *lower_layer, const Poly
 #endif
     }
 
+    // bridge_infill_wall_overlap: lengthen the bridge lines at their endpoints (union of the
+    // bridge polygon with copies shifted ±extra_offset along the bridge line direction — a
+    // Minkowski sum with a line segment, so material is added only at the line ends, with no
+    // lateral widening) so that the lines anchor deeper where the bridge meets an OVERHANGING
+    // wall: a wall zone of this layer that hangs over the void being bridged (walls around
+    // holes printed on supports, progressive hole caps, overhanging perimeters).
+    //
+    // The permitted extension territory is strictly that overhang zone: material of this
+    // region that is over VOID in the lower layer, kept one external wall width away from
+    // every outline of the region (outer contour and holes). Consequently:
+    //   - wall zones resting on solid material below (the regular anchor side of a bridge)
+    //     are NOT a target — a bridge meeting a supported wall gets no extra overlap there,
+    //     the regular infill/wall overlap already applied to the fill boundary is enough;
+    //   - the extension may overlap the inner walls of an overhang but never reaches the
+    //     external perimeter, so it cannot poke past the outer surface or into a hole opening.
+    {
+        const double inner_wall_width    = unscale<double>(this->flow(frPerimeter).scaled_width());
+        const float  bridge_ovlp_scaled  = scaled<float>(this->region().config().bridge_infill_wall_overlap.get_abs_value(inner_wall_width));
+        const float  infill_ovlp_scaled  = scaled<float>(this->region().config().infill_wall_overlap.get_abs_value(inner_wall_width));
+        const float  extra_offset        = bridge_ovlp_scaled - infill_ovlp_scaled;
+        if (extra_offset > 0.f && lower_layer != nullptr && !bridges.surfaces.empty()) {
+            // Region's own area, holes preserved: the extension may never land where this
+            // layer has no material (outside the part or inside a hole opening).
+            ExPolygons own_region;
+            own_region.reserve(this->slices.surfaces.size());
+            for (const Surface& s : this->slices.surfaces)
+                own_region.push_back(s.expolygon);
+            own_region = union_ex(own_region);
+
+            // Material of this region hanging over void in the lower layer: the bridges
+            // themselves plus the overhanging wall zones adjacent to them. Wall zones with
+            // solid support below are deliberately excluded — that is the anchor side.
+            ExPolygons over_lower_void = diff_ex(own_region, lower_layer->lslices);
+
+            ExPolygons overhang_zone;
+            if (!over_lower_void.empty()) {
+                // Clearance of one external wall width from every outline, so the extension
+                // can reach the inner walls of an overhang but never overlaps the external
+                // perimeter. This also erases the hairline over-void slivers that sloped or
+                // near-vertical walls produce along the outline.
+                const float ext_wall_width = float(this->flow(frExternalPerimeter).scaled_width());
+                overhang_zone = intersection_ex(over_lower_void, offset_ex(own_region, -ext_wall_width));
+            }
+
+            if (!overhang_zone.empty()) {
+                Surfaces new_bridges;
+                new_bridges.reserve(bridges.surfaces.size());
+                for (Surface& bridge_surf : bridges.surfaces) {
+                    if (bridge_surf.bridge_angle < 0) {
+                        new_bridges.push_back(std::move(bridge_surf));
+                        continue;
+                    }
+
+                    const ExPolygons orig{ bridge_surf.expolygon };
+
+                    // Shift the bridge polygon ±extra_offset along the bridge line direction.
+                    const double cos_a = std::cos(bridge_surf.bridge_angle);
+                    const double sin_a = std::sin(bridge_surf.bridge_angle);
+                    const coord_t dx = static_cast<coord_t>(extra_offset * cos_a);
+                    const coord_t dy = static_cast<coord_t>(extra_offset * sin_a);
+
+                    ExPolygons shifted_fwd = orig;
+                    ExPolygons shifted_bwd = orig;
+                    for (ExPolygon& ep : shifted_fwd) ep.translate( dx,  dy);
+                    for (ExPolygon& ep : shifted_bwd) ep.translate(-dx, -dy);
+
+                    // Keep only what the shifted copies gain inside the overhang zone. Where a
+                    // bridge end meets a supported wall, the shifted copy falls outside the
+                    // zone and is clipped away, leaving that end untouched.
+                    ExPolygons extension = intersection_ex(union_ex(shifted_fwd, shifted_bwd), overhang_zone);
+                    if (extension.empty()) {
+                        // Nothing gained — keep the original surface bit-identical.
+                        new_bridges.push_back(std::move(bridge_surf));
+                        continue;
+                    }
+
+                    // Subtract the gained area from remaining expansion zones to prevent double coverage.
+                    const ExPolygons gained = diff_ex(extension, orig);
+                    for (ExpansionZone& zone : expansion_zones)
+                        zone.expolygons = diff_ex(zone.expolygons, gained);
+
+                    ExPolygons expanded = union_ex(orig, extension);
+
+                    // Emit one Surface per connected component. Normally the extension touches
+                    // orig through a shared edge and union_ex produces a single piece, but
+                    // numerical clipping can occasionally disconnect a tab — keep them all.
+                    for (ExPolygon& ep : expanded) {
+                        Surface s = bridge_surf;
+                        s.expolygon = std::move(ep);
+                        new_bridges.push_back(std::move(s));
+                    }
+                }
+                bridges.surfaces = std::move(new_bridges);
+            }
+        }
+    }
+
     this->fill_surfaces.remove_types({stTop});
     {
         Surface top_templ(stTop, {});

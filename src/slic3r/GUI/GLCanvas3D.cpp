@@ -3448,6 +3448,26 @@ void GLCanvas3D::on_char(wxKeyEvent& evt)
 #endif /* __APPLE__ */
             post_event(SimpleEvent(EVT_GLTOOLBAR_CLONE));
             break;
+#ifdef __APPLE__
+        case 'h':
+        case 'H':
+#else /* __APPLE__ */
+        case WXK_CONTROL_Q:
+#endif /* __APPLE__ */
+            // Toggle printable state for selected objects (Ctrl+H)
+            if (m_canvas_type == CanvasView3D && !m_selection.is_empty())
+                wxGetApp().obj_list()->toggle_printable_state();
+            break;
+#ifdef __APPLE__
+        case 'j':
+        case 'J':
+#else /* __APPLE__ */
+        case WXK_CONTROL_W:
+#endif /* __APPLE__ */
+            // Center selection on the plate (Ctrl+J)
+            if (m_canvas_type == CanvasView3D && !m_selection.is_empty())
+                wxGetApp().plater()->center_selection();
+            break;
         default:            evt.Skip();
         }
     } else {
@@ -3511,9 +3531,17 @@ void GLCanvas3D::on_char(wxKeyEvent& evt)
             break;
         }
         case '?': { post_event(SimpleEvent(EVT_GLCANVAS_QUESTION_MARK)); break; }
-        case ' ': {
+        case ' ': { // same key code as WXK_SPACE
             if (m_canvas_type == ECanvasType::CanvasView3D)
                 post_event(SimpleEvent(EVT_GLCANVAS_OPEN_SPEED_DIAL));
+            // Toggle legend fold when the GCode preview legend is visible (no modifier keys)
+            else if (!evt.HasAnyModifiers() && m_gcode_viewer.is_legend_shown()) {
+                m_gcode_viewer.toggle_legend_fold();
+                m_dirty = true;
+                request_extra_frame();
+            }
+            else
+                evt.Skip();
             break;
         }
         case 'A':
@@ -3966,7 +3994,7 @@ void GLCanvas3D::on_mouse_wheel(wxMouseEvent& evt)
             // A volume is selected. Test, whether hovering over a layer thickness bar.
             if (m_layers_editing.bar_rect_contains(*this, (float)evt.GetX(), (float)evt.GetY())) {
                 // Adjust the width of the selection.
-                m_layers_editing.band_width = std::max(std::min(m_layers_editing.band_width * (1.0f + 0.1f * (float)evt.GetWheelRotation() / (float)evt.GetWheelDelta()), 10.0f), 1.5f);
+                m_layers_editing.band_width = std::max(std::min(m_layers_editing.band_width * (1.0f + 0.1f * (float)evt.GetWheelRotation() / (float)evt.GetWheelDelta()), 10.0f), 0.5f);
                 if (m_canvas != nullptr)
                     m_canvas->Refresh();
 
@@ -4868,7 +4896,17 @@ bool GLCanvas3D::is_camera_rotate(const wxMouseEvent& evt, const std::map<MouseB
     if (m_is_touchpad_navigation) {
         return evt.Moving() && evt.AltDown() && !evt.ShiftDown();
     } else {
+#ifdef __WXMSW__
+        // RCtrl held alone (without LAlt) emulates LButton: Moving mouse without any button
+        // triggers rotation, matching the behaviour of AutoHotKey "$RCtrl::LButton".
+        // LAlt takes priority: if LAlt is also down, pan wins over rotate.
+        const bool rctrl_as_lbutton = (::GetAsyncKeyState(VK_RCONTROL) & 0x8000) != 0 &&
+                                      (::GetAsyncKeyState(VK_LMENU)    & 0x8000) == 0;
+        return (evt.Dragging() && clicked_button_matches_action(evt, MouseAction::Rotation, mappings)) ||
+               (evt.Moving()   && rctrl_as_lbutton);
+#else
         return evt.Dragging() && clicked_button_matches_action(evt, MouseAction::Rotation, mappings);
+#endif
     }
 }
 
@@ -4877,8 +4915,15 @@ bool GLCanvas3D::is_camera_pan(const wxMouseEvent& evt, const std::map<MouseButt
     if (m_is_touchpad_navigation) {
         return evt.Moving() && evt.ShiftDown() && !evt.AltDown();
     } else {
+#ifdef __WXMSW__
+        // LAlt held alone emulates RButton: Moving mouse without any button triggers pan,
+        // matching the behaviour of AutoHotKey "$LAlt::RButton".
+        const bool lalt_as_rbutton = (::GetAsyncKeyState(VK_LMENU) & 0x8000) != 0;
+        return (evt.Dragging() && clicked_button_matches_action(evt, MouseAction::Pan, mappings)) ||
+               (evt.Moving()   && lalt_as_rbutton);
+#else
         return evt.Dragging() && clicked_button_matches_action(evt, MouseAction::Pan, mappings);
-        ;
+#endif
     }
 }
 
