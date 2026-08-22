@@ -111,6 +111,10 @@ const std::string GCodeProcessor::VFlush_End_Tag  = " VFLUSH_END";
 //Orca: External device purge tag
 const std::string GCodeProcessor::External_Purge_Tag = " EXTERNAL_PURGE";
 
+// Per-feature nozzle temperature lookahead tag, trailing the temperature command it applies to.
+// See its declaration for the fields it carries.
+const std::string GCodeProcessor::Feature_Temp_Tag = " FEATURE_TEMP";
+
 // SKIPPABLE region tags. SKIPTYPE carries a trailing "<type>" payload so it is matched with
 // starts_with; START/END are whole-line tags.
 const std::string GCodeProcessor::Skippable_Start_Tag = " SKIPPABLE_START";
@@ -731,6 +735,9 @@ private:
     {
         std::string                                                                        line;
         std::array<float, static_cast<size_t>(PrintEstimatedStatistics::ETimeMode::Count)> times{0.0f, 0.0f};
+        // Orca: input line this came from, so a relocated line can be mapped back onto the moves,
+        // which are keyed by the very same ids until synchronize_moves() rebases them.
+        size_t                                                                             line_id{0};
     };
 
     enum ETimeMode {
@@ -780,6 +787,8 @@ private:
 
     size_t m_times_cache_id{0};
     size_t m_out_file_pos{0};
+    // Orca: input line currently being processed, stamped onto every line appended for it.
+    size_t m_current_line_id{0};
 
 public:
     ExportLines(EWriteType type, const std::array<GCodeProcessor::TimeMachine, static_cast<size_t>(PrintEstimatedStatistics::ETimeMode::Count)>& machines)
@@ -796,6 +805,7 @@ public:
         unsigned int update(const std::string& line, size_t lines_counter, size_t g1_lines_counter)
     {
         unsigned int ret = 0;
+        m_current_line_id = lines_counter;
         m_gcode_lines_map.push_back({lines_counter, 0});
 
         if (GCodeReader::GCodeLine::cmd_is(line, "G0") || GCodeReader::GCodeLine::cmd_is(line, "G1") ||
@@ -842,7 +852,7 @@ public:
         if (line.empty())
             return;
 
-        m_lines.push_back({line, m_times});
+        m_lines.push_back({line, m_times, m_current_line_id});
 #ifndef NDEBUG
         m_statistics.add_line(line.length());
 #endif // NDEBUG
@@ -897,7 +907,7 @@ public:
                     time_diffs.push_back(m_times[Stealth] - rev_it->times[Stealth]);
                 const std::string out_line = line_inserter(i + 1, time_diffs);
                 rev_it_dist                = std::distance(m_lines.rbegin(), rev_it) + 1;
-                m_lines.insert(rev_it.base(), {out_line, rev_it->times});
+                m_lines.insert(rev_it.base(), {out_line, rev_it->times, rev_it->line_id});
 #ifndef NDEBUG
                 m_statistics.add_line(out_line.length());
 #endif // NDEBUG
@@ -910,6 +920,66 @@ public:
                 ++m_added_lines_counter;
             }
         }
+    }
+
+    // Elapsed print time at the last line appended to the cache.
+    float current_time() const { return m_times[Normal]; }
+
+    // Orca: insert a single line at the point in the cache where `target_time` elapsed, used by the
+    // per-feature nozzle temperature lookahead. It differs from insert_lines() on the two points that
+    // matter here: the walk stops at the most recent temperature command, so two insertions can never
+    // swap places, and a line is always inserted even when the window available is shorter than asked
+    // for - a feature crowded against the one before it still deserves the command as early as it
+    // can be had, rather than none at all.
+    // `line_inserter` receives the elapsed time at the chosen insertion point; the point's time and
+    // input line id are returned, so the caller can repaint the moves the relocation now covers.
+    struct InsertPoint
+    {
+        float  time{0.0f};
+        size_t line_id{0};
+    };
+    InsertPoint insert_line_at_time(float target_time, const std::function<std::string(float)>& line_inserter)
+    {
+        auto is_temperature_command = [](const std::string& line) {
+            return GCodeReader::GCodeLine::cmd_is(line, "M104") || GCodeReader::GCodeLine::cmd_is(line, "M109") ||
+                   GCodeReader::GCodeLine::cmd_is(line, "M568") ||
+                   // RepRapFirmware sets the tool temperature with G10 P<tool> S<temp>; a bare G10 is
+                   // a firmware retract and must not stop the walk, or the feature dies on that flavor.
+                   (GCodeReader::GCodeLine::cmd_is(line, "G10") && line.find('S') != std::string::npos);
+        };
+
+        if (m_lines.empty()) {
+            const std::string out_line = line_inserter(m_times[Normal]);
+            append_line(out_line, true);
+            return { m_times[Normal], m_current_line_id };
+        }
+
+        auto rev_it = m_lines.rbegin();
+        while (rev_it != m_lines.rend() && rev_it->times[Normal] > target_time && !is_temperature_command(rev_it->line))
+            ++rev_it;
+
+        const bool        at_front = rev_it == m_lines.rend();
+        const auto&       anchor   = at_front ? m_lines.front() : *rev_it;
+        const InsertPoint point{ anchor.times[Normal], anchor.line_id };
+
+        const std::string out_line = line_inserter(point.time);
+        if (out_line.empty())
+            return point;
+
+        // number of cached lines that will follow the inserted one; computed before the insert,
+        // which invalidates the iterators
+        const size_t lines_after = at_front ? m_lines.size() : size_t(std::distance(m_lines.rbegin(), rev_it));
+        m_lines.insert(at_front ? m_lines.begin() : rev_it.base(), {out_line, anchor.times, anchor.line_id});
+#ifndef NDEBUG
+        m_statistics.add_line(out_line.length());
+#endif // NDEBUG
+        m_size += out_line.length();
+        // synchronize gcode lines map, as insert_lines() does
+        const size_t to_shift = std::min(lines_after, m_gcode_lines_map.size());
+        for (auto map_it = m_gcode_lines_map.rbegin(); map_it != m_gcode_lines_map.rbegin() + to_shift; ++map_it)
+            ++map_it->second;
+        ++m_added_lines_counter;
+        return point;
     }
 
     // write to file:
@@ -1112,7 +1182,8 @@ void GCodeProcessor::run_post_process()
         last_exported_stop[i] = time_in_minutes(m_time_processor.machines[i].time);
     }
 
-    ExportLines export_line(m_result.backtrace_enabled ? ExportLines::EWriteType::ByTime : ExportLines::EWriteType::BySize,
+    ExportLines export_line((m_result.backtrace_enabled || m_feature_temp_lookahead) ? ExportLines::EWriteType::ByTime :
+                                                                                      ExportLines::EWriteType::BySize,
         m_time_processor.machines);
 
     // replace placeholder lines with the proper final value
@@ -1445,6 +1516,55 @@ void GCodeProcessor::run_post_process()
     // to flush the backtrace cache accordingly
     float max_backtrace_time = 120.0f;
 
+    // Orca: per-feature nozzle temperature lookahead. A command that enters a feature is held back
+    // until the command leaving that feature shows up, because only then is the feature's duration
+    // known: one shorter than the ramp the hotend needs cannot benefit from the change, so it is
+    // dropped along with its restore rather than making the nozzle chase a temperature it will never
+    // reach in time.
+    struct PendingFeatureTemp
+    {
+        std::string command;      // the command line, tag stripped
+        float       time{0.0f};   // elapsed time at the point it was emitted
+        size_t      line_id{0};   // input line it sat on
+        float       lead{0.0f};   // how far back in time it should be moved
+        float       ramp{0.0f};   // seconds the hotend needs for this change; the feature has to outlast it
+        float       target{0.0f}; // temperature it sets
+    };
+    std::optional<PendingFeatureTemp> pending_feature_temp;
+
+    // The analysis pass recorded each move's temperature from where the commands originally sat, so
+    // moving or dropping one leaves the preview disagreeing with the file it is meant to show.
+    // Collect the stretches of moves whose temperature the post-processing changed, as [first, last)
+    // input line ids - the same ids the moves are keyed by until synchronize_moves() rebases them.
+    struct RepaintedTemp
+    {
+        size_t first_line_id{0};
+        size_t last_line_id{0};
+        float  temperature{0.0f};
+        // Set for a dropped pair, whose moves go back to whatever was in effect just before the
+        // feature rather than to any value known here - the print temperature may well have been
+        // set by a start macro this processor never parsed, in which case the analysis pass holds
+        // no temperature at all and inventing one would show a change that exists nowhere.
+        bool   inherit_preceding{false};
+    };
+    std::vector<RepaintedTemp> repainted_temps;
+    // Open correction: the analysis timeline is wrong from this line on, and stays wrong until some
+    // temperature command that survived into the exported file sets it straight again.
+    std::optional<size_t> revert_temp_from;
+
+    // Insert a held command at its backtraced position; the moves between there and where it used to
+    // be now print at its temperature.
+    auto commit_feature_temp = [&export_line, &max_backtrace_time, &repainted_temps](const PendingFeatureTemp& p) {
+        const auto point = export_line.insert_line_at_time(p.time - p.lead, [&p](float anchor_time) {
+            char buf[32];
+            sprintf(buf, "%.1f", p.time - anchor_time);
+            return p.command + " (" + buf + "s ahead)\n";
+        });
+        max_backtrace_time = std::max(max_backtrace_time, p.lead);
+        if (point.line_id > 0 && point.line_id < p.line_id)
+            repainted_temps.push_back({point.line_id, p.line_id, p.target});
+    };
+
     // First-pass usage-block builder. Reconstructs, from the emitted g-code, which filament/extruder
     // is active over each output-line span so the pre-heat injector can locate idle-hotend windows.
     // Gated behind m_enable_pre_heating: the byte-frozen fleet (X1/P1/A1/H2S, which never set the
@@ -1691,6 +1811,75 @@ void GCodeProcessor::run_post_process()
                             process_line_T(gcode_line, g1_lines_counter, backtrace_T);
                             max_backtrace_time = std::max(max_backtrace_time, backtrace_T.time);
                         }
+                        // Orca: per-feature nozzle temperature lookahead. A tagged temperature command is
+                        // moved <ramp> seconds earlier, so the hotend is there in time, and is dropped
+                        // altogether when the feature it opens turns out to be shorter than <ramp>, which
+                        // means the nozzle could never have arrived. m_times is the elapsed time at the previous
+                        // move, i.e. just before the travel into the feature, so the measured duration
+                        // errs slightly long and the anticipation slightly early. An untagged command is
+                        // left alone, and so is a tagged one this branch never sees - it then simply acts
+                        // where it stands, which is the un-anticipated, unfiltered behaviour.
+                        else if (GCodeReader::GCodeLine::cmd_is(gcode_line, "M104") ||
+                                 GCodeReader::GCodeLine::cmd_is(gcode_line, "M109") ||
+                                 GCodeReader::GCodeLine::cmd_is(gcode_line, "M568") ||
+                                 GCodeReader::GCodeLine::cmd_is(gcode_line, "G10")) {
+                            // Any temperature command, tagged or not, ends an open correction: from
+                            // here on the analysis timeline is right again. A command relocated
+                            // earlier pushes its own stretch afterwards, which wins on the overlap.
+                            if (revert_temp_from) {
+                                repainted_temps.push_back({*revert_temp_from, line_id, 0.0f, true});
+                                revert_temp_from.reset();
+                            }
+                            const size_t tag_pos = gcode_line.find(Feature_Temp_Tag);
+                            if (tag_pos != std::string::npos) {
+                                const std::string_view fields =
+                                    std::string_view(gcode_line).substr(tag_pos + Feature_Temp_Tag.size());
+                                auto read_field = [&fields](char key, float fallback) {
+                                    const size_t pos = fields.find(key);
+                                    return (pos == std::string_view::npos) ?
+                                               fallback :
+                                               float(atof(std::string(fields.substr(pos + 1)).c_str()));
+                                };
+                                const float ramp   = read_field('R', 0.0f);
+                                const bool  enters = read_field('F', 0.0f) != 0.0f;
+                                const float target = read_field('S', 0.0f);
+                                const float now    = export_line.current_time();
+                                // the command without the tag, and without the ';' that introduced it
+                                std::string command = gcode_line.substr(0, tag_pos);
+                                while (!command.empty() && (command.back() == ' ' || command.back() == ';'))
+                                    command.pop_back();
+
+                                // Every tagged command closes the regime the held one opened.
+                                bool drop_this = false;
+                                if (pending_feature_temp) {
+                                    // EPSILON keeps a feature that lasts exactly the ramp time from being
+                                    // dropped by rounding alone.
+                                    if (now - pending_feature_temp->time + float(EPSILON) < pending_feature_temp->ramp) {
+                                        // Too short to be worth it. The restore that pairs with it has
+                                        // nothing left to restore, so it goes as well; another feature
+                                        // opening here is a real change and stays. The feature keeps
+                                        // printing at the temperature it would have interrupted.
+                                        drop_this = !enters;
+                                        if (!revert_temp_from)
+                                            revert_temp_from = pending_feature_temp->line_id;
+                                    } else
+                                        commit_feature_temp(*pending_feature_temp);
+                                    pending_feature_temp.reset();
+                                }
+                                if (!drop_this) {
+                                    if (enters)
+                                        // hold it: its worth is only known once the feature ends
+                                        pending_feature_temp = PendingFeatureTemp{std::move(command), now, line_id,
+                                                                                  ramp, ramp, target};
+                                    else
+                                        // a command closing a feature is placed, never weighed
+                                        commit_feature_temp(PendingFeatureTemp{std::move(command), now, line_id,
+                                                                               ramp, 0.0f, target});
+                                }
+                                // consumed either way: a relocated copy replaces it, or it is dropped
+                                gcode_line.clear();
+                            }
+                        }
                     }
 
                     if (!gcode_line.empty())
@@ -1737,10 +1926,38 @@ void GCodeProcessor::run_post_process()
         }
     }
 
+    // Orca: a feature left open at the end of the file (no closing command ever came) keeps its
+    // temperature change rather than losing it; there is no duration left to judge it by.
+    if (pending_feature_temp)
+        commit_feature_temp(*pending_feature_temp);
+    // Nothing sets the timeline straight again before the end of the print.
+    if (revert_temp_from)
+        repainted_temps.push_back({*revert_temp_from, std::numeric_limits<size_t>::max(), 0.0f, true});
+
     export_line.flush(out, m_result, out_path);
 
     out.close();
     in.close();
+
+    // Orca: repaint the moves the per-feature temperature commands no longer govern the way the
+    // analysis pass assumed, so the preview's temperature view matches the exported file. Done here,
+    // while moves[].gcode_id is still in the input-line space the stretches were recorded in, and
+    // before synchronize_moves() rebases it. Moves are appended in file order, so gcode_id is
+    // non-decreasing and the range can be found by binary search.
+    if (!repainted_temps.empty() && !m_result.moves.empty()) {
+        auto by_gcode_id = [](const GCodeProcessorResult::MoveVertex& move, size_t id) { return move.gcode_id < id; };
+        for (const RepaintedTemp& stretch : repainted_temps) {
+            auto first = std::lower_bound(m_result.moves.begin(), m_result.moves.end(), stretch.first_line_id, by_gcode_id);
+            auto last  = std::lower_bound(first, m_result.moves.end(), stretch.last_line_id, by_gcode_id);
+            // Stretches are applied in the order they were decided, so a preceding move already
+            // carries whatever an earlier stretch left there.
+            const float temperature = stretch.inherit_preceding ?
+                                          (first == m_result.moves.begin() ? 0.0f : std::prev(first)->temperature) :
+                                          stretch.temperature;
+            for (auto it = first; it != last; ++it)
+                it->temperature = temperature;
+        }
+    }
 
     const std::string result_filename = m_result.filename;
     export_line.synchronize_moves(m_result);
@@ -2924,6 +3141,17 @@ void GCodeProcessor::apply_config(const PrintConfig& config)
     if(m_preheat_steps < 1)
         m_preheat_steps = 1;
     m_result.backtrace_enabled = config.ooze_prevention && m_preheat_time > 0 && (m_is_XL_printer || (!m_single_extruder_multi_material && filament_count > 1));
+    // Orca: the per-feature temperature lookahead backtraces into the export cache as well, and the
+    // cache only keeps enough history in EWriteType::ByTime mode. It needs its own flag rather than
+    // backtrace_enabled, which additionally switches on the tool-change preheat injection.
+    m_feature_temp_lookahead = false;
+    if (config.nozzle_heating_rate.value > 0. || config.nozzle_cooling_rate.value > 0.) {
+        auto any_override = [](const std::vector<int>& temps) {
+            return std::any_of(temps.begin(), temps.end(), [](int temp) { return temp > 0; });
+        };
+        m_feature_temp_lookahead = any_override(config.bridge_temperature.values) ||
+                                   any_override(config.overhang_temperature.values);
+    }
 
     assert(config.nozzle_volume.size() == config.nozzle_diameter.size());
     m_nozzle_volume.resize(config.nozzle_volume.size());
@@ -3570,6 +3798,7 @@ void GCodeProcessor::reset()
 
     m_seams_count = 0;
     m_preheat_time = 0.f;
+    m_feature_temp_lookahead = false;
     m_preheat_steps = 1;
 }
 
@@ -5277,7 +5506,7 @@ void GCodeProcessor::process_G1(const std::array<std::optional<double>, 4>& axes
             const std::optional<Vec3f> first_vertex = m_seams_detector.get_first_vertex();
             // the threshold value = 0.0625f == 0.25 * 0.25 is arbitrary, we may find some smarter condition later
 
-            if ((new_pos - *first_vertex).squaredNorm() < 0.0625f) {
+            if ((new_pos - *first_vertex).squaredNorm() < 1.0625f) {
                 set_end_position(0.5f * (new_pos + *first_vertex) + m_z_offset * Vec3f::UnitZ());
                 store_move_vertex(EMoveType::Seam);
                 set_end_position(curr_pos);

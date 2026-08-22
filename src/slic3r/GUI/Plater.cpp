@@ -13748,6 +13748,23 @@ void Plater::_calib_pa_pattern(const Calib_Params& params)
 
     print_config.set_key_value("enable_wrapping_detection", new ConfigOptionBool(false));
 
+    // Orca: the user enters volumetric flow rates (mm3/s); convert them to print speeds using the
+    // same flow model the pattern itself uses: speed = flow / (mm3_per_mm * flow_ratio).
+    // line_width has just been set above (nozzle_ratio_pairs), so the conversion matches what the
+    // pattern will actually print with. The speed is rounded to an integer because the pattern's
+    // speed_adjust() truncates to int when emitting the feedrate; rounding here keeps the resulting
+    // flow as close as possible to the requested value (otherwise e.g. 10 prints as ~9.9 mm³/s).
+    if (!speeds.empty()) {
+        const double line_width   = print_config.get_abs_value("line_width", nozzle_diameter);
+        const double layer_height = print_config.get_abs_value("layer_height");
+        const double flow_ratio   = filament_config->option<ConfigOptionFloatsNullable>("filament_flow_ratio")->get_at(0);
+        const double mm3_per_mm   = Flow(line_width, layer_height, nozzle_diameter).mm3_per_mm() * flow_ratio;
+        if (mm3_per_mm > EPSILON) {
+            for (double& v : speeds)
+                v = std::round(v / mm3_per_mm);
+        }
+    }
+
     // Orca: Set the outer wall speed to the optimal speed for the test, cap it with max volumetric speed
     if (speeds.empty()) {
         // TODO: per-variant cap

@@ -3017,15 +3017,26 @@ void PrintConfigDef::init_fff_params()
     def->label = L("Max volumetric speed multinomial coefficients");
     def->set_default_value(new ConfigOptionStrings{""});
 
-    def = this->add("filament_shrink", coPercents);
-    def->label = L("Shrinkage (XY)");
+    def = this->add("filament_shrinkage_compensation_x", coPercents);
+    def->label = L("Shrinkage (X)");
     // xgettext:no-c-format, no-boost-format
-    def->tooltip = L("Enter the shrinkage percentage that the filament will get after cooling (94% if you measure 94mm instead of 100mm). "
-        "The part will be scaled in XY to compensate. For multi-material prints, ensure filament shrinkage matches across all used filaments\n"
-        "Be sure to allow enough space between objects, as this compensation is done after the checks.");
+    def->tooltip = L("Enter the shrinkage percentage that the filament will get after cooling (94% if you measure 94mm instead of 100mm)."
+        " The part will be scaled in X to compensate.");
     def->sidetext = "%";
     def->ratio_over = "";
-    def->min = 50;
+    def->min = 10;
+    def->max = 150;
+    def->mode = comAdvanced;
+    def->set_default_value(new ConfigOptionPercents{ 100 });
+
+    def = this->add("filament_shrinkage_compensation_y", coPercents);
+    def->label = L("Shrinkage (Y)");
+    // xgettext:no-c-format, no-boost-format
+    def->tooltip = L("Enter the shrinkage percentage that the filament will get after cooling (94% if you measure 94mm instead of 100mm)."
+        " The part will be scaled in Y to compensate.");
+    def->sidetext = "%";
+    def->ratio_over = "";
+    def->min = 10;
     def->max = 150;
     def->mode = comAdvanced;
     def->set_default_value(new ConfigOptionPercents{ 100 });
@@ -3405,6 +3416,23 @@ void PrintConfigDef::init_fff_params()
                         "to shorten the effective vertical column length and improve Z-axis compression "
                         "buckling resistance. Filament use is preserved. No effect at ~30% sparse infill "
                         "density and above. Only applies when Sparse infill pattern is set to Gyroid.");
+    def->set_default_value(new ConfigOptionBool(false));
+
+    // Weld the gyroid's in-plane saddle points, where two strands approach each other
+    // without ever touching, with a small internal bridge patch. Each saddle is bridged on
+    // the single layer that owns it, so the extra material is negligible.
+    def             = this->add("gyroid_saddle_bridges", coBool);
+    def->label      = L("Bridge saddle points");
+    def->category   = L("Strength");
+    def->tooltip    = L("Every half period the gyroid strands swap connectivity, and on the layer nearest that "
+                        "transition two strands approach each other without ever touching. Seen from above these "
+                        "unconnected necks are the weak spots of the pattern. Enabling this welds each of them with "
+                        "a small patch of internal bridge infill, on the one layer where the neck appears and only "
+                        "across the neck itself. The patch is sized to the neck, so it is a single line on a dense "
+                        "gyroid and a few millimetres across on a sparse one, and no material is spent where the "
+                        "strands already run into each other. Only applies when Sparse infill pattern is set to "
+                        "Gyroid.");
+    def->mode       = comAdvanced;
     def->set_default_value(new ConfigOptionBool(false));
 
     def = this->add("sparse_infill_pattern", coEnum);
@@ -4611,6 +4639,23 @@ void PrintConfigDef::init_fff_params()
     def->ratio_over = "inner_wall_line_width";
     def->mode = comAdvanced;
     def->set_default_value(new ConfigOptionPercent(25));
+
+    def = this->add("bridge_infill_wall_overlap", coPercent);
+    def->label = L("Bridge infill/wall overlap");
+    def->category = L("Strength");
+    // xgettext:no-c-format, no-boost-format
+    def->tooltip = L("Bridge fill surfaces are extended along the bridge line direction so that bridge "
+                     "lines anchor deeper into overhanging walls: walls that hang over the void being "
+                     "bridged, e.g. a wall surrounding a hole printed on supports or an overhanging "
+                     "perimeter. Walls resting on solid material below are not extended into (the "
+                     "regular infill/wall overlap is enough there), and the extension always stops "
+                     "before the external perimeter, so it cannot poke past the outer surface. "
+                     "The percentage value is relative to the inner wall line width. "
+                     "Set to 0 to disable. Typical values: 30-60%.");
+    def->sidetext = "%";
+    def->ratio_over = "inner_wall_line_width";
+    def->mode = comAdvanced;
+    def->set_default_value(new ConfigOptionPercent(30));
 
     def = this->add("sparse_infill_speed", coFloats);
     def->label = L("Sparse infill");
@@ -6482,6 +6527,34 @@ void PrintConfigDef::init_fff_params()
     def->mode = comAdvanced;
     def->set_default_value(new ConfigOptionFloat(30.0));
 
+    // Orca: hotend ramp rates, used to work out how early a per-feature temperature change has
+    // to be issued so the nozzle actually gets there in time. 0 disables the anticipation.
+    def = this->add("nozzle_heating_rate", coFloat);
+    def->label = L("Nozzle heating rate");
+    def->tooltip = L("How fast the hotend heats up. It decides how early a per-feature temperature change "
+                     "(see the filament's bridge and overhang temperatures) has to be issued for the nozzle to "
+                     "get there in time, and how long a feature has to last to be worth changing temperature "
+                     "for at all.\n\n"
+                     "Set to 0 to issue those commands inline instead, with no anticipation and no filtering.");
+    def->sidetext = L(u8"\u2103/s");	// degrees Celsius per second, CIS languages need translation
+    def->min = 0;
+    def->max = 100;
+    def->mode = comAdvanced;
+    def->set_default_value(new ConfigOptionFloat(10.0));
+
+    def = this->add("nozzle_cooling_rate", coFloat);
+    def->label = L("Nozzle cooling rate");
+    def->tooltip = L("How fast the hotend cools down while printing. It decides how early a per-feature "
+                     "temperature change (see the filament's bridge and overhang temperatures) has to be "
+                     "issued for the nozzle to get there in time, and how long a feature has to last to be "
+                     "worth changing temperature for at all.\n\n"
+                     "Set to 0 to issue those commands inline instead, with no anticipation and no filtering.");
+    def->sidetext = L(u8"\u2103/s");	// degrees Celsius per second, CIS languages need translation
+    def->min = 0;
+    def->max = 100;
+    def->mode = comAdvanced;
+    def->set_default_value(new ConfigOptionFloat(3.0));
+
     def = this->add("preheat_steps", coInt);
     def->label = L("Preheat steps");
     def->tooltip = L("Insert multiple preheat commands (e.g. M104.1). Only useful for Prusa XL. For other printers, please set it to 1.");
@@ -7238,6 +7311,40 @@ void PrintConfigDef::init_fff_params()
     def->min = 0;
     def->max = max_temp;
     def->set_default_value(new ConfigOptionInts { 200 });
+
+    // Orca: per-feature nozzle temperature overrides. Both default to 0 (disabled), so a filament
+    // that does not opt in emits exactly the same temperature commands as before.
+    def = this->add("overhang_temperature", coInts);
+    def->label = L("Overhangs");
+    def->full_label = L("Overhang nozzle temperature");
+    def->tooltip = L("Nozzle temperature used while printing overhanging perimeters. "
+                     "Set to 0 to keep the regular nozzle temperature.\n\n"
+                     "The command is issued early enough for the nozzle to reach this temperature before the "
+                     "overhang starts, and to be back to the regular one before it ends, from the ramp rates "
+                     "set in the printer settings. Overhangs too short to outlast the ramp keep the regular "
+                     "temperature, since the nozzle could not have got there in time anyway.");
+    def->sidetext = L(u8"\u2103" /* °C */);	// degrees Celsius, CIS languages need translation
+    def->mode = comAdvanced;
+    def->min = 0;
+    def->max = max_temp;
+    def->set_default_value(new ConfigOptionInts { 0 });
+
+    def = this->add("bridge_temperature", coInts);
+    def->label = L("Bridges");
+    def->full_label = L("Bridge nozzle temperature");
+    def->tooltip = L("Nozzle temperature used while printing external bridges. "
+                     "Set to 0 to keep the regular nozzle temperature.\n\n"
+                     "The command is issued early enough for the nozzle to reach this temperature before the "
+                     "bridge starts, and to be back to the regular one before it ends, from the ramp rates set "
+                     "in the printer settings. Bridges too short to outlast the ramp keep the regular "
+                     "temperature, since the nozzle could not have got there in time anyway.\n\n"
+                     "Internal bridges are deliberately left out: they alternate with regular infill far too "
+                     "often for the hotend to follow.");
+    def->sidetext = L(u8"\u2103" /* °C */);	// degrees Celsius, CIS languages need translation
+    def->mode = comAdvanced;
+    def->min = 0;
+    def->max = max_temp;
+    def->set_default_value(new ConfigOptionInts { 0 });
 
     def = this->add("nozzle_temperature_range_low", coInts);
     def->label = L("Min");

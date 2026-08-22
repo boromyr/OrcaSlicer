@@ -27,6 +27,8 @@ public:
     // Gyroid upper resolution tolerance (mm^-2)
     static constexpr double PatternTolerance = 0.2;
 
+    Polylines fill_surface(const Surface *surface, const FillParams &params) override;
+    void      fill_surface_extrusion(const Surface *surface, const FillParams &params, ExtrusionEntitiesPtr &out) override;
 
 protected:
     void _fill_surface_single(
@@ -35,6 +37,12 @@ protected:
         const std::pair<float, Point>   &direction, 
         ExPolygon                        expolygon,
         Polylines                       &polylines_out) override;
+
+private:
+    // Lines welding the pattern's in-plane saddle points, collected by
+    // _fill_surface_single() and turned into internal bridge extrusions by
+    // fill_surface_extrusion(). Empty unless params.gyroid_saddle_bridges is set.
+    Polylines m_saddle_bridges;
 };
 
 } // namespace Slic3r

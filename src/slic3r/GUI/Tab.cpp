@@ -2790,6 +2790,7 @@ void TabPrint::build()
         optgroup->append_single_option_line("fill_multiline", "strength_settings_infill#fill-multiline");
         optgroup->append_single_option_line("sparse_infill_pattern", "strength_settings_infill#sparse-infill-pattern");
         optgroup->append_single_option_line("gyroid_optimized", "strength_settings_patterns#gyroid-optimized");
+        optgroup->append_single_option_line("gyroid_saddle_bridges", "strength_settings_patterns#gyroid-saddle-bridges");
         optgroup->append_single_option_line("sparse_infill_smooth_factor", "strength_settings_infill#sparse-infill-smooth-factor");
         optgroup->append_single_option_line("infill_direction", "strength_settings_infill#direction");
         optgroup->append_single_option_line("sparse_infill_rotate_template", "strength_settings_infill_rotation_template_metalanguage");
@@ -2816,6 +2817,7 @@ void TabPrint::build()
         optgroup->append_single_option_line("filter_out_gap_fill", "strength_settings_infill#filter-out-tiny-gaps");
         optgroup->append_single_option_line("separated_infills", "strength_settings_infill#separated-infills");
         optgroup->append_single_option_line("infill_wall_overlap", "strength_settings_infill#infill-wall-overlap");
+        optgroup->append_single_option_line("bridge_infill_wall_overlap", "strength_settings_infill#bridge-infill-wall-overlap");
 
         optgroup = page->new_optgroup(L("Advanced"), L"param_advanced");
         optgroup->append_single_option_line("align_infill_direction_to_model", "strength_settings_advanced#align-directions-to-model");
@@ -4275,7 +4277,8 @@ void TabFilament::build()
         optgroup->append_single_option_line("filament_adhesiveness_category", "material_basic_information#adhesiveness-category");
 
         optgroup->append_single_option_line("filament_density", "material_basic_information#density");
-        optgroup->append_single_option_line("filament_shrink", "material_basic_information#shrinkage-xy");
+        optgroup->append_single_option_line("filament_shrinkage_compensation_x", "material_basic_information#shrinkage-x");
+        optgroup->append_single_option_line("filament_shrinkage_compensation_y", "material_basic_information#shrinkage-y");
         optgroup->append_single_option_line("filament_shrinkage_compensation_z", "material_basic_information#shrinkage-z");
         optgroup->append_single_option_line("filament_cost", "material_basic_information#price");
         //BBS
@@ -4356,6 +4359,15 @@ void TabFilament::build()
         line.label_path = "material_temperatures#nozzle";
         line.append_option(optgroup->get_option("nozzle_temperature_initial_layer", 0));
         line.append_option(optgroup->get_option("nozzle_temperature", 0));
+        optgroup->append_line(line);
+
+        // Orca: per-feature nozzle temperature overrides, 0 keeps the regular nozzle temperature.
+        line = { L("Overhangs and bridges"),
+                 L("Nozzle temperature used when printing external bridges and overhanging perimeters. "
+                   "A value of 0 keeps the regular nozzle temperature.") };
+        line.label_path = "material_temperatures#nozzle";
+        line.append_option(optgroup->get_option("overhang_temperature", 0));
+        line.append_option(optgroup->get_option("bridge_temperature", 0));
         optgroup->append_line(line);
 
         optgroup = page->new_optgroup(L("Bed temperature"), L"param_bed_temp");
@@ -4995,6 +5007,9 @@ void TabPrinter::build_fff()
         optgroup->append_single_option_line("gcode_skip_config_block", "printer_basic_information_advanced#skip-g-code-config-block");
         optgroup->append_single_option_line("pellet_modded_printer", "printer_basic_information_advanced#pellet-modded-printer");
         optgroup->append_single_option_line("bbl_use_printhost", "printer_basic_information_advanced#use-3rd-party-print-host");
+        // Orca: hotend ramp rates feeding the per-feature nozzle temperature lookahead.
+        optgroup->append_single_option_line("nozzle_heating_rate");
+        optgroup->append_single_option_line("nozzle_cooling_rate");
 
         // "Printer Agent" dropdown - printer_agent is a coString; gui_type routes it to
         // PrinterAgentChoice instead of a TextCtrl. Rows and values come from the live agent

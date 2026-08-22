@@ -6624,6 +6624,9 @@ LayerResult GCode::process_layer(
         gcode += insert_timelapse_gcode();
     }
 
+    // Orca: never carry a bridge/overhang temperature override across a layer boundary.
+    gcode += this->apply_role_temperature(erNone);
+
     result.gcode = std::move(gcode);
     result.cooling_buffer_flush = object_layer || raft_layer || last_layer;
     return result;
@@ -7469,9 +7472,108 @@ double GCode::calc_max_volumetric_speed(const double layer_height, const double 
     return res;
 }
 
+// Orca: nozzle temperature override for bridges and overhangs, configured per filament.
+// Internal bridges are excluded on purpose: they interleave with sparse infill on nearly every
+// layer, so following them would only produce temperature commands the hotend can never keep up with.
+GCode::FeatureTemp GCode::role_temperature_source(ExtrusionRole role) const
+{
+    if (role == erOverhangPerimeter)
+        return FeatureTemp::Overhang;
+    // Every bridging role but the internal one. Asking is_bridge() rather than listing the roles
+    // keeps this working on a tree that adds one (wave bridges, say) and on one that has not.
+    // erOverhangPerimeter is a bridging role too, but it was taken above.
+    if (is_bridge(role) && role != erInternalBridgeInfill)
+        return FeatureTemp::Bridge;
+    return FeatureTemp::None;
+}
+
+int GCode::role_temperature(ExtrusionRole role) const
+{
+    if (m_writer.filament() == nullptr)
+        return 0;
+    switch (this->role_temperature_source(role)) {
+    case FeatureTemp::Overhang: return FILAMENT_CONFIG(overhang_temperature);
+    case FeatureTemp::Bridge:   return FILAMENT_CONFIG(bridge_temperature);
+    default:                    return 0;
+    }
+}
+
+std::string GCode::apply_role_temperature(ExtrusionRole role)
+{
+    if (m_writer.filament() == nullptr)
+        return {};
+
+    const int          target      = this->role_temperature(role);
+    const unsigned int filament_id = m_writer.filament()->id();
+    // A filament change re-emits its own temperature, so an override carried over from the previous
+    // filament has to be re-applied rather than assumed to be still in effect.
+    if (target == m_role_temperature_override && (target == 0 || filament_id == m_role_temperature_filament))
+        return {};
+
+    const size_t fi = get_filament_config_index((int) filament_id);
+    // Leaving an override behind restores the temperature this layer would have used anyway.
+    const int    regular     = this->on_first_layer() ? m_config.nozzle_temperature_initial_layer.get_at(fi) :
+                                                        m_config.nozzle_temperature.get_at(fi);
+    const int    temperature = target > 0 ? target : regular;
+    // A zero nozzle temperature means the filament never sets one, so there is nothing to restore to.
+    if (temperature <= 0)
+        return {};
+    // What the hotend was last told to do, so the ramp size and direction are known. Stale after a
+    // filament change, which sets its own temperature.
+    const int previous = (m_role_temperature_current > 0 && filament_id == m_role_temperature_filament) ?
+                             m_role_temperature_current : regular;
+
+    const bool changes_anything = temperature != previous;
+    m_role_temperature_override = target;
+    m_role_temperature_current  = temperature;
+    m_role_temperature_filament = filament_id;
+    // The override state still had to be tracked, but a filament whose feature temperature matches
+    // the one already in effect has nothing to command.
+    if (!changes_anything)
+        return {};
+
+    std::string command = m_writer.set_temperature(temperature, false, filament_id);
+    if (command.empty())
+        return command;
+
+    // Seconds the hotend needs for this change. One quantity doing two jobs: how early the command
+    // has to be issued to land on time, and the yardstick the feature has to outlast to be worth a
+    // temperature change at all - a feature shorter than its own ramp is over before the nozzle
+    // could have got there, so changing temperature for it only disturbs its surroundings.
+    const double rate = temperature < previous ? m_config.nozzle_cooling_rate.value : m_config.nozzle_heating_rate.value;
+    const double ramp = rate > 0. ? std::abs(double(temperature - previous)) / rate : 0.;
+    if (ramp <= 0.)
+        // No ramp rate configured: emit it inline, unanticipated and unfiltered.
+        return command;
+
+    // Both ends of a feature are worth anticipating: the nozzle has to be at the feature temperature
+    // when the feature starts, and back to normal before it ends. Only the post-processor can place
+    // those commands, since it is the only stage that knows the final print times, and only it can
+    // weigh the feature's real duration, so hand it the command tagged rather than acting here.
+    // Tagging beats replacing the command with a marker: if the tag never gets consumed the command
+    // still stands right where it is, which is the un-anticipated, unfiltered behaviour rather than
+    // no temperature change at all.
+    // set_temperature() only ever returns more than one line when asked to wait, which this never does.
+    while (!command.empty() && (command.back() == '\n' || command.back() == '\r'))
+        command.pop_back();
+    assert(command.find('\n') == std::string::npos);
+    char buf[96];
+    // R: the ramp, i.e. how far back to move it and how long the feature has to last. F: whether it
+    // opens a feature (and so has to be weighed) or closes one. S: the temperature it sets, so the
+    // post-processor can repaint the preview to match wherever it ends up putting the command -
+    // reading that off the command itself would mean parsing every g-code flavor.
+    sprintf(buf, " R%.2f F%d S%d", ramp, target > 0 ? 1 : 0, temperature);
+    return command + " ;" + GCodeProcessor::Feature_Temp_Tag + buf + "\n";
+}
+
 std::string GCode::_extrude(const ExtrusionPath &path, std::string description, double speed)
 {
     std::string gcode;
+
+    // Orca: hand the bridge/overhang nozzle temperature over before the travel move leading into the
+    // feature, so the post-processor measures the anticipation from there rather than from the first
+    // extrusion, erring early. No-op unless the filament opts in.
+    gcode += this->apply_role_temperature(path.role());
 
     if (is_bridge(path.role()))
         description += " (bridge)";

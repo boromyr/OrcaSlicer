@@ -3493,9 +3493,17 @@ void GLCanvas3D::on_char(wxKeyEvent& evt)
             break;
         }
         case '?': { post_event(SimpleEvent(EVT_GLCANVAS_QUESTION_MARK)); break; }
-        case ' ': {
+        case ' ': { // same key code as WXK_SPACE
             if (m_canvas_type == ECanvasType::CanvasView3D)
                 post_event(SimpleEvent(EVT_GLCANVAS_OPEN_SPEED_DIAL));
+            // Toggle legend fold when the GCode preview legend is visible (no modifier keys)
+            else if (!evt.HasAnyModifiers() && m_gcode_viewer.is_legend_shown()) {
+                m_gcode_viewer.toggle_legend_fold();
+                m_dirty = true;
+                request_extra_frame();
+            }
+            else
+                evt.Skip();
             break;
         }
         case 'A':
@@ -3557,6 +3565,13 @@ void GLCanvas3D::on_char(wxKeyEvent& evt)
         //}
         case 'v':
         case 'V': { post_event(SimpleEvent(EVT_GLCANVAS_PRINTABLE)); break; }
+        case 'x':
+        case 'X': {
+            // Center the selection on the plate
+            if (m_canvas_type == CanvasView3D && !m_selection.is_empty())
+                wxGetApp().plater()->center_selection();
+            break;
+        }
         default:  { evt.Skip(); break; }
         }
     }
@@ -3948,7 +3963,7 @@ void GLCanvas3D::on_mouse_wheel(wxMouseEvent& evt)
             // A volume is selected. Test, whether hovering over a layer thickness bar.
             if (m_layers_editing.bar_rect_contains(*this, (float)evt.GetX(), (float)evt.GetY())) {
                 // Adjust the width of the selection.
-                m_layers_editing.band_width = std::max(std::min(m_layers_editing.band_width * (1.0f + 0.1f * (float)evt.GetWheelRotation() / (float)evt.GetWheelDelta()), 10.0f), 1.5f);
+                m_layers_editing.band_width = std::max(std::min(m_layers_editing.band_width * (1.0f + 0.1f * (float)evt.GetWheelRotation() / (float)evt.GetWheelDelta()), 10.0f), 0.5f);
                 if (m_canvas != nullptr)
                     m_canvas->Refresh();
 
@@ -4176,6 +4191,21 @@ void GLCanvas3D::on_mouse(wxMouseEvent& evt)
 #endif
 
     Point pos(evt.GetX(), evt.GetY());
+
+#ifdef __WXMSW__
+    // is_camera_rotate()/is_camera_pan() below can grab the mouse capture on a Moving event, i.e.
+    // with no mouse button pressed, so no button up event is guaranteed to ever release it again.
+    // Release it here, ahead of the early returns further down (ImGui and the toolbars), as soon as
+    // nothing that needs the capture is active any more: every other holder of the capture (gizmo
+    // grabber, object move, rectangle selection, layer editing, ImGui drag) requires a button down.
+    // Restrict this to Moving() events (motion with no button held): on a button *up* event
+    // LeftIsDown()/etc. already read false, so without this the cleanup would wipe
+    // m_mouse.drag.move_volume_idx and m_mouse.dragging before the LeftUp handler below can
+    // commit the drag via do_move(), losing the object move and its re-slice invalidation.
+    if (evt.Moving() && has_mouse_capture() && !evt.LeftIsDown() && !evt.MiddleIsDown() && !evt.RightIsDown() &&
+        (::GetAsyncKeyState(VK_LMENU) & 0x8000) == 0 && (::GetAsyncKeyState(VK_RCONTROL) & 0x8000) == 0)
+        mouse_up_cleanup();
+#endif /* __WXMSW__ */
 
     ImGuiWrapper* imgui = wxGetApp().imgui();
     if (m_tooltip.is_in_imgui() && evt.LeftUp())
@@ -4918,7 +4948,17 @@ bool GLCanvas3D::is_camera_rotate(const wxMouseEvent& evt, const std::map<MouseB
     if (m_is_touchpad_navigation) {
         return evt.Moving() && evt.AltDown() && !evt.ShiftDown();
     } else {
+#ifdef __WXMSW__
+        // RCtrl held alone (without LAlt) emulates LButton: Moving mouse without any button
+        // triggers rotation, matching the behaviour of AutoHotKey "$RCtrl::LButton".
+        // LAlt takes priority: if LAlt is also down, pan wins over rotate.
+        const bool rctrl_as_lbutton = (::GetAsyncKeyState(VK_RCONTROL) & 0x8000) != 0 &&
+                                      (::GetAsyncKeyState(VK_LMENU)    & 0x8000) == 0;
+        return (evt.Dragging() && clicked_button_matches_action(evt, MouseAction::Rotation, mappings)) ||
+               (evt.Moving()   && rctrl_as_lbutton);
+#else
         return evt.Dragging() && clicked_button_matches_action(evt, MouseAction::Rotation, mappings);
+#endif
     }
 }
 
@@ -4927,8 +4967,15 @@ bool GLCanvas3D::is_camera_pan(const wxMouseEvent& evt, const std::map<MouseButt
     if (m_is_touchpad_navigation) {
         return evt.Moving() && evt.ShiftDown() && !evt.AltDown();
     } else {
+#ifdef __WXMSW__
+        // LAlt held alone emulates RButton: Moving mouse without any button triggers pan,
+        // matching the behaviour of AutoHotKey "$LAlt::RButton".
+        const bool lalt_as_rbutton = (::GetAsyncKeyState(VK_LMENU) & 0x8000) != 0;
+        return (evt.Dragging() && clicked_button_matches_action(evt, MouseAction::Pan, mappings)) ||
+               (evt.Moving()   && lalt_as_rbutton);
+#else
         return evt.Dragging() && clicked_button_matches_action(evt, MouseAction::Pan, mappings);
-        ;
+#endif
     }
 }
 

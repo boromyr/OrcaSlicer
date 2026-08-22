@@ -1319,6 +1319,7 @@ PRINT_CONFIG_CLASS_DEFINE(
     ((ConfigOptionFloatOrPercent,       sparse_infill_line_width))
     ((ConfigOptionPercent,              infill_wall_overlap))
     ((ConfigOptionPercent,              top_bottom_infill_wall_overlap))
+    ((ConfigOptionPercent,              bridge_infill_wall_overlap))
     ((ConfigOptionFloatsNullable,       sparse_infill_speed))
     ((ConfigOptionPercent, skeleton_infill_density))
     ((ConfigOptionPercent, skin_infill_density))
@@ -1331,6 +1332,7 @@ PRINT_CONFIG_CLASS_DEFINE(
     ((ConfigOptionFloatOrPercent,                infill_combination_max_layer_height))
     ((ConfigOptionInt,                  fill_multiline))
     ((ConfigOptionBool,                 gyroid_optimized))
+    ((ConfigOptionBool,                 gyroid_saddle_bridges))
     // Ironing options
     ((ConfigOptionEnum<IroningType>, ironing_type))
     ((ConfigOptionEnum<InfillPattern>, ironing_pattern))
@@ -1832,7 +1834,13 @@ PRINT_CONFIG_CLASS_DERIVED_DEFINE(
     ((ConfigOptionInt,                standby_temperature_delta))
     ((ConfigOptionFloat,                preheat_time))
     ((ConfigOptionInt,                preheat_steps))
+    // Orca: hotend ramp rates driving the per-feature temperature lookahead
+    ((ConfigOptionFloat,              nozzle_heating_rate))
+    ((ConfigOptionFloat,              nozzle_cooling_rate))
     ((ConfigOptionInts,               nozzle_temperature))
+    // Orca: per-feature nozzle temperature overrides, 0 = keep nozzle_temperature
+    ((ConfigOptionInts,               overhang_temperature))
+    ((ConfigOptionInts,               bridge_temperature))
     ((ConfigOptionBools,              wipe))
     // BBS
     ((ConfigOptionInts,               nozzle_temperature_range_low))
@@ -1896,7 +1904,8 @@ PRINT_CONFIG_CLASS_DERIVED_DEFINE(
     ((ConfigOptionBool, independent_support_layer_height))
     ((ConfigOptionBool,               combine_brims))
     // SoftFever
-    ((ConfigOptionPercents,            filament_shrink))
+    ((ConfigOptionPercents,            filament_shrinkage_compensation_x))
+    ((ConfigOptionPercents,            filament_shrinkage_compensation_y))
     ((ConfigOptionPercents,            filament_shrinkage_compensation_z))
     ((ConfigOptionBool,                gcode_label_objects))
     ((ConfigOptionBool,                exclude_object))
