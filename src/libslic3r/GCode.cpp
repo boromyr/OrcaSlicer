@@ -8486,7 +8486,7 @@ std::string GCode::_extrude(const ExtrusionPath &path, const std::string &path_d
 
                 new_points = m_extrusion_quality_estimator.estimate_extrusion_quality(path, overhang_overlap_levels, dynamic_overhang_speeds,
                                                                               ref_speed, speed, NOZZLE_CONFIG(slowdown_for_curled_perimeters),
-                                                                              fan_overlap_threshold);
+                                                                              fan_overlap_threshold, emit_overhangs);
         	}else{
                 ConfigOptionFloatsOrPercents dynamic_overhang_speeds(
                                                                      {FloatOrPercent{100, true},
@@ -8506,7 +8506,7 @@ std::string GCode::_extrude(const ExtrusionPath &path, const std::string &path_d
 
                 new_points = m_extrusion_quality_estimator.estimate_extrusion_quality(path, overhang_overlap_levels, dynamic_overhang_speeds,
                                                                               ref_speed, speed, NOZZLE_CONFIG(slowdown_for_curled_perimeters),
-                                                                              fan_overlap_threshold);
+                                                                              fan_overlap_threshold, emit_overhangs);
             }
             variable_speed = std::any_of(new_points.begin(), new_points.end(),
                                          [speed](const ProcessedPoint &p) { return fabs(double(p.speed) - speed) > 1; }); // Ignore small speed variations (under 1mm/sec)
