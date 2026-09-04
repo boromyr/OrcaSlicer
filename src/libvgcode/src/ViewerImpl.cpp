@@ -899,6 +899,8 @@ void ViewerImpl::reset()
     delete_textures(m_positions_tex_id);
     delete_buffers(m_positions_buf_id);
 #endif // ENABLE_OPENGL_ES
+
+    m_layers_range_used_for_ranges = std::nullopt;
 }
 
 // On some graphic cards texture buffers using GL_RGB32F format do not work, see:
@@ -1370,7 +1372,9 @@ void ViewerImpl::set_layers_view_range(Interval::value_type min, Interval::value
     update_view_full_range();
     m_view_range.set_visible(m_view_range.get_enabled());
     m_settings.update_enabled_entities = true;
-    //m_settings.update_colors = true;
+    // ORCA: the ranges follow the inspected layer, so scrubbing the slider has to recolor
+    if (color_ranges_layers_restriction() != m_layers_range_used_for_ranges)
+        m_settings.update_colors = true;
     update_colors_texture();
 }
 
@@ -1380,8 +1384,21 @@ void ViewerImpl::toggle_top_layer_only_view_range()
     update_view_full_range();
     m_view_range.set_visible(m_view_range.get_enabled());
     m_settings.update_enabled_entities = true;
-    //m_settings.update_colors = true;
+    // ORCA: the ranges follow the layers actually colored, which this mode changes
+    if (color_ranges_layers_restriction() != m_layers_range_used_for_ranges)
+        m_settings.update_colors = true;
     update_colors_texture();
+}
+
+// ORCA: scale the color ranges of the current view type to the layer shown alone
+void ViewerImpl::set_rescale_colors_to_visible_layer(bool value)
+{
+    if (m_settings.rescale_colors_to_visible_layer == value)
+        return;
+    m_settings.rescale_colors_to_visible_layer = value;
+    // defer the actual color/texture rebuild to the next render(), when the GL context is current
+    // (this may be toggled from the Preferences dialog, outside the canvas context)
+    m_settings.update_colors = true;
 }
 
 // ORCA: enable/disable darkening of the layers the layer slider is not scrubbed to
@@ -1510,7 +1527,9 @@ void ViewerImpl::set_view_visible_range(Interval::value_type min, Interval::valu
     update_view_full_range();
     m_view_range.set_visible(min, max);
     update_enabled_entities();
-    //m_settings.update_colors = true;
+    // ORCA: the ranges follow the layers actually colored, which the moves slider can change
+    if (color_ranges_layers_restriction() != m_layers_range_used_for_ranges)
+        m_settings.update_colors = true;
     update_colors_texture();
 }
 
@@ -1870,13 +1889,48 @@ void ViewerImpl::update_view_full_range()
     m_settings.update_view_full_range = false;
 }
 
+// ORCA: while a single layer is shown alone, the values of the whole print squeeze the palette
+// into a couple of bins, hiding every variation inside that layer. Report the layers the ranges
+// have to be restricted to, so that the palette spans only what is actually on screen.
+std::optional<Interval> ViewerImpl::color_ranges_layers_restriction() const
+{
+    if (!m_settings.rescale_colors_to_visible_layer || m_layers.empty())
+        return std::nullopt;
+
+    // only the speed and flow view types: they are the ones whose values vary inside a layer in a
+    // way worth resolving. The other ranges either have absolute endpoints or barely vary at all.
+    switch (m_settings.view_type)
+    {
+    case EViewType::Speed:
+    case EViewType::ActualSpeed:
+    case EViewType::VolumetricFlowRate:
+    case EViewType::ActualVolumetricFlowRate: { break; }
+    default: { return std::nullopt; }
+    }
+
+    const Interval& layers_range = m_layers.get_view_range();
+    // the layer slider is scrubbed to a single layer
+    if (layers_range[0] == layers_range[1])
+        return layers_range;
+    // the moves slider is trimming the topmost shown layer while the top layer only mode is on:
+    // every layer below it is rendered gray, so the top layer is the only one carrying colors
+    if (m_settings.top_layer_only_view_range && m_view_range.get_full()[1] != m_view_range.get_visible()[1])
+        return Interval{ layers_range[1], layers_range[1] };
+
+    // as soon as more than one layer is colored the ranges span the whole print, as they always did
+    return std::nullopt;
+}
+
 void ViewerImpl::update_color_ranges()
 {
+    const std::optional<Interval> layers_restriction = color_ranges_layers_restriction();
+
     // Color ranges do not need to be recalculated that often. If the following settings are the same
     // as last time, the current ranges are still valid. The recalculation is quite expensive.
     if (m_settings_used_for_ranges.has_value() &&
         m_settings.extrusion_roles_visibility == m_settings_used_for_ranges->extrusion_roles_visibility &&
-        m_settings.options_visibility == m_settings_used_for_ranges->options_visibility)
+        m_settings.options_visibility == m_settings_used_for_ranges->options_visibility &&
+        m_layers_range_used_for_ranges == layers_restriction)
         return;
 
     m_width_range.reset();
@@ -1896,8 +1950,25 @@ void ViewerImpl::update_color_ranges()
     m_layer_time_range[0].reset(); // ColorRange::EType::Linear
     m_layer_time_range[1].reset(); // ColorRange::EType::Logarithmic
 
+    // ORCA: keep the values of the layers not on screen out of the ranges, unless the inspected
+    // layer carries no extrusion at all, in which case the whole print is used as before
+    std::optional<Interval> layers_filter = layers_restriction;
+    if (layers_filter.has_value()) {
+        const auto belongs_to_filter = [&layers_filter](const PathVertex& v) {
+            return static_cast<size_t>(v.layer_id) >= (*layers_filter)[0] &&
+                   static_cast<size_t>(v.layer_id) <= (*layers_filter)[1];
+        };
+        if (std::none_of(m_vertices.begin(), m_vertices.end(),
+                         [&belongs_to_filter](const PathVertex& v) { return v.is_extrusion() && belongs_to_filter(v); }))
+            layers_filter.reset();
+    }
+
     for (size_t i = 0; i < m_vertices.size(); i++) {
         const PathVertex& v = m_vertices[i];
+        // ORCA: restrict the ranges to the layer shown alone
+        if (layers_filter.has_value() && (static_cast<size_t>(v.layer_id) < (*layers_filter)[0] ||
+                                          static_cast<size_t>(v.layer_id) > (*layers_filter)[1]))
+            continue;
         if (v.is_extrusion()) {
             m_height_range.update(round_to_bin(v.height));
             if (!v.is_custom_gcode() || m_settings.extrusion_roles_visibility[size_t(EGCodeExtrusionRole::Custom)]) {
@@ -1931,6 +2002,7 @@ void ViewerImpl::update_color_ranges()
     }
 
     m_settings_used_for_ranges = m_settings;
+    m_layers_range_used_for_ranges = layers_restriction;
 }
 
 void ViewerImpl::update_heights_widths()

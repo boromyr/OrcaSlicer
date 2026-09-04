@@ -338,6 +338,9 @@ public:
     // ORCA: brightness of those darkened layers, 1.0 = unchanged, 0.0 = black
     void set_dim_previous_layers_brightness(float value) { m_viewer.set_dim_previous_layers_brightness(value); }
     float get_dim_previous_layers_brightness() const { return m_viewer.get_dim_previous_layers_brightness(); }
+    // ORCA: scale the colors of the current view type to the layer shown alone
+    void set_rescale_colors_to_visible_layer(bool value) { m_viewer.set_rescale_colors_to_visible_layer(value); }
+    bool is_rescale_colors_to_visible_layer() const { return m_viewer.is_rescale_colors_to_visible_layer(); }
 
     void set_layers_z_range(const std::array<unsigned int, 2>& layers_z_range);
 

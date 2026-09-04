@@ -221,6 +221,10 @@ void AppConfig::set_defaults()
         set("preview_dim_previous_layers_brightness", std::to_string(std::max(0, std::min(brightness, 99))));
     }
 
+    // ORCA: scale the preview colors to the layer shown alone
+    if (get("preview_rescale_colors_to_layer").empty())
+        set_bool("preview_rescale_colors_to_layer", true);
+
     if (get("filaments_area_preferred_count").empty())
         set("filaments_area_preferred_count", "10");
 

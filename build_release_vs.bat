@@ -149,7 +149,7 @@ if "%USE_NINJA%"=="1" (
     cmake --build . --config %build_type% --target deps
 ) else (
     cmake ../ -G %CMAKE_GENERATOR% -A %arch% -DCMAKE_BUILD_TYPE=%build_type%
-    cmake --build . --config %build_type% --target deps -- -m
+    cmake --build . --config %build_type% --target deps -- -m:22
 )
 @echo off
 
@@ -168,7 +168,7 @@ if "%USE_NINJA%"=="1" (
     cmake --build . --config %build_type% --target all
 ) else (
     cmake .. -G %CMAKE_GENERATOR% -A %arch% %TOOLSET_ARG% -DORCA_TOOLS=ON %SIG_FLAG% -DBUILD_TESTS=%BUILD_TESTS% -DCMAKE_BUILD_TYPE=%build_type%
-    cmake --build . --config %build_type% --target ALL_BUILD -- -m
+    cmake --build . --config %build_type% --target ALL_BUILD -- -m:22
 )
 @echo off
 cd ..
