@@ -82,6 +82,10 @@ struct FillParams
     // For Gyroid: when true, use the parameterized "optimized" variant.
     bool        gyroid_optimized { false };
 
+    // For Gyroid: when true, weld the pattern's in-plane saddle points with a small patch of
+    // internal bridge infill on the single layer where each of them opens up.
+    bool        gyroid_saddle_bridges { false };
+
     // Orca: corner smoothing factor in the range [0, 1].
     double      smooth_factor { 0. };
 

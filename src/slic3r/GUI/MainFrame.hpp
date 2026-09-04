@@ -13,6 +13,10 @@
 
 #include <string>
 #include <map>
+#include <memory>
+#include <mutex>
+#include <set>
+#include <vector>
 
 #include "GUI_Utils.hpp"
 #include "Event.hpp"
@@ -67,6 +71,7 @@ class PrintHostQueueDialog;
 class Plater;
 class MainFrame;
 class ParamsDialog;
+class QuickSettingsBar;
 #ifdef __WXGTK__
 class ResizeEdgePanel;
 #endif
@@ -185,14 +190,30 @@ class MainFrame : public DPIFrame
         size_t FindFileInHistory(const wxString &file);
 
         void LoadThumbnails();
+        // Files still without a thumbnail after LoadThumbnails(), so the expensive ones can
+        // be generated off the main thread. Every file is only reported once per session.
+        std::vector<std::wstring> CollectMissingThumbnails();
+        // Stores thumbnails produced from CollectMissingThumbnails(); true if any was used.
+        bool ApplyThumbnails(const std::map<std::wstring, std::string> &thumbnails);
 
         void SetMaxFiles(int max);
     private:
         std::deque<std::string> m_thumbnails;
         bool m_load_called = false;
+        // Paths already handed to CollectMissingThumbnails(), successful or not.
+        std::set<std::wstring> m_thumbnails_requested;
     };
 
     FileHistory m_recent_projects;
+
+    // Lets the detached load_missing_recent_thumbnails() worker find out, without racing
+    // the destructor, whether this frame is still around to post its result to.
+    struct AliveFlag
+    {
+        std::mutex mutex;
+        bool       alive = true;
+    };
+    std::shared_ptr<AliveFlag> m_alive = std::make_shared<AliveFlag>();
 
     enum class ESettingsLayout
     {
@@ -225,7 +246,7 @@ protected:
 
 public:
     MainFrame();
-    ~MainFrame() = default;
+    ~MainFrame();
 #ifdef __APPLE__
     bool get_mac_full_screen() { return m_mac_fullscreen; }
 #endif
@@ -347,6 +368,9 @@ public:
     void        get_recent_projects(boost::property_tree::wptree &tree, int images);
     void        open_recent_project(size_t file_id, wxString const & filename);
     void        remove_recent_project(size_t file_id, wxString const &filename);
+    // Generates the recent file thumbnails the shell had not cached yet, in the background,
+    // and refreshes the home page once they are in.
+    void        load_missing_recent_thumbnails();
 
     void        technology_changed();
 
@@ -362,6 +386,8 @@ public:
     //SoftFever
     void show_device(bool should_use_native);
     void fit_tab_labels(); // ORCA
+    // ORCA reload the quick access settings shown in the tab bar from the current presets
+    void update_quick_settings();
     // True while either of the two tabs backed by m_plater is selected.
     bool is_prepare_or_preview_tab() const;
     PluginPages& plugin_pages() { return m_plugin_pages; }
@@ -395,6 +421,7 @@ public:
     // BBS
     //wxBookCtrlBase*       m_tabpanel { nullptr };
     Notebook*             m_tabpanel{ nullptr };
+    QuickSettingsBar*     m_quick_settings{ nullptr }; // ORCA quick access settings in the tab bar
     wxBoxSizer*           m_side_tools{ nullptr };
     ParamsPanel*          m_param_panel{ nullptr };
     ParamsDialog*         m_param_dialog{ nullptr };

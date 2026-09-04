@@ -3,12 +3,14 @@
 #include <algorithm>
 #include <cmath>
 #include <map>
+#include <set>
 #include <numeric>
 #include <sstream>
 #include <string>
 #include <vector>
 
 #include "libslic3r/ClipperUtils.hpp"
+#include "libslic3r/ExtrusionEntity.hpp"
 #include "libslic3r/Fill/Fill.hpp"
 #include "libslic3r/Flow.hpp"
 #include "libslic3r/Geometry.hpp"
@@ -1022,3 +1024,197 @@ TEST_CASE("Smoothing multiline lightning infill keeps its outlines connected", "
     REQUIRE(smooth.point_count > sharp.point_count);
     REQUIRE(smooth.sharp_turns < sharp.sharp_turns);
 }
+
+// Orca: gyroid_saddle_bridges. Every half period the gyroid strands swap connectivity, and
+// on the layer nearest that transition two strands of the same layer stop short of touching.
+// The option welds those necks with a small patch of internal bridge infill.
+namespace {
+
+constexpr double GYROID_LINE_WIDTH = 0.45;
+
+// The ;TYPE: tags in the G-code are role_to_string() of the extrusion role, so ask for
+// them rather than spelling them out - the wording has been renamed before.
+const std::string SPARSE_INFILL  = ExtrusionEntity::role_to_string(erInternalInfill);
+const std::string INTERNAL_BRIDGE = ExtrusionEntity::role_to_string(erInternalBridgeInfill);
+
+// A gyroid-filled cube with no solid shells, so the only internal bridges in the G-code can
+// be the saddle welds.
+std::string slice_gyroid(bool saddle_bridges, const char *density)
+{
+    return Slic3r::Test::slice({Slic3r::Test::cube(20)}, {
+        {"sparse_infill_pattern",      "gyroid"},
+        {"sparse_infill_density",      density},
+        {"sparse_infill_line_width",   GYROID_LINE_WIDTH},
+        {"gyroid_saddle_bridges",      saddle_bridges},
+        {"top_shell_layers",           0},
+        {"bottom_shell_layers",        0},
+        {"layer_height",               0.2},
+        {"initial_layer_print_height", 0.2}});
+}
+
+// One extruding move: the ;TYPE: feature in effect, the layer Z, and the segment travelled.
+// A layer change is recorded as an entry with an empty feature, so the order within a layer
+// can be read straight off the sequence.
+struct FeatureMove {
+    std::string feature;
+    double      z    = 0.;
+    Vec2d       from = Vec2d::Zero();
+    Vec2d       to   = Vec2d::Zero();
+};
+
+std::vector<FeatureMove> extrusions_by_feature(const std::string &gcode)
+{
+    std::vector<FeatureMove> out;
+    std::string feature;
+    double      z = 0., x = 0., y = 0.;
+    std::istringstream in(gcode);
+    for (std::string line; std::getline(in, line);) {
+        if (line.rfind(";TYPE:", 0) == 0) {
+            feature = line.substr(6);
+        } else if (line.rfind(";Z:", 0) == 0) {
+            z = atof(line.c_str() + 3);
+            out.push_back({ "", z, Vec2d::Zero(), Vec2d::Zero() });
+        } else if (line.rfind("G1 ", 0) == 0) {
+            double nx = x, ny = y;
+            bool   moved = false, extruding = false;
+            for (size_t i = 3; i < line.size(); ++ i)
+                switch (line[i]) {
+                    case 'X': nx = atof(line.c_str() + i + 1); moved = true; break;
+                    case 'Y': ny = atof(line.c_str() + i + 1); moved = true; break;
+                    case 'E': extruding = atof(line.c_str() + i + 1) > 0.; break;
+                    default: break;
+                }
+            if (moved && extruding)
+                out.push_back({ feature, z, Vec2d(x, y), Vec2d(nx, ny) });
+            x = nx; y = ny;
+        }
+    }
+    return out;
+}
+
+int count_feature(const std::string &gcode, const std::string &feature)
+{
+    int n = 0;
+    for (const FeatureMove &m : extrusions_by_feature(gcode))
+        if (m.feature == feature)
+            ++ n;
+    return n;
+}
+
+// How many lines make up each weld, across the whole object. Neighbouring welds sit a whole
+// lattice pitch apart, so lines closer together than a couple of extrusions belong to the
+// same weld.
+std::multiset<size_t> weld_sizes(const char *density)
+{
+    std::map<double, std::vector<Vec2d>> per_layer;
+    for (const FeatureMove &m : extrusions_by_feature(slice_gyroid(true, density)))
+        if (m.feature == INTERNAL_BRIDGE)
+            per_layer[m.z].push_back(0.5 * (m.from + m.to));
+
+    std::multiset<size_t> sizes;
+    for (const auto &layer : per_layer) {
+        const std::vector<Vec2d> &mid = layer.second;
+        std::vector<bool> taken(mid.size(), false);
+        for (size_t i = 0; i < mid.size(); ++ i) {
+            if (taken[i])
+                continue;
+            std::vector<size_t> weld{i};
+            taken[i] = true;
+            for (size_t head = 0; head < weld.size(); ++ head)
+                for (size_t j = 0; j < mid.size(); ++ j)
+                    if (! taken[j] && (mid[weld[head]] - mid[j]).norm() < 2. * GYROID_LINE_WIDTH) {
+                        weld.push_back(j);
+                        taken[j] = true;
+                    }
+            sizes.insert(weld.size());
+        }
+    }
+    return sizes;
+}
+
+} // namespace
+
+TEST_CASE("Gyroid saddle bridges are only emitted when the option is on", "[Fill]")
+{
+    CHECK(count_feature(slice_gyroid(false, "15%"), INTERNAL_BRIDGE) == 0);
+    CHECK(count_feature(slice_gyroid(true,  "15%"), INTERNAL_BRIDGE) > 0);
+}
+
+TEST_CASE("Gyroid saddle bridges leave the infill they weld untouched", "[Fill]")
+{
+    // Welding a layer pins the order its extrusions are printed in, so the toolpath may be
+    // walked differently. The material it lays down must still be exactly the same: same
+    // features, on the same layers, along the same segments.
+    auto laid_down = [](const std::string &gcode) {
+        // Feature, layer, and the segment with its two ends put in a fixed order, so a
+        // segment printed the other way round still compares equal.
+        std::vector<std::tuple<std::string, double, double, double, double, double>> out;
+        for (const FeatureMove &m : extrusions_by_feature(gcode)) {
+            if (m.feature.empty() || m.feature == INTERNAL_BRIDGE)
+                continue;
+            const Vec2d a = std::make_pair(m.from.x(), m.from.y()) <= std::make_pair(m.to.x(), m.to.y()) ? m.from : m.to;
+            const Vec2d b = a == m.from ? m.to : m.from;
+            out.emplace_back(m.feature, m.z, a.x(), a.y(), b.x(), b.y());
+        }
+        std::sort(out.begin(), out.end());
+        return out;
+    };
+    CHECK(laid_down(slice_gyroid(true, "15%")) == laid_down(slice_gyroid(false, "15%")));
+}
+
+TEST_CASE("Gyroid saddle bridges are printed after the strands they join", "[Fill]")
+{
+    // A weld hangs between two strands of its own layer, so those have to be down first.
+    bool saw_bridge = false;
+    bool sparse_first = true;
+    bool sparse_seen  = false;
+    for (const FeatureMove &move : extrusions_by_feature(slice_gyroid(true, "15%"))) {
+        if (move.feature.empty())          // layer change
+            sparse_seen = false;
+        else if (move.feature == SPARSE_INFILL)
+            sparse_seen = true;
+        else if (move.feature == INTERNAL_BRIDGE) {
+            saw_bridge = true;
+            if (! sparse_seen)
+                sparse_first = false;
+        }
+    }
+    REQUIRE(saw_bridge);
+    CHECK(sparse_first);
+}
+
+TEST_CASE("Gyroid saddle bridges grow into a patch as the gyroid gets sparser", "[Fill]")
+{
+    // The neck is a bowtie, not a slit: the two strands separate as you move along it, so the
+    // empty area scales with the pattern. A dense gyroid needs one line to close it, a sparse
+    // one needs a slab of them side by side.
+    const std::multiset<size_t> dense  = weld_sizes("35%");
+    const std::multiset<size_t> sparse = weld_sizes("5%");
+    REQUIRE_FALSE(dense.empty());
+    REQUIRE_FALSE(sparse.empty());
+    CHECK(*dense.rbegin() == 1);
+    CHECK(*sparse.begin()  > 1);
+}
+
+TEST_CASE("Gyroid saddle bridges keep the same shape throughout one object", "[Fill]")
+{
+    // How far a layer sits from the saddle plane drifts as the saddle planes and the layer
+    // grid slide past each other, so the neck in front of a weld is not the same on every
+    // layer. The fan is sized from the widest neck the layer height can produce rather than
+    // from the one at hand, so it no longer flickers through a range of sizes up the object.
+    // Two sizes remain by design: every half period the saddle plane falls close enough to a
+    // layer for the two tips to meet at the centre, and those welds leave out the lines that
+    // would land on the joint already in place while still filling the neck either side of it.
+    const std::multiset<size_t> sizes = weld_sizes("8%");
+    REQUIRE(sizes.size() > 4);                       // several welds, over several layers
+    CHECK(std::set<size_t>(sizes.begin(), sizes.end()).size() <= 2);
+    CHECK(*sizes.rbegin() > 1);
+}
+
+TEST_CASE("Gyroid saddle bridges are skipped where the strands already meet", "[Fill]")
+{
+    // Packed this densely the two sides of every neck overlap on their own, so there is no
+    // gap left to weld and no material should be spent on one.
+    CHECK(count_feature(slice_gyroid(true, "80%"), INTERNAL_BRIDGE) == 0);
+}
+

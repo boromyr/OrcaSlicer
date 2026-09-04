@@ -272,6 +272,24 @@ void ButtonsListCtrl::SetOverflowButton(wxWindow* button)
     m_sizer->Layout();
 }
 
+void ButtonsListCtrl::SetTrailingControls(wxWindow* window)
+{
+    if (m_trailing_controls == window)
+        return;
+
+    if (m_trailing_controls != nullptr)
+        m_sizer->Detach(m_trailing_controls);
+
+    m_trailing_controls = window;
+
+    if (m_trailing_controls != nullptr)
+        // After the tab buttons and the overflow indicator, ahead of the stretch spacer / side_tools.
+        m_sizer->Insert(m_overflow_button == nullptr ? 1 : 2, m_trailing_controls, 0,
+                        wxALIGN_CENTER_VERTICAL | wxBOTTOM, m_btn_margin);
+
+    m_sizer->Layout();
+}
+
 //#endif // _WIN32
 
 void Notebook::Init()

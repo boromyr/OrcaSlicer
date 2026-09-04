@@ -14,6 +14,9 @@
 #include <wx/debug.h>
 #include <wx/utils.h>
 
+#include <climits>
+#include <thread>
+
 #include <boost/algorithm/string/predicate.hpp>
 #include <boost/log/trivial.hpp>
 #include <boost/property_tree/ptree.hpp>
@@ -38,6 +41,7 @@
 #include "GLCanvas3D.hpp"
 #include "Plater.hpp"
 #include "WebViewDialog.hpp"
+#include "ShellThumbnail.hpp"
 #include "../Utils/Process.hpp"
 #include "format.hpp"
 // BBS
@@ -56,6 +60,7 @@
 #include "UnsavedChangesDialog.hpp"
 #include "MsgDialog.hpp"
 #include "Notebook.hpp"
+#include "QuickSettingsBar.hpp"
 #include "GUI_Factories.hpp"
 #include "GUI_ObjectList.hpp"
 #include "NotificationManager.hpp"
@@ -291,6 +296,13 @@ static const wxString ctrl = _L("Ctrl+");
 static const wxString ctrl_t = ctrl;
 #endif
 static const wxString shift = _L("Shift+");
+
+MainFrame::~MainFrame()
+{
+    // Stop the detached recent-thumbnail worker from posting back to a frame that is gone.
+    std::lock_guard<std::mutex> lock(m_alive->mutex);
+    m_alive->alive = false;
+}
 
 MainFrame::MainFrame() :
 DPIFrame(NULL, wxID_ANY, "", wxDefaultPosition, wxDefaultSize, BORDERLESS_FRAME_STYLE, "mainframe")
@@ -1251,6 +1263,13 @@ void MainFrame::init_tabpanel() {
     m_tabpanel->Hide();
     m_settings_dialog.set_tabpanel(m_tabpanel);
 
+    // ORCA quick access to the most frequently changed settings, placed in the empty space that
+    // follows the tab buttons. Editor only, the G-code viewer has no presets to edit.
+    if (wxGetApp().is_editor()) {
+        m_quick_settings = new QuickSettingsBar(m_tabpanel->GetBtnsListCtrl());
+        m_tabpanel->SetTrailingControls(m_quick_settings);
+    }
+
 #ifdef __WXMSW__
     m_tabpanel->Bind(wxEVT_BOOKCTRL_PAGE_CHANGED, [this](wxBookCtrlEvent& e) {
 #else
@@ -1548,15 +1567,26 @@ void MainFrame::fit_tab_labels()
     m_tabpanel->Refresh();
     Layout();
 
+    // ORCA the quick settings sit between the tab buttons and the slice/print buttons, so they
+    // take part in the space the labels have to fit into.
+    const int trailing_width = m_quick_settings && m_quick_settings->IsShown() ? m_quick_settings->GetSize().GetWidth() : 0;
+
     // Compact (last to first)
     for (size_t i = count - 1; i >= 1; --i) {
         int right = ScreenToClient(m_slice_option_btn->ClientToScreen({})).x;
-        int left  = sizer->GetSize().GetWidth();
+        int left  = sizer->GetSize().GetWidth() + trailing_width;
         if (right - left - FromDIP(15) > 0) return;
         ctrl->SetCompact(i, true);
         m_tabpanel->Refresh();
         Layout();
     }
+}
+
+// ORCA
+void MainFrame::update_quick_settings()
+{
+    if (m_quick_settings != nullptr)
+        m_quick_settings->update();
 }
 
 bool MainFrame::preview_only_hint()
@@ -2540,6 +2570,9 @@ void MainFrame::on_dpi_changed(const wxRect& suggested_rect)
 
     m_tabpanel->Rescale();
 
+    if (m_quick_settings != nullptr) // ORCA
+        m_quick_settings->msw_rescale();
+
     update_side_button_style();
 
     m_slice_btn->Rescale();
@@ -2810,6 +2843,7 @@ void MainFrame::init_menubar_as_editor()
             m_recent_projects.AddFileToHistory(from_u8(project));
         }
         m_recent_projects.LoadThumbnails();
+        load_missing_recent_thumbnails();
 
         Bind(wxEVT_UPDATE_UI, [this](wxUpdateUIEvent& evt) { evt.Enable(can_open_project() && (m_recent_projects.GetCount() > 0)); }, recent_projects_submenu->GetId());
 
@@ -4200,7 +4234,24 @@ void MainFrame::add_to_recent_projects(const wxString& filename)
         }
         wxGetApp().app_config->set_recent_projects(recent_projects);
         m_webview->SendRecentList(0);
+        load_missing_recent_thumbnails();
     }
+}
+
+// Thumbnails are displayed at 184px in the home page, 256 keeps them sharp on HiDPI.
+static const int RECENT_THUMBNAIL_SIZE = 256;
+
+static std::string get_recent_thumbnail(const wxString &file, bool cached_only)
+{
+    // 3mf projects carry their own preview; every other model format reuses the thumbnail
+    // handler the desktop already has registered for it, so no extra renderer is needed.
+    const std::string path = into_u8(file);
+    if (boost::iends_with(path, ".3mf")) {
+        std::string thumbnail = bbs_3mf_get_thumbnail(path.c_str());
+        if (! thumbnail.empty())
+            return thumbnail;
+    }
+    return get_shell_thumbnail_png(file.ToStdWstring(), RECENT_THUMBNAIL_SIZE, cached_only);
 }
 
 std::wstring MainFrame::FileHistory::GetThumbnailUrl(int index) const
@@ -4218,7 +4269,7 @@ void MainFrame::FileHistory::AddFileToHistory(const wxString &file)
         return;
     wxFileHistory::AddFileToHistory(file);
     if (m_load_called)
-        m_thumbnails.push_front(bbs_3mf_get_thumbnail(into_u8(file).c_str()));
+        m_thumbnails.push_front(get_recent_thumbnail(file, /* cached_only */ true));
     else
         m_thumbnails.push_front("");
 }
@@ -4240,13 +4291,43 @@ void MainFrame::FileHistory::LoadThumbnails()
 {
     tbb::parallel_for(tbb::blocked_range<size_t>(0, GetCount()), [this](tbb::blocked_range<size_t> range) {
         for (size_t i = range.begin(); i < range.end(); ++i) {
-            auto thumbnail = bbs_3mf_get_thumbnail(into_u8(GetHistoryFile(i)).c_str());
+            auto thumbnail = get_recent_thumbnail(GetHistoryFile(i), /* cached_only */ true);
             if (!thumbnail.empty()) {
                 m_thumbnails[i] = thumbnail;
             }
         }
     });
     m_load_called = true;
+}
+
+std::vector<std::wstring> MainFrame::FileHistory::CollectMissingThumbnails()
+{
+    std::vector<std::wstring> missing;
+    for (size_t i = 0; i < GetCount(); ++i) {
+        if (! m_thumbnails[i].empty())
+            continue;
+        std::wstring file = GetHistoryFile(i).ToStdWstring();
+        if (m_thumbnails_requested.insert(file).second)
+            missing.push_back(std::move(file));
+    }
+    return missing;
+}
+
+bool MainFrame::FileHistory::ApplyThumbnails(const std::map<std::wstring, std::string> &thumbnails)
+{
+    bool changed = false;
+    // The history may have been reordered or trimmed while the thumbnails were generated,
+    // so match them back by path instead of by index.
+    for (size_t i = 0; i < GetCount(); ++i) {
+        if (! m_thumbnails[i].empty())
+            continue;
+        auto it = thumbnails.find(GetHistoryFile(i).ToStdWstring());
+        if (it != thumbnails.end()) {
+            m_thumbnails[i] = it->second;
+            changed = true;
+        }
+    }
+    return changed;
 }
 
 inline void MainFrame::FileHistory::SetMaxFiles(int max)
@@ -4278,6 +4359,36 @@ void MainFrame::get_recent_projects(boost::property_tree::wptree &tree, int imag
         }
         tree.push_back({L"", item});
     }
+}
+
+void MainFrame::load_missing_recent_thumbnails()
+{
+    std::vector<std::wstring> missing = m_recent_projects.CollectMissingThumbnails();
+    if (missing.empty())
+        return;
+
+    // Asking the shell for a thumbnail it has not cached yet starts its extractor host and
+    // can take about a second per file, so this never runs on the main thread.
+    std::thread([this, alive = m_alive, missing = std::move(missing)]() {
+        std::map<std::wstring, std::string> thumbnails;
+        for (const std::wstring &file : missing) {
+            std::string png = get_shell_thumbnail_png(file, RECENT_THUMBNAIL_SIZE, /* cached_only */ false);
+            if (! png.empty())
+                thumbnails.emplace(file, std::move(png));
+        }
+        if (thumbnails.empty())
+            return;
+        // Holding the lock across CallAfter() is what makes this safe: the frame cannot
+        // start being destroyed in between. Events queued before that are dropped by
+        // ~wxEvtHandler, so nothing reaches a dead frame afterwards either.
+        std::lock_guard<std::mutex> lock(alive->mutex);
+        if (! alive->alive)
+            return;
+        CallAfter([this, thumbnails = std::move(thumbnails)]() {
+            if (m_recent_projects.ApplyThumbnails(thumbnails) && m_webview != nullptr)
+                m_webview->SendRecentList(INT_MAX);
+        });
+    }).detach();
 }
 
 void MainFrame::open_recent_project(size_t file_id, wxString const & filename)

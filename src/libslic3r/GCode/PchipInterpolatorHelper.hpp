@@ -23,8 +23,9 @@ public:
      * @brief Constructs the PCHIP interpolator with given data points.
      * @param x The x-coordinates of the data points.
      * @param y The y-coordinates of the data points.
+     * @param extrapolate If true, linearly extrapolates beyond the data range using endpoint derivatives.
      */
-    PchipInterpolatorHelper(const std::vector<double>& x, const std::vector<double>& y);
+    PchipInterpolatorHelper(const std::vector<double>& x, const std::vector<double>& y, bool extrapolate = false);
 
     /**
      * @brief Sets the data points for the interpolator.
@@ -47,6 +48,7 @@ private:
     std::vector<double> h_; ///< The differences between successive x-coordinates.
     std::vector<double> delta_; ///< The slopes of the segments between successive data points.
     std::vector<double> d_; ///< The derivatives at the data points.
+    bool m_extrapolate = false; ///< If true, extrapolates linearly beyond data range using endpoint derivatives.
 
     /**
      * @brief Computes the PCHIP coefficients.

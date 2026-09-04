@@ -4047,6 +4047,8 @@ void GCodeViewer::render_legend(float &legend_height, int canvas_width, int canv
         ImGui::SameLine();
         ::sprintf(buf, "%.2f", ps.total_cost);
         imgui.text(buf);
+        ImGui::SameLine();
+        imgui.text("€");
 
         ImGui::Dummy({window_padding, window_padding});
         ImGui::SameLine();
@@ -4194,6 +4196,8 @@ void GCodeViewer::render_legend(float &legend_height, int canvas_width, int canv
         ImGui::SameLine();
         ::sprintf(buf, "%.2f", ps.total_cost);
         imgui.text(buf);
+        ImGui::SameLine();
+        imgui.text("€");
 
         break;
     }
@@ -4655,6 +4659,8 @@ void GCodeViewer::render_legend(float &legend_height, int canvas_width, int canv
         ImGui::SameLine(max_len);
         ::sprintf(buf, "%.2f", ps.total_cost);
         imgui.text(buf);
+        ImGui::SameLine();
+        imgui.text("€");
     }
     //BBS: start gcode is mostly same with prepeare time
     if (time_mode.prepare_time != 0.0f) {
