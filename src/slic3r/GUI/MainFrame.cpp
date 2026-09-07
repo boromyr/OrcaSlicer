@@ -701,6 +701,8 @@ DPIFrame(NULL, wxID_ANY, "", wxDefaultPosition, wxDefaultSize, BORDERLESS_FRAME_
             }
             return;}
 #endif
+        // Orca: open the speed dial from any page. CmdDown() = Ctrl on Win/Linux, Cmd on macOS.
+        if (evt.CmdDown() && evt.GetKeyCode() == 'K') { wxGetApp().open_speed_dial(); return; }
         if (evt.CmdDown() && evt.GetKeyCode() == 'R') { if (m_slice_enable) { wxGetApp().plater()->update(true, true); wxPostEvent(m_plater, SimpleEvent(EVT_GLTOOLBAR_SLICE_PLATE)); this->m_tabpanel->SelectPageByName(TAB_ID_PREVIEW); } return; }
         if (evt.CmdDown() && evt.ShiftDown() && evt.GetKeyCode() == 'G') {
             m_plater->apply_background_progress();
@@ -3346,6 +3348,11 @@ void MainFrame::init_menubar_as_editor()
             wxGetApp().open_preferences();
         },
         "", nullptr, []() { return true; }, this, 1);
+    parent_menu->AppendSeparator();
+    append_menu_item(
+        parent_menu, wxID_ANY, _L("Open speed dial...") + sep + ctrl_t + "K", "",
+        [](wxCommandEvent &) { wxGetApp().open_speed_dial(); },
+        "", nullptr, []() { return true; }, this);
     //parent_menu->Insert(1, preference_item);
 #endif
     // Help menu
@@ -3370,7 +3377,13 @@ void MainFrame::init_menubar_as_editor()
     auto top_menu = m_topbar->GetTopMenu();
     top_menu->AppendSeparator();
 
-        append_menu_item(
+    append_menu_item(
+        top_menu, wxID_ANY, _L("Open speed dial...") + "\t" + ctrl + "K", "",
+        [](wxCommandEvent &) { wxGetApp().open_speed_dial(); },
+        "", nullptr, []() { return true; }, this);
+    top_menu->AppendSeparator();
+
+    append_menu_item(
         top_menu, wxID_ANY, _L("Preset Bundle") + "\t", "",
         [this](wxCommandEvent &) {
             // Orca: Use GUI_App::open_preferences instead of direct call so windows associations are updated on exit
@@ -3508,6 +3521,10 @@ void MainFrame::init_menubar_as_editor()
 #else
     // On Mac, the Apple menu ignores non-standard custom items, so add Preset Bundle to the File menu
     fileMenu->AppendSeparator();
+    append_menu_item(
+        fileMenu, wxID_ANY, _L("Open speed dial...") + sep + ctrl_t + "K", "",
+        [](wxCommandEvent&) { wxGetApp().open_speed_dial(); },
+        "", nullptr, []() { return true; }, this);
     append_menu_item(
         fileMenu, wxID_ANY, _L("Preset Bundle"), "",
         [this](wxCommandEvent&) {

@@ -10,6 +10,7 @@
 #include "Widgets/Label.hpp"
 
 #include <wx/button.h>
+#include <wx/dcclient.h>
 #include <wx/sizer.h>
 
 wxDEFINE_EVENT(wxCUSTOMEVT_NOTEBOOK_SEL_CHANGED, wxCommandEvent);
@@ -158,11 +159,21 @@ void ButtonsListCtrl::SetSelection(int sel)
 
 bool ButtonsListCtrl::InsertPage(size_t n, const wxString &text, bool bSelect /* = false*/, const std::string &bmp_name /* = ""*/, const wxBitmap &bmp /* = wxNullBitmap */)
 {
-    Button * btn = new Button(this, text.empty() ? text : " " + text, bmp_name, wxNO_BORDER);
+    Button * btn = new Button(this, text, bmp_name, wxNO_BORDER);
     btn->SetCornerRadius(0);
 
     if (bmp_name.empty() && bmp.IsOk())
         btn->SetIcon(bmp);
+
+    // The label no longer carries a leading space, so widen the icon<->text gap to keep the
+    // original spacing between a tab's icon and its caption.
+    {
+        wxClientDC dc(btn);
+        dc.SetFont(btn->GetFont());
+        int space_w = 0;
+        dc.GetTextExtent(" ", &space_w, nullptr);
+        btn->SetIconSpacing(5 + space_w);
+    }
 
     int em = em_unit(this);
     //BBS set size for button
@@ -245,7 +256,7 @@ void ButtonsListCtrl::SetCompact(size_t n, bool compact)
     int em = em_unit(this);
     Button* btn = m_pageButtons[n];
     btn->SetMinSize({(compact ? 40 : 136) * em / 10, 36 * em / 10});
-    btn->SetLabel(compact ? "" : (" " +  m_pageLabels[n]));
+    btn->SetLabel(compact ? "" : m_pageLabels[n]);
 }
 
 wxString ButtonsListCtrl::GetPageText(size_t n) const

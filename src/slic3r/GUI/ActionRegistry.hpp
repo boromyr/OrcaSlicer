@@ -18,6 +18,9 @@ namespace Slic3r { namespace GUI {
 // How a source's action set changed. Drives the registry's refresh handlers.
 enum class ActionChange { Added, Removed };
 
+// What kind of runnable thing an action is. Drives the palette section + dispatch.
+enum class AppActionKind { Plugin, Command };
+
 // Result of running an AppAction, in the action layer's own vocabulary. Concrete
 // actions translate their runner-specific result into this generic shape.
 struct AppActionRunResult
@@ -56,8 +59,18 @@ struct AppAction
     int         count = 0;
     long long   last = 0;     // epoch seconds
 
+    // Speed Dial presentation: Plugin keeps group empty (the UI falls back to the
+    // source name); Command sets a section label (e.g. "Commands", "Mode").
+    AppActionKind kind = AppActionKind::Plugin;
+    std::string   group;
+    // Second-phase input descriptor for the palette: "settings" (jump to a config option)
+    // or "percent" (jump to layer by a 0-100 value). Empty = run immediately on activation.
+    std::string input;
+
     virtual ~AppAction() = default;
-    virtual AppActionRunResult run() const = 0; // re-resolves + runs (UI thread)
+    // Re-resolves + runs (UI thread). `param` carries an optional per-run argument for
+    // commands (e.g. a layer percentage); plugins ignore it.
+    virtual AppActionRunResult run(const std::string& param = {}) const = 0;
 
 protected:
     // The definition is constructor-set and immutable. Refreshes replace an action
@@ -92,6 +105,8 @@ private:
 class ActionRegistry
 {
 public:
+    ~ActionRegistry();
+
     // Subscribes to the plugin loader and enumerates its current actions. Call once
     // on the UI thread after the plugin system is up; wires the initial list and live
     // updates together.
@@ -108,7 +123,7 @@ public:
     const AppAction*                               by_id(const std::string& id) const;
 
     // Dispatch + write-through (registry is the only thing that touches AppConfig).
-    AppActionRunResult run(const std::string& id);          // runs + bumps stats
+    AppActionRunResult run(const std::string& id, const std::string& param = {}); // runs + bumps stats
     void             set_favourite(const std::string& id, bool on);
     void             reorder_favourites(const std::vector<std::string>& ids);   // persist a new bar order
 
@@ -116,8 +131,32 @@ public:
     bool should_ask(const std::string& id) const;
     void suppress_ask(const std::string& id);
 
-    // Flat, frecency-sorted snapshot for the webview: {actions:[...], favourites:[...]}.
+    // Flat, frecency-sorted snapshot for the webview:
+    // {actions:[...], favourites:[...], recent:[...]} (recent = last-N launched by recency).
     nlohmann::json snapshot() const;
+
+    // "Go to setting..." Speed Dial helper: query the current print/filament/printer
+    // config options via the sidebar's live OptionsSearcher (the instance Tab registration
+    // populates with group/category, and which carries the current printer technology) and
+    // return the top matches as JSON. The searcher is re-seeded from the current configs +
+    // user mode on every call so the result always reflects what the sidebar's own search
+    // would show. An empty/whitespace query returns the recent settings list (below), and the
+    // page shows a "type to search" hint when there are no recents.
+    nlohmann::json settings_search(const std::string& query);
+
+    // Recently-jumped-to settings, persisted (most-recent-first, capped at 8). Returns the
+    // stored JSON array [{opt_key,type,label,category,group},...]; record_setting_recent()
+    // prepends an entry (deduped by opt_key+type) and re-persists.
+    nlohmann::json settings_recent() const;
+    void record_setting_recent(const std::string& opt_key, int type, const std::string& label,
+                               const std::string& category, const std::string& group);
+
+    // "Go to tab..." Speed Dial helper: enumerate the MainFrame notebook's current pages
+    // as [{id,title},...]. Live by construction - built-in tabs (Home/Prepare/Preview/Device/
+    // Project/Calibration) and plugin tabs (plugin.<key>.<name>) are all Notebook pages, so a
+    // page appears/disappears with the notebook. Plugin tabs hidden in the overflow menu (many
+    // plugins) aren't separate pages and are not listed. Call on the UI thread; null-safe.
+    nlohmann::json tab_options() const;
 
 private:
     void         seed_state(AppAction& a) const;               // favourite/stats from config

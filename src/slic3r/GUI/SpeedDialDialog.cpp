@@ -9,11 +9,17 @@
 #include "Plater.hpp"
 #include "Widgets/WebViewHostDialog.hpp"
 
+#include <libslic3r/Preset.hpp>
+
 #include <algorithm>
 
 #include <wx/display.h>
 #include <wx/sizer.h>
 #include <wx/stattext.h>
+
+#ifdef __linux__
+#include <gtk/gtk.h>
+#endif
 
 namespace Slic3r { namespace GUI {
 
@@ -21,8 +27,8 @@ namespace {
 
 // ADJUST WIDTH HERE (DIP px). Fixed dialog width; was 360, now 1.5x. Height is not set here -
 // the dialog auto-resizes to the page content (see resize_to_content + the list max-height in style.css).
-constexpr int kPopupWidth = 540;
-constexpr int kPopupMinHeight = 60;   // just above the bare search-bar height, so the dialog hugs content
+constexpr int kPopupWidth     = 540;
+constexpr int kPopupMinHeight = 60; // just above the bare search-bar height, so the dialog hugs content
 constexpr int kPopupMaxHeight = 282;
 
 int json_int_or(const nlohmann::json& j, const char* key, int fallback)
@@ -33,23 +39,49 @@ int json_int_or(const nlohmann::json& j, const char* key, int fallback)
 
 wxColour bg_color() { return wxGetApp().get_window_default_clr(); }
 
+// Give the WebKitGTK widget itself input focus, not its GtkScrolledWindow container.
+// (browser()->SetFocus() grabs focus on the container and doesn't reach the web content,
+// so typing only works after the user clicks.) On Linux the native backend is the
+// WebKitWebView widget; grab focus there directly. Elsewhere SetFocus() is correct.
+void focus_webview(wxWebView* browser, bool page_ready)
+{
+    if (!browser)
+        return;
+#ifdef __linux__
+    if (void* nb = browser->GetNativeBackend())
+        gtk_widget_grab_focus((GtkWidget*) nb);
+#else
+    browser->SetFocus();
+#endif
+    if (page_ready)
+        browser->RunScript("focusInput();");
 }
 
+} // namespace
+
 SpeedDialWebDialog::SpeedDialWebDialog(wxWindow* parent)
-    : WebViewHostDialog(parent, wxID_ANY, wxEmptyString, wxDefaultPosition, wxDefaultSize,
-                        wxBORDER_NONE | wxFRAME_NO_TASKBAR)
+    : WebViewHostDialog(parent,
+                        wxID_ANY,
+                        wxEmptyString,
+                        wxDefaultPosition,
+                        wxDefaultSize,
+                        wxBORDER_NONE | wxFRAME_NO_TASKBAR | wxFRAME_FLOAT_ON_PARENT)
 {
     SetBackgroundColour(bg_color());
     Bind(wxEVT_ACTIVATE, [this](wxActivateEvent& event) {
-        if (!event.GetActive() && IsShown())
+        // Focus the WebKit widget exactly when the WM makes the popup the active window
+        // (modeless focus is granted asynchronously, so a focus request made right after
+        // Show() is dropped). Also re-corrects focus on every re-open.
+        if (event.GetActive() && IsShown())
+            focus_webview(browser(), m_page_ready);
+        else if (!event.GetActive() && IsShown())
             Hide();
         event.Skip();
     });
-    if (!create_webview("web/dialog/SpeedDial/index.html", wxEmptyString,
-                       wxSize(kPopupWidth, kPopupMaxHeight), wxSize(kPopupWidth, kPopupMinHeight))) {
+    if (!create_webview("web/dialog/SpeedDial/index.html", wxEmptyString, wxSize(kPopupWidth, kPopupMaxHeight),
+                        wxSize(kPopupWidth, kPopupMinHeight))) {
         auto* sizer = new wxBoxSizer(wxVERTICAL);
-        sizer->Add(new wxStaticText(this, wxID_ANY, wxS("wxWebView unavailable")),
-                   wxSizerFlags().Border(wxALL, 20));
+        sizer->Add(new wxStaticText(this, wxID_ANY, wxS("wxWebView unavailable")), wxSizerFlags().Border(wxALL, 20));
         SetSizer(sizer);
         SetClientSize(FromDIP(wxSize(kPopupWidth, kPopupMinHeight)));
     }
@@ -61,8 +93,7 @@ void SpeedDialWebDialog::request_show()
 {
     if (IsShown()) {
         Raise();
-        if (browser())
-            browser()->SetFocus();
+        focus_webview(browser(), m_page_ready);
         return;
     }
 
@@ -70,8 +101,9 @@ void SpeedDialWebDialog::request_show()
     Raise();
     if (m_page_ready)
         send_actions();
-    if (browser())
-        browser()->SetFocus();
+    // Grab focus now and again on wxEVT_ACTIVATE; grabbing directly on the WebKit widget is
+    // what makes typing reach the search field immediately on open.
+    focus_webview(browser(), m_page_ready);
 }
 
 void SpeedDialWebDialog::on_script_message(const nlohmann::json& payload)
@@ -95,8 +127,7 @@ void SpeedDialWebDialog::handle_web_command(const nlohmann::json& payload)
     if (command == "request_actions") {
         m_page_ready = true;
         send_actions();
-    }
-    else if (command == "toggle_favourite")
+    } else if (command == "toggle_favourite")
         wxGetApp().action_registry().set_favourite(payload.value("id", ""), payload.value("fav", false));
     else if (command == "reorder_favourites") {
         std::vector<std::string> ids;
@@ -105,11 +136,59 @@ void SpeedDialWebDialog::handle_web_command(const nlohmann::json& payload)
                 if (id.is_string())
                     ids.push_back(id.get<std::string>());
         wxGetApp().action_registry().reorder_favourites(ids);
-    }
-    else if (command == "run_action")
-        run_action(payload.value("id", ""), payload.value("title", ""));
-    else if (command == "resize")
+    } else if (command == "run_action")
+        run_action(payload.value("id", ""), payload.value("title", ""), payload.value("param", ""));
+    else if (command == "go_to_setting") {
+        // "Go to setting..." second phase: the page hands back the option it matched.
+        const std::string opt_key = payload.value("opt_key", "");
+        if (!opt_key.empty()) {
+            const int type          = json_int_or(payload, "type", int(Preset::TYPE_INVALID));
+            const std::string label = payload.value("label", "");
+            const std::string group = payload.value("group", "");
+            const std::string cat   = payload.value("category", "");
+            // Track it in the palette's recent-settings list before jumping (persisted).
+            wxGetApp().action_registry().record_setting_recent(opt_key, type, label, cat, group);
+            Hide();
+            wxGetApp().sidebar().jump_to_option(opt_key, Preset::Type(type), from_u8(cat).ToStdWstring());
+        }
+    } else if (command == "search_settings")
+        search_settings(payload.value("q", ""));
+    else if (command == "search_tabs")
+        search_tabs();
+    else if (command == "go_to_tab") {
+        // "Go to tab..." second phase: the page hands back the tab id it matched.
+        const std::string tab_id = payload.value("id", "");
+        if (!tab_id.empty()) {
+            Hide();
+            if (wxGetApp().mainframe)
+                wxGetApp().mainframe->select_tab(from_u8(tab_id));
+        }
+    } else if (command == "resize")
         resize_to_content(json_int_or(payload, "height", 0));
+}
+
+void SpeedDialWebDialog::search_tabs()
+{
+    // Round-trip is async because the webview delivers script messages synchronously on the
+    // GTK/macOS stack; defer the (cheap) enumeration and push the result back to the page.
+    wxGetApp().CallAfter([this, alive = m_alive]() {
+        if (!alive->load(std::memory_order_acquire))
+            return;
+        auto tabs = wxGetApp().action_registry().tab_options();
+        call_web_handler({{"command", "tab_results"}, {"tabs", std::move(tabs)}});
+    });
+}
+
+void SpeedDialWebDialog::search_settings(const std::string& query)
+{
+    // Round-trip is async because the webview delivers script messages synchronously on the
+    // GTK/macOS stack; defer the (cheap) search and push the result back to the page.
+    wxGetApp().CallAfter([this, alive = m_alive, query]() {
+        if (!alive->load(std::memory_order_acquire))
+            return;
+        auto results = wxGetApp().action_registry().settings_search(query);
+        call_web_handler({{"command", "settings_results"}, {"results", std::move(results)}});
+    });
 }
 
 void SpeedDialWebDialog::resize_to_content(int height)
@@ -127,14 +206,15 @@ void SpeedDialWebDialog::resize_to_content(int height)
     Layout();
 }
 
-void SpeedDialWebDialog::run_action(const std::string& id, const std::string& title)
+void SpeedDialWebDialog::run_action(const std::string& id, const std::string& title, const std::string& param)
 {
     ActionRegistry& reg = wxGetApp().action_registry();
-    const AppAction* a = reg.by_id(id);
+    const AppAction* a  = reg.by_id(id);
     if (!a)
         return;
 
-    const bool        ask    = reg.should_ask(id);
+    // Only plugin actions get the "Run plugin?" confirm. Built-in commands act immediately.
+    const bool ask           = a->kind == AppActionKind::Plugin && reg.should_ask(id);
     const std::string atitle = a->title();
     if (IsModal())
         EndModal(wxID_CANCEL);
@@ -143,8 +223,7 @@ void SpeedDialWebDialog::run_action(const std::string& id, const std::string& ti
 
     if (ask) {
         const wxString label = title.empty() ? from_u8(atitle) : from_u8(title);
-        RichMessageDialog dlg(wxGetApp().mainframe, wxString::Format(_L("Run \"%s\"?"), label),
-                              _L("Run plugin"), wxOK | wxCANCEL);
+        RichMessageDialog dlg(wxGetApp().mainframe, wxString::Format(_L("Run \"%s\"?"), label), _L("Run plugin"), wxOK | wxCANCEL);
         dlg.ShowCheckBox(_L("Don't ask again for this action"));
         if (dlg.ShowModal() != wxID_OK)
             return;
@@ -152,18 +231,21 @@ void SpeedDialWebDialog::run_action(const std::string& id, const std::string& ti
             wxGetApp().action_registry().suppress_ask(id);
     }
 
-    wxGetApp().CallAfter([id] {
+    wxGetApp().CallAfter([id, param] {
         if (wxGetApp().is_closing())
             return;
-        AppActionRunResult result = wxGetApp().action_registry().run(id);
+        AppActionRunResult result = wxGetApp().action_registry().run(id, param);
         if (result.level == AppActionRunResult::Level::Busy)
             return;
         if (!result.message.IsEmpty() && wxGetApp().plater())
-            wxGetApp().plater()->get_notification_manager()->push_notification(
-                NotificationType::CustomNotification,
-                result.level == AppActionRunResult::Level::Error ? NotificationManager::NotificationLevel::ErrorNotificationLevel :
-                                                                    NotificationManager::NotificationLevel::RegularNotificationLevel,
-                into_u8(result.message));
+            wxGetApp()
+                .plater()
+                ->get_notification_manager()
+                ->push_notification(NotificationType::CustomNotification,
+                                    result.level == AppActionRunResult::Level::Error ?
+                                        NotificationManager::NotificationLevel::ErrorNotificationLevel :
+                                        NotificationManager::NotificationLevel::RegularNotificationLevel,
+                                    into_u8(result.message));
     });
 }
 
@@ -172,7 +254,8 @@ void SpeedDialWebDialog::send_actions()
     nlohmann::json snap = wxGetApp().action_registry().snapshot();
     call_web_handler({{"command", "list_actions"},
                       {"actions", std::move(snap["actions"])},
-                      {"favourites", std::move(snap["favourites"])}});
+                      {"favourites", std::move(snap["favourites"])},
+                      {"recent", std::move(snap["recent"])}});
 }
 
-}}
+}} // namespace Slic3r::GUI
