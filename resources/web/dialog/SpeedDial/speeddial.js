@@ -10,39 +10,117 @@ var sel = { zone: "list", i: 0 };   // zone: 'list' | 'fav'
 var lastResizeHeight = 0;
 var matchIndex = {};
 
-// Palette phase: 'commands' (search actions/commands, show recents), 'settings' ("Go to
-// setting..." second phase: search config options), 'percent' ("Go to layer" second phase:
-// enter a 0-100 percentage), 'tab' ("Go to tab..." second phase: pick a notebook tab).
+// ---- windowed list render ----------------------------------------------------
+// The command list is rendered in windows (append-on-scroll) so a huge settings pool doesn't build
+// the whole DOM per keystroke. Rows are exactly ROW_H tall (matches .row min-height 44px; see --row-h,
+// which is documented to stay in sync). `renderEnd` is the exclusive count of rows currently in the DOM;
+// a bottom spacer fills the rest of the list so the scrollbar reflects the full match count and
+// "scroll past the last rendered row" reveals the next window.
+var K_ROWS = 50;
+var ROW_H  = 44;
+var renderEnd = 0;
+var builtKey  = "";   // phase|query|listLen - when it changes, rows are rebuilt from the first window
+var spacerEl  = null; // the trailing height spacer, always the last child of listEl
+
+// search-cache: the normalized (folded+lowercased) needle for the current query pass.
+var searchNeedle = "";
+
+// Palette phase: 'commands' (one unified search over actions/commands/settings, recents on empty
+// query), 'percent' ("Go to layer" second phase: enter a 0-100 percentage), 'tab' ("Go to tab..."
+// second phase: pick a notebook tab).
 var phase = "commands";
-var settingsResults = [];  // [{opt_key,type,label,category,group}]
 var tabOptions = [];       // [{id,title}] - notebook pages, fetched on entering the tab phase
 
 // why: fuzzy matcher (FoldChar/Norm/FuzzyRanges) lives in shared ../../js/fuzzy-search.js, loaded before
 //      this script - it is shared with the Plugins dialog. Speed dial search is always case-insensitive.
 
 // element handles, assigned in OnInit (kept null so load-time touches no DOM)
-var qEl = null, listEl = null, favEl = null, clearEl = null, eyeEl = null, countEl = null;
+var qEl = null, listEl = null, favEl = null, clearEl = null, eyeEl = null, countEl = null, headEl = null;
+
+// ---- inline setting editor state ---------------------------------------------
+// The "setting" phase (opened by activating a setting action) replaces the list with an editor card
+// for one option. phase transitions: commands -> setting -> (apply / open-in-sidebar) -> closed, or
+// Esc back to commands. settingDesc is the C++ descriptor; settingRows are the per-index control
+// descriptors (1 row for scalars, one per index for vectors); settingFieldEls hold the live controls.
+var settingId = "";        // the setting action id being edited
+var settingDesc = null;    // {id,opt_key,type,title,breadcrumb,category,unit,tooltip,editable,control,cardinality,value|values,index_labels,enum_options,min,max,is_int}
+var settingRows = [];      // [{index,kind,value,label,enum_options,min,max,unit,is_int}]
+var settingFieldEls = [];  // [Element...] parallel to settingRows
+var settingPreviewIcon = null; // <img> beside the editor title, updated live on dropdown pick
+var openDropDownEl = null; // the custom dropdown toggle button whose option list is expanded
 
 // ---- pure helpers (no DOM; unit-tested) -------------------------------------
-function filterActions(actions, query) {
+// Pre-normalized haystacks, cached on the action object. The fold is length-preserving (1:1 per
+// char) so the ranges FuzzyRangesNorm returns slice the ORIGINAL title/source text correctly. The
+// action objects arrive from C++ and are stable for the dialog's lifetime, so we compute these once.
+function titleNorm(a) {
+    if (a._tn === undefined)
+        a._tn = NormText(a.title, false);
+    return a._tn;
+}
+function otherNorm(a) {
+    if (a._on === undefined)
+        a._on = NormText((a.source || "") + " " + (a.group || ""), false);
+    return a._on;
+}
+
+// Relevance score for a single field vs the current query needle, or -1 when there's no match.
+// Higher is better: an earlier start and a more contiguous (fewer gaps) match beat a scattered late one.
+function matchScoreNorm(haystackNorm) {
+    if (!searchNeedle) return -1;
+    var r = FuzzyRangesNorm(haystackNorm || "", searchNeedle);
+    if (!r) return -1;
+    var gaps = 0;
+    for (var i = 1; i < r.length; i++)
+        gaps += r[i][0] - r[i - 1][1];
+    return 1000 - r[0][0] * 10 - gaps * 10;
+}
+
+// Per-action score: title matches rank above a source/group-only match of equal quality.
+function actionSearchScore(a) {
+    var title = matchScoreNorm(titleNorm(a));
+    var other = matchScoreNorm(otherNorm(a));
+    if (title < 0 && other < 0) return -1;
+    return Math.max(title < 0 ? -1e9 : title + 10000, other < 0 ? -1e9 : other);
+}
+
+// The unified main-phase search: every action (command/plugin/setting) matching the query, ranked
+// by relevance (not by action type). Sets matchIndex so rows highlight their match ranges. The query
+// is normalized ONCE per pass - FuzzyRangesNorm then runs against each action's pre-normalized
+// haystack, so per-keystroke cost is a cheap scan (no per-char normalize/regex).
+function searchActions(actions, query) {
     var q = (query || "").trim();
     var list = actions || [];
     matchIndex = {};
-    if (!q)
-        return list.slice(0);
+    if (!q) { searchNeedle = ""; return list.slice(0); }
+    searchNeedle = NormText(q, false);
 
-    var out = [];
+    var scored = [];
     for (var i = 0; i < list.length; i++) {
         var a = list[i];
-        var titleMatch = FuzzyRanges(a.title, q, false);
-        var sourceMatch = FuzzyRanges(a.source || "", q, false);
-        if (!titleMatch && !sourceMatch)
-            continue;
-        matchIndex[a.id] = { title: titleMatch, source: sourceMatch, useTitle: !!titleMatch };
-        out.push(a);
+        var s = actionSearchScore(a);
+        if (s < 0) continue;
+        var titleMatch = FuzzyRangesNorm(titleNorm(a), searchNeedle);
+        matchIndex[a.id] = { title: titleMatch, source: FuzzyRangesNorm(otherNorm(a), searchNeedle), useTitle: !!titleMatch };
+        scored.push({ a: a, s: s });
     }
-    return out;
+    scored.sort(function (x, y) {
+        if (x.s !== y.s) return y.s - x.s;
+        if (x.a.title !== y.a.title) return x.a.title < y.a.title ? -1 : 1;
+        return x.a.id < y.a.id ? -1 : x.a.id > y.a.id ? 1 : 0;
+    });
+    return scored.map(function (e) { return e.a; });
 }
+
+// Pure: how many rows must be materialized to cover the given starting index plus `size` more.
+// Clamped to the total; used to decide "render the next window" on scroll / arrow-nav.
+function revealTarget(total, fromIndex, size) {
+    return Math.min(total, Math.max(0, fromIndex) + size);
+}
+
+// buildKey: the command-list signature that decides whether rows must be rebuilt (new search / phase)
+// or just have their selection refreshed in place (arrow-nav / click). Cheap to compute.
+function buildKey() { return phase + "|" + (query || "").trim(); }
 
 function visibleFavourites(favourites, actions) {
     // why: a fav whose id has no live action (plugin unloaded/disabled) renders a dead
@@ -52,6 +130,24 @@ function visibleFavourites(favourites, actions) {
     return (favourites || []).filter(function (id, i, arr) {
         return seen[id] && arr.indexOf(id) === i;
     });
+}
+
+// Numbered quick-launch slots (mirrors ActionRegistry::kFavLimit). Pure so the node-vm test
+// can exercise the digit<->slot mapping without a DOM.
+var K_FAV_LIMIT = 10;
+
+// Badge label for a 0-based fav-bar index: 0..8 -> "1".."9", index 9 (the 10th) -> "0".
+function favSlotForIndex(i) {
+    if (i < 0 || i >= K_FAV_LIMIT) return null;
+    return i < 9 ? String(i + 1) : "0";
+}
+
+// Digit key -> 0-based fav-bar index (1..9 -> 0..8, 0 -> 9); -1 for anything else.
+function favIndexForDigit(d) {
+    var c = String(d || "").charCodeAt(0);
+    if (c >= 49 && c <= 57) return c - 49;
+    if (c === 48) return 9;
+    return -1;
 }
 
 function resultCountText(total, shown, query) {
@@ -80,11 +176,125 @@ function shouldRenderActionList(query) {
     return !!((query || "").trim());
 }
 
-// The active list for the commands phase. A typed query filters every action (plugins +
-// commands); an empty query shows the recent list instead (recents live below the search bar).
+// Label for a closed-enum entry, looked up from its enum_options by value; falls back to the value.
+// Pure so the node-vm test can exercise the dropdown label mapping. `value` is the current int value.
+function dropdownLabel(options, value) {
+    var want = String(value == null ? "" : value);
+    for (var i = 0; i < (options || []).length; i++)
+        if (String(options[i].value) === want)
+            return options[i].label != null && options[i].label !== "" ? String(options[i].label) : String(options[i].key != null ? options[i].key : options[i].value);
+    return want;
+}
+
+// Pure: the data:URI pictogram for a dropdown's selected value, or "" when none of the options has
+// one (most settings have no pattern icon). Mirrors dropdownLabel so tests can drive it without DOM.
+function dropdownIcon(options, value) {
+    var want = String(value == null ? "" : value);
+    for (var i = 0; i < (options || []).length; i++)
+        if (String(options[i].value) === want && options[i].icon)
+            return options[i].icon;
+    return "";
+}
+
+// Put an action's pattern pictogram into a tile (search row or favourites tile) when it has one,
+// otherwise fall back to the monogram. Toggles the has-icon class so CSS neutralises the hue.
+function fillTile(tile, a) {
+    tile.classList.remove("has-icon");
+    if (a && a.icon) {
+        tile.textContent = "";
+        var img = document.createElement("img");
+        img.className = "tile-icon";
+        img.src = a.icon;
+        img.alt = "";
+        tile.appendChild(img);
+        tile.classList.add("has-icon");
+    } else {
+        tile.textContent = a ? tileCode(a, ACTIONS) : "";
+    }
+}
+
+// Per-index control descriptors for the inline setting editor, derived from the C++ descriptor.
+// Pure so the node-vm test can exercise the scalar/vector + control mapping without a DOM.
+// Values are the current config value(s); vector options get one row per index, each labelled.
+function settingControlRows(desc) {
+    if (!desc || !desc.editable) return [];
+    var rows = [];
+    var values = desc.cardinality === "vector" ? (desc.values || []) : [desc.value];
+    var labels = desc.cardinality === "vector" ? (desc.index_labels || []) : [];
+    for (var i = 0; i < values.length; i++) {
+        rows.push({
+            index: i,
+            kind: desc.control,
+            value: values[i],
+            label: labels[i] != null ? String(labels[i]) : (desc.cardinality === "vector" ? String(i + 1) : null),
+            enum_options: desc.enum_options || [],
+            min: typeof desc.min === "number" ? desc.min : null,
+            max: typeof desc.max === "number" ? desc.max : null,
+            unit: desc.unit || "",
+            is_int: !!desc.is_int
+        });
+    }
+    return rows;
+}
+
+// Pure: read the value a control would submit back for a setting. `el` is a DOM element (never
+// passed in tests). Returns undefined for an unusable value (empty/invalid number, out of range),
+// boolean for toggles, number for numeric, string otherwise.
+function settingControlValue(row, el) {
+    if (!row || !el) return undefined;
+    switch (row.kind) {
+    case "toggle": return !!el.checked;
+    case "number": {
+        var raw = String(el.value || "").trim();
+        if (raw === "") return undefined;
+        var n = row.is_int ? parseInt(raw, 10) : parseFloat(raw);
+        if (!isFinite(n)) return undefined;
+        if (row.min != null && n < row.min) return undefined;
+        if (row.max != null && n > row.max) return undefined;
+        return n;
+    }
+    case "dropdown": {
+        // value is stored on the toggle button's dataset (set when an option is picked).
+        var v = parseInt(el.dataset ? el.dataset.value : "", 10);
+        return isFinite(v) ? v : undefined;
+    }
+    case "combo": {
+        // Open enum: free text field (never a select), so read it as the seeded integer value.
+        var v = parseInt(el.value, 10);
+        return isFinite(v) ? v : undefined;
+    }
+    case "color":
+    case "text":
+    case "percent": {
+        // percent submission is a string ("10%", "0.5"); C++ parses + clamps it. Empty is invalid.
+        var raw = String(el.value || "").trim();
+        return raw === "" ? undefined : raw;
+    }
+    default: return undefined;
+    }
+}
+
+// Pure: assemble the value payload for a setting from its edited control rows. Returns the scalar
+// for scalar settings, an array for vector settings, or undefined when any control is invalid.
+function settingCollectedValue(desc, rows, values) {
+    if (!desc || !desc.editable) return undefined;
+    if (desc.cardinality === "vector") {
+        var out = [];
+        for (var i = 0; i < rows.length; i++) {
+            var v = settingControlValue(rows[i], values[i]);
+            if (v === undefined) return undefined;
+            out.push(v);
+        }
+        return out;
+    }
+    return settingControlValue(rows[0], values[0]);
+}
+
+// The active list for the main phase. A typed query ranks every action (commands/plugins/settings)
+// by relevance; an empty query shows the recent list (recents are a mixed bag - no discrimination).
 function commandList(actions, recents, query) {
     if (shouldRenderActionList(query))
-        return filterActions(actions || [], query);
+        return searchActions(actions || [], query);
     return (recents || []).slice(0);
 }
 
@@ -146,31 +356,13 @@ function monogramFor(item, list, titleOf, sourceOf, idOf) {
     return pi + ti;
 }
 
-// Action tile code - see monogramFor for the escalation ladder. Accessed via accessors so the
-// same helper serves settings rows (leaf label + category) without duplicating the logic.
+// Action tile code - see monogramFor for the escalation ladder. Settings are actions now, so
+// they share this ladder (title initial, then source, then a stable ordinal).
 function tileCode(action, actions) {
     return monogramFor(action, actions,
         function (o) { return o.title; },
         function (o) { return o.source; },
         function (o) { return o.id; });
-}
-
-// Last " : "-separated segment of a "category : group : label" setting label = the option name
-// (e.g. "Quality : Layer Height" -> "Layer Height"); empty labels fall back to the opt_key.
-function leafLabel(s) {
-    var label = String(s && (s.label || s.opt_key || "") || "");
-    var parts = label.split(" : ");
-    var leaf = parts[parts.length - 1];
-    return (leaf || "").trim() || label.trim();
-}
-
-// Setting tile code - the option name initial, then the section (category) on collision, then a
-// stable ordinal, so settings no longer all collapse to a generic "S".
-function settingCode(s, list) {
-    return monogramFor(s, list,
-        function (o) { return leafLabel(o); },
-        function (o) { return o.category; },
-        function (o) { return o.opt_key; });
 }
 
 function syncClearButton() {
@@ -187,7 +379,6 @@ function stateFromPayload(payload) {
         sel: { zone: "list", i: 0 },
         lastResizeHeight: 0,
         phase: "commands",
-        settingsResults: [],
         tabOptions: []
     };
 }
@@ -203,17 +394,19 @@ function resetScrollPositions(list, doc) {
         doc.body.scrollTop = 0;
 }
 
-// nextSel: pure arrow-nav transition. Down fav->list0; Down list->clamp; Up list@0->fav0;
-// Up list->i-1; Left/Right clamp within fav. Returns a fresh {zone,i}.
+// nextSel: pure arrow-nav transition. Down fav->list0; Down list wraps at the bottom (last -> first).
+// Up list wraps at the top (first -> last) only when there's no fav bar above; with a fav bar, Up at
+// the list top goes to fav0 (unchanged). Left/Right clamp within fav. Returns a fresh {zone,i}.
 function nextSel(sel, key, listLen, favLen) {
     var zone = sel.zone, i = sel.i;
+    var last = Math.max(0, listLen - 1);
     if (key === "ArrowDown") {
         if (zone === "fav") return { zone: "list", i: 0 };
-        return { zone: "list", i: Math.min(i + 1, Math.max(0, listLen - 1)) };
+        return { zone: "list", i: i >= last ? 0 : i + 1 };
     }
     if (key === "ArrowUp") {
         if (zone === "list") {
-            if (i <= 0) return favLen ? { zone: "fav", i: 0 } : { zone: "list", i: 0 };
+            if (i <= 0) return favLen ? { zone: "fav", i: 0 } : { zone: "list", i: last };
             return { zone: "list", i: i - 1 };
         }
         return { zone: zone, i: i };
@@ -245,8 +438,16 @@ window.HandleStudio = function (payload) {
         sel = next.sel;
         lastResizeHeight = next.lastResizeHeight;
         phase = next.phase;
-        settingsResults = next.settingsResults;
         tabOptions = next.tabOptions;
+        // Reset any half-open setting editor (the dialog was closed/reopened), restoring the search.
+        settingId = ""; settingDesc = null; settingRows = []; settingFieldEls = [];
+        settingPreviewIcon = null;
+        openDropDownEl = null;
+        // why: builtKey caches phase|query so renderCommandsList can skip a rebuild on arrow-nav. It
+        // survives an apply-then-reopen (which never goes through exitPhase), so without a reset the
+        // leftover editor card would be mistaken for the empty-query commands list and never rebuilt.
+        builtKey = "";
+        if (headEl) headEl.hidden = false;
         if (qEl) {
             qEl.value = "";
             qEl.placeholder = "Search " + ACTIONS.length + " actions";
@@ -254,16 +455,27 @@ window.HandleStudio = function (payload) {
         }
         render({ resize: true, resetScroll: true });
         focusInput();
-    } else if (payload.command === "settings_results") {
-        settingsResults = payload.results || [];
-        if (sel.zone === "list")
-            sel.i = Math.max(0, Math.min(sel.i, settingsResults.length - 1));
+    } else if (payload.command === "setting_descriptor") {
+        // Inline editor loaded: render the card. Guard against a stale response for a different id.
+        if (payload.descriptor && payload.descriptor.id === settingId)
+            settingDesc = payload.descriptor;
         render({ resize: true });
+        // why: keyboard focus must land on the field after the card is built, not stay on the hidden
+        // search input. fire on a timeout so the element is attached and its content selectable.
+        focusSettingEditor();
+    } else if (payload.command === "apply_failed") {
+        flashHint("Couldn't apply that value");
     } else if (payload.command === "tab_results") {
         tabOptions = payload.tabs || [];
         if (sel.zone === "list")
             sel.i = Math.max(0, Math.min(sel.i, tabOptions.length - 1));
         render({ resize: true });
+    } else if (payload.command === "favourite_full") {
+        // Favourites are at the quick-launch cap - undo the optimistic pin and flash a hint.
+        var fid = payload.id;
+        if (fid && FAVS.indexOf(fid) !== -1) FAVS.splice(FAVS.indexOf(fid), 1);
+        render({ resize: true });
+        flashHint("Favourites are full (" + (payload.limit || K_FAV_LIMIT) + " max)");
     }
 };
 
@@ -284,7 +496,6 @@ function currentVisibleFavs() { return visibleFavourites(FAVS, ACTIONS); }
 
 // Active list for the current phase (drives list rendering + arrow nav).
 function currentList() {
-    if (phase === "settings") return settingsResults;
     if (phase === "tab") return filterTabs(tabOptions, query);
     if (phase === "commands") return commandList(ACTIONS, RECENTS, query);
     return []; // percent - the input itself is the only field
@@ -349,10 +560,19 @@ function renderFav() {
         var tile = document.createElement("button");
         tile.className = "fav-tile" + (sel.zone === "fav" && sel.i === i ? " sel" : "");
         tile.style.setProperty("--h", hue(id));
-        tile.textContent = tileCode(a, ACTIONS);
+        fillTile(tile, a);
         tile.title = a.title;
         tile.setAttribute("aria-label", actionLabel(a, ACTIONS));
         tile.onclick = function () { sel = { zone: "fav", i: i }; activateEntry(a); };
+        // Numbered quick-launch badge (Alt/Option+digit), drawn on the corner.
+        var slot = favSlotForIndex(i);
+        if (slot) {
+            var badge = document.createElement("span");
+            badge.className = "fav-slot";
+            badge.textContent = slot;
+            badge.title = slot === "0" ? "Favourite 10 (Alt+0)" : "Favourite " + slot + " (Alt+" + slot + ")";
+            tile.appendChild(badge);
+        }
         // Direct removal: a hover-revealed ✕ in the tile's corner. click() stops propagation so it
         // unpins without activating the action.
         var unpin = document.createElement("button");
@@ -430,35 +650,8 @@ function updateFavEyebrow(favs) {
 }
 
 // One settings row; has no star/tile because settings aren't pinnable.
-function renderSettingRow(s, i) {
-    var row = document.createElement("div");
-    row.className = "row" + (sel.zone === "list" && sel.i === i ? " sel" : "");
-    row.setAttribute("aria-label", s.label);
-
-    var tile = document.createElement("div");
-    tile.className = "tile";
-    tile.style.setProperty("--h", hue(s.opt_key));
-    tile.textContent = settingCode(s, settingsResults);
-
-    var left = document.createElement("div");
-    left.className = "row-left";
-    // why: the label already packs "Category : Group : Label", so no separate eyebrow.
-    var line = document.createElement("div");
-    line.className = "row-line";
-    var name = document.createElement("div");
-    name.className = "row-name";
-    name.textContent = s.label;
-    line.appendChild(name);
-    left.appendChild(line);
-
-    row.appendChild(tile);
-    row.appendChild(left);
-    row.onclick = function () { sel = { zone: "list", i: i }; render({ resize: true }); };
-    row.ondblclick = function () { sel = { zone: "list", i: i }; jumpToSetting(s); };
-    return row;
-}
-
-// A command/action row (used for both recents and filtered results).
+// A command/action row - used for search results, recents, and (because settings are actions now)
+// the setting options too. All rows are pinnable, so every row carries a star.
 function renderActionRow(a, i) {
     var on = FAVS.indexOf(a.id) !== -1;
     var row = document.createElement("div");
@@ -468,7 +661,7 @@ function renderActionRow(a, i) {
     var tile = document.createElement("div");
     tile.className = "tile";
     tile.style.setProperty("--h", hue(a.id));
-    tile.textContent = tileCode(a, ACTIONS);
+    fillTile(tile, a);
 
     var left = document.createElement("div");
     left.className = "row-left";
@@ -507,78 +700,103 @@ function renderActionRow(a, i) {
     return row;
 }
 
-function renderCommandsList() {
-    var q = (query || "").trim();
-    var list = currentList();
-    if (sel.zone === "list")
-        sel.i = Math.max(0, Math.min(sel.i, list.length - 1));
-    // Recents are not filtered, so clear any stale match marks from a previous typed query.
-    if (!shouldRenderActionList(query))
-        matchIndex = {};
-    listEl.innerHTML = "";
-
-    if (!shouldRenderActionList(query) && list.length) {
-        var head = document.createElement("div");
-        head.className = "dial-group";
-        head.textContent = "Recent";
-        listEl.appendChild(head);
+// Append rows [from, to) into listEl, always inserting before the bottom spacer so row order is preserved.
+function appendActionRows(list, from, to) {
+    var spacer = spacerEl || ensureSpacer();
+    for (var i = from; i < to; i++) {
+        var row = renderActionRow(list[i], i);
+        row.setAttribute("data-idx", i);
+        listEl.insertBefore(row, spacer);
     }
-
-    if (!list.length) {
-        listEl.className = "dial-list empty";
-        if (countEl) countEl.hidden = true;
-        var empty = document.createElement("div");
-        empty.className = "dial-empty";
-        empty.textContent = shouldRenderActionList(query) ? ("No actions match (Total: " + ACTIONS.length + ")") : "No actions yet";
-        listEl.appendChild(empty);
-        return;
-    }
-
-    listEl.className = "dial-list";
-    if (countEl) {
-        countEl.hidden = false;
-        countEl.textContent = shouldRenderActionList(query) ? resultCountText(ACTIONS.length, list.length, query) : list.length + " recent";
-    }
-    list.forEach(function (a, i) { listEl.appendChild(renderActionRow(a, i)); });
 }
 
-function renderSettingsList() {
-    var q = (query || "").trim();
-    listEl.innerHTML = "";
-    // Empty query + recents -> show the recent settings under a "Recent" group header.
-    var showingRecents = !q && settingsResults.length > 0;
-    if (!q && !showingRecents) {
-        listEl.className = "dial-list empty";
-        if (countEl) countEl.hidden = true;
-        var hint = document.createElement("div");
-        hint.className = "dial-empty";
-        hint.textContent = "Type to search print, filament and printer settings";
-        listEl.appendChild(hint);
-        return;
+// Ensure the bottom spacer exists as the last child of listEl. It is (re)created on rebuild because
+// listEl.innerHTML="" destroys the old node.
+function ensureSpacer() {
+    if (!spacerEl || spacerEl.parentNode !== listEl) {
+        spacerEl = document.createElement("div");
+        spacerEl.className = "dial-spacer-bottom";
+        listEl.appendChild(spacerEl);
     }
-    if (q && !settingsResults.length) {
+    return spacerEl;
+}
+
+// Size the spacer to the un-rendered tail so the scrollbar reflects the full match count.
+function setBottomSpacer(total) {
+    ensureSpacer();
+    spacerEl.style.height = Math.max(0, total - renderEnd) * ROW_H + "px";
+}
+
+// Reveal rows up to `upto` (an exclusive index), appending without rebuilding the whole list. Used by
+// the scroll handler (viewport + overscan) and by arrow-nav that runs off the end of the current window.
+function revealTo(list, upto) {
+    var need = Math.min(list.length, upto);
+    if (need <= renderEnd)
+        return;
+    appendActionRows(list, renderEnd, need);
+    renderEnd = need;
+    setBottomSpacer(list.length);
+}
+
+// Rebuild the list from the first window (new search / phase change), clearing stale rows.
+function rebuildCommandsList(list) {
+    listEl.innerHTML = "";
+    listEl.className = "dial-list";
+    ensureSpacer();
+    renderEnd = 0;
+    appendActionRows(list, 0, Math.min(list.length, K_ROWS));
+    renderEnd = Math.min(list.length, K_ROWS);
+    setBottomSpacer(list.length);
+}
+
+// Toggle the .sel class in place - arrow-nav/click don't rebuild the DOM, just re-highlight the row.
+function updateSelection() {
+    var rows = listEl ? listEl.querySelectorAll(".row") : [];
+    for (var i = 0; i < rows.length; i++) {
+        var idx = parseInt(rows[i].getAttribute("data-idx"), 10);
+        rows[i].classList.toggle("sel", sel.zone === "list" && idx === sel.i);
+    }
+}
+
+function renderCommandsList() {
+    var list = currentList();
+    var total = list.length;
+    if (sel.zone === "list")
+        sel.i = Math.max(0, Math.min(sel.i, total - 1));
+    var showList = shouldRenderActionList(query);
+    // Recents are not filtered, so clear any stale match marks from a previous typed query.
+    if (!showList)
+        matchIndex = {};
+
+    if (!total) {
+        listEl.innerHTML = "";
+        spacerEl = null;
         listEl.className = "dial-list empty";
         if (countEl) countEl.hidden = true;
         var empty = document.createElement("div");
         empty.className = "dial-empty";
-        empty.textContent = "No settings match";
+        empty.textContent = showList ? ("No actions match (Total: " + ACTIONS.length + ")") : "No actions yet";
         listEl.appendChild(empty);
+        renderEnd = 0;
+        builtKey = buildKey() + "|0";
         return;
     }
-    if (sel.zone === "list")
-        sel.i = Math.max(0, Math.min(sel.i, settingsResults.length - 1));
+
+    var key = buildKey() + "|" + total;
+    if (key !== builtKey) {
+        builtKey = key;
+        rebuildCommandsList(list);
+    } else if (sel.i >= renderEnd) {
+        // Arrow-nav walked past the rendered window - reveal enough to keep the selection visible.
+        revealTo(list, revealTarget(total, sel.i, K_ROWS));
+    }
+
     listEl.className = "dial-list";
     if (countEl) {
         countEl.hidden = false;
-        countEl.textContent = showingRecents ? settingsResults.length + " recent" : settingsResults.length + " matches";
+        countEl.textContent = showList ? resultCountText(ACTIONS.length, total, query) : total + " recent";
     }
-    if (showingRecents) {
-        var head = document.createElement("div");
-        head.className = "dial-group";
-        head.textContent = "Recent";
-        listEl.appendChild(head);
-    }
-    settingsResults.forEach(function (s, i) { listEl.appendChild(renderSettingRow(s, i)); });
+    updateSelection();
 }
 
 // A tab row: no star/unpin (tabs aren't pinnable), tile monogram from the title. Uses tabTitle so
@@ -646,13 +864,349 @@ function renderPercentList() {
     listEl.appendChild(ph);
 }
 
+// ---- inline setting editor (DOM stage) ---------------------------------------
+
+// Collapse every open custom dropdown except `keep` (null collapses all). The menu list elements
+// are the .ed-dropdown-menu siblings of the toggle buttons we track via openDropDownEl.
+function closeOtherDropDowns(keep) {
+    if (openDropDownEl && openDropDownEl !== keep && openDropDownEl.parentNode) {
+        var m = openDropDownEl.parentNode.querySelector(".ed-dropdown-menu");
+        if (m) m.hidden = true;
+        openDropDownEl.classList.remove("open");
+    }
+    if (!keep)
+        openDropDownEl = null;
+}
+
+// Collapse the currently open dropdown, if any (kept for the editor's export/import-adjacent helpers).
+function closeEditorDropDown() { closeOtherDropDowns(null); }
+
+// Place an open dropdown menu as a fixed overlay just under its toggle, so the menu floats over the
+// card (never resizing it) and is clamped to the popup's bottom edge with an internal scrollbar for
+// long option lists. position:fixed escapes the card/launcher overflow clipping that an absolute
+// menu would otherwise hit, keeping every option reachable within the window.
+function positionDropDownMenu(btn, menu) {
+    var lrect = (document.querySelector(".launcher") || { getBoundingClientRect: function () { return { top: 0, bottom: window.innerHeight }; } }).getBoundingClientRect();
+    var rect = btn.getBoundingClientRect();
+    // Available room above and below the toggle, within the popup. Opening the menu must not push it
+    // past the window edge (that's the unreachable-overflow bug) - pick whichever side has more room
+    // and clamp the box to it. Overflow-y:auto scrolls any long list inside the menu itself.
+    var spaceBelow  = lrect.bottom - (rect.bottom + 8);
+    var spaceAbove  = (rect.top - 8) - lrect.top;
+    var openUp      = spaceBelow < spaceAbove;
+    var maxH        = Math.max(0, Math.min(openUp ? spaceAbove : spaceBelow, 200));
+    menu.style.position  = "fixed";
+    menu.style.width     = rect.width + "px";
+    menu.style.left      = rect.left + "px";
+    menu.style.maxHeight = maxH + "px";
+    if (openUp) {
+        // bottom edge sits just above the toggle; the box grows upward to content height.
+        menu.style.top    = "auto";
+        menu.style.bottom = (lrect.bottom - rect.top + 4) + "px";
+    } else {
+        menu.style.top    = (rect.bottom + 4) + "px";
+        menu.style.bottom = "auto";
+    }
+}
+
+// Build the control element for one row (toggle/number/dropdown/combo/text/color) and seed it with
+// the current value. Returns {el, node, extra} - node is what is appended, extra carries a datalist.
+function settingInputFor(row) {
+    var el;
+    if (row.kind === "toggle") {
+        el = document.createElement("input");
+        el.type = "checkbox";
+        el.checked = !!row.value;
+        var sw = document.createElement("label");
+        sw.className = "ed-switch";
+        sw.appendChild(el);
+        var slider = document.createElement("span");
+        slider.className = "ed-slider";
+        sw.appendChild(slider);
+        return { el: el, node: sw };
+    }
+    if (row.kind === "number") {
+        el = document.createElement("input");
+        el.type = "number";
+        el.step = row.is_int ? 1 : "any";
+        if (row.min != null) el.min = row.min;
+        if (row.max != null) el.max = row.max;
+        if (row.value != null && row.value !== "") el.value = row.value;
+        return { el: el, node: el };
+    }
+    if (row.kind === "dropdown") {
+        // Native <select> popups are unreliable inside this wxWebView (a click synthesizes a
+        // keydown that can reach the global Enter handler and apply+close). Build a custom
+        // dropdown: a toggle button that expands an in-flow option list. Selection only updates
+        // local state; nothing applies until Enter/Apply. The value lives on the toggle button's
+        // dataset so settingControlValue can read it back without the DOM copy.
+        var wrap = document.createElement("div");
+        wrap.className = "ed-dropdown";
+        var btn = document.createElement("button");
+        btn.type = "button";
+        btn.className = "ed-dropdown-toggle";
+        btn.dataset.value = row.value != null ? String(row.value) : "";
+        // The selected value's pattern pictogram (hidden when the value has none).
+        var toggleIcon = document.createElement("img");
+        toggleIcon.className = "ed-dropdown-icon";
+        toggleIcon.setAttribute("aria-hidden", "true");
+        toggleIcon.alt = "";
+        var tIcon = dropdownIcon(row.enum_options || [], row.value);
+        toggleIcon.src = tIcon || "";
+        toggleIcon.hidden = !tIcon;
+        btn.appendChild(toggleIcon);
+        var label = document.createElement("span");
+        label.className = "ed-dropdown-label";
+        label.textContent = dropdownLabel(row.enum_options || [], row.value);
+        btn.appendChild(label);
+        var caret = document.createElement("span");
+        caret.className = "ed-dropdown-caret";
+        caret.textContent = "▾";
+        btn.appendChild(caret);
+        var listEl = document.createElement("div");
+        listEl.className = "ed-dropdown-menu";
+        listEl.hidden = true;
+        (row.enum_options || []).forEach(function (o, oi) {
+            var opt = document.createElement("button");
+            opt.type = "button";
+            opt.className = "ed-dropdown-option";
+            if (o.icon) {
+                var img = document.createElement("img");
+                img.className = "ed-option-icon";
+                img.src = o.icon;
+                img.alt = "";
+                img.setAttribute("aria-hidden", "true");
+                opt.appendChild(img);
+            }
+            var optLabel = document.createElement("span");
+            optLabel.className = "ed-option-label";
+            optLabel.textContent = o.label;
+            opt.appendChild(optLabel);
+            if (String(o.value) === String(row.value))
+                opt.classList.add("sel");
+            opt.onclick = function (ev) {
+                ev.stopPropagation();
+                btn.dataset.value = String(o.value);
+                label.textContent = o.label;
+                toggleIcon.src = o.icon || "";
+                toggleIcon.hidden = !o.icon;
+                listEl.hidden = true;
+                btn.classList.remove("open");
+                openDropDownEl = null;
+                onSettingValueChanged(settingDesc, o);
+            };
+            listEl.appendChild(opt);
+        });
+        btn.onclick = function (ev) {
+            ev.stopPropagation();
+            if (openDropDownEl === btn) {
+                // clicking the open toggle closes it
+                listEl.hidden = true;
+                btn.classList.remove("open");
+                openDropDownEl = null;
+                return;
+            }
+            closeOtherDropDowns(null); // collapse any other open dropdown
+            positionDropDownMenu(btn, listEl);
+            listEl.hidden = false;
+            btn.classList.add("open");
+            openDropDownEl = btn;
+        };
+        wrap.appendChild(btn);
+        wrap.appendChild(listEl);
+        return { el: btn, node: wrap };
+    }
+    if (row.kind === "combo") {
+        el = document.createElement("input");
+        el.type = "text";
+        var dl = document.createElement("datalist");
+        el.setAttribute("list", dl.id = "ed-combo-" + row.index);
+        (row.enum_options || []).forEach(function (o) {
+            var op = document.createElement("option");
+            op.value = o.value;
+            op.textContent = o.label;
+            dl.appendChild(op);
+        });
+        el.value = row.value != null ? String(row.value) : "";
+        return { el: el, node: el, extra: dl };
+    }
+    if (row.kind === "color") {
+        el = document.createElement("input");
+        el.type = "color";
+        el.value = row.value && /^#[0-9a-fA-F]{6}$/.test(row.value) ? row.value : "#000000";
+        return { el: el, node: el };
+    }
+    if (row.kind === "percent") {
+        // "mm or %" (coFloatOrPercent/coFloatsOrPercents): a free-text field showing the serialized
+        // value (e.g. "10%" or "0.5"). The unit hints at the sidebar semantics (mm or %), so it's
+        // not shown here - the value itself carries the % when applicable.
+        el = document.createElement("input");
+        el.type = "text";
+        el.value = row.value != null ? String(row.value) : "";
+        return { el: el, node: el };
+    }
+    // text
+    el = document.createElement("input");
+    el.type = "text";
+    el.value = row.value != null ? String(row.value) : "";
+    return { el: el, node: el };
+}
+
+// One labeled control row in the editor card.
+function renderControlRow(row, i) {
+    var wrap = document.createElement("div");
+    wrap.className = "editor-row";
+    if (row.label != null) {
+        var lab = document.createElement("label");
+        lab.className = "editor-label";
+        lab.textContent = row.label;
+        wrap.appendChild(lab);
+    }
+    var ctrl = settingInputFor(row);
+    if (ctrl.extra)
+        wrap.appendChild(ctrl.extra); // datalist for open-enum combos
+    wrap.appendChild(ctrl.node);
+    if (row.unit) {
+        var unit = document.createElement("span");
+        unit.className = "editor-unit";
+        unit.textContent = row.unit;
+        wrap.appendChild(unit);
+    }
+    settingFieldEls[i] = ctrl.el;
+    return wrap;
+}
+
+// Render the editor card into listEl (phase === "setting"). Keeps the search head hidden so the
+// card owns the layout.
+function renderSettingStage() {
+    listEl.innerHTML = "";
+    listEl.className = "dial-list setting";
+    if (countEl) countEl.hidden = true;
+    if (!settingDesc || !settingDesc.opt_key) {
+        var ph = document.createElement("div");
+        ph.className = "dial-empty";
+        ph.textContent = "Loading…";
+        listEl.appendChild(ph);
+        return;
+    }
+    var card = document.createElement("div");
+    card.className = "dial-editor";
+    if (settingDesc.breadcrumb) {
+        var crumb = document.createElement("div");
+        crumb.className = "row-eyebrow";
+        crumb.textContent = settingDesc.breadcrumb;
+        card.appendChild(crumb);
+    }
+    var titleRow = document.createElement("div");
+    titleRow.className = "editor-title-row";
+    var titleIcon = document.createElement("img");
+    titleIcon.className = "editor-preview-icon";
+    titleIcon.setAttribute("aria-hidden", "true");
+    titleIcon.alt = "";
+    var pIcon = dropdownIcon(settingDesc.enum_options || [], settingDesc.value);
+    titleIcon.src = pIcon || "";
+    titleIcon.hidden = !pIcon;
+    titleRow.appendChild(titleIcon);
+    settingPreviewIcon = titleIcon;
+    var title = document.createElement("div");
+    title.className = "editor-title";
+    title.textContent = settingDesc.title || "";
+    titleRow.appendChild(title);
+    card.appendChild(titleRow);
+    if (settingDesc.tooltip) {
+        var tt = document.createElement("div");
+        tt.className = "editor-tooltip";
+        tt.textContent = settingDesc.tooltip;
+        card.appendChild(tt);
+    }
+
+    var actions = document.createElement("div");
+    actions.className = "editor-actions";
+    if (settingDesc.editable) {
+        settingRows = settingControlRows(settingDesc);
+        settingFieldEls = [];
+        if (settingRows.length) {
+            settingRows.forEach(function (row, i) { card.appendChild(renderControlRow(row, i)); });
+        } else {
+            var empty = document.createElement("div");
+            empty.className = "dial-empty";
+            empty.textContent = "Nothing editable here";
+            card.appendChild(empty);
+        }
+        var apply = document.createElement("button");
+        apply.className = "ed-btn ed-btn-primary";
+        apply.textContent = "Apply";
+        apply.onclick = applySetting;
+        actions.appendChild(apply);
+    } else {
+        var ro = document.createElement("div");
+        ro.className = "editor-readonly";
+        ro.textContent = "This setting can't be edited here";
+        card.appendChild(ro);
+        var open = document.createElement("button");
+        open.className = "ed-btn";
+        open.textContent = "Open in sidebar";
+        open.onclick = openSettingInSidebar;
+        actions.appendChild(open);
+    }
+    var cancel = document.createElement("button");
+    cancel.className = "ed-btn";
+    cancel.textContent = "Cancel";
+    cancel.onclick = exitPhase;
+    actions.appendChild(cancel);
+    card.appendChild(actions);
+    var hint = document.createElement("div");
+    hint.className = "editor-hint";
+    hint.textContent = "Enter to apply · Esc to cancel";
+    card.appendChild(hint);
+    listEl.appendChild(card);
+}
+
+function applySetting() {
+    if (!settingDesc || !settingDesc.editable) return;
+    var value = settingCollectedValue(settingDesc, settingRows, settingFieldEls);
+    if (value === undefined) {
+        flashHint("Enter a valid value");
+        return;
+    }
+    SendMessage({ command: "set_setting", id: settingId, value: value });
+}
+
+function openSettingInSidebar() {
+    if (!settingDesc) return;
+    SendMessage({ command: "open_setting_in_sidebar", opt_key: settingDesc.opt_key, type: settingDesc.type, category: settingDesc.category || "" });
+}
+
+// When a dropdown option is picked, mirror its pattern pictogram onto the editor title's preview so
+// the current selection is visible without opening the menu. Non-enum / icon-less rows no-op.
+function onSettingValueChanged(desc, option) {
+    if (!settingPreviewIcon) return;
+    var icon = (option && option.icon) || "";
+    settingPreviewIcon.src = icon;
+    settingPreviewIcon.hidden = !icon;
+}
+
+function enterSettingPhase(a) {
+    if (!a) return;
+    phase = "setting";
+    query = ""; qEl.value = ""; syncClearButton();
+    sel = { zone: "list", i: 0 };
+    settingId = a.id;
+    settingDesc = null;
+    settingRows = [];
+    settingFieldEls = [];
+    if (headEl) headEl.hidden = true;
+    render({ resetScroll: true });
+    SendMessage({ command: "setting_descriptor", id: a.id });
+}
+
 function renderList() {
-    if (phase === "settings")
-        renderSettingsList();
-    else if (phase === "tab")
+    if (phase === "tab")
         renderTabList();
     else if (phase === "percent")
         renderPercentList();
+    else if (phase === "setting")
+        renderSettingStage();
     else
         renderCommandsList();
 }
@@ -694,6 +1248,20 @@ function requestResize() {
     }, 0);
 }
 
+// Transient inline hint pinned to the top of the launcher (e.g. "favourites are full").
+function flashHint(text) {
+    if (!document.body) return;
+    var launcher = document.querySelector(".launcher");
+    if (!launcher) return;
+    var hint = document.createElement("div");
+    hint.className = "dial-flash";
+    hint.textContent = text;
+    launcher.insertBefore(hint, launcher.firstChild);
+    setTimeout(function () {
+        if (hint && hint.parentNode) hint.parentNode.removeChild(hint);
+    }, 2500);
+}
+
 // ---- actions -----------------------------------------------------------------
 function toggleFav(id) {
     var k = FAVS.indexOf(id);
@@ -710,24 +1278,19 @@ function run(a) {
     SendMessage({ command: "run_action", id: a.id, title: a.title, param: "" });
 }
 
-// Activate an entry in the commands phase. Two-phase commands switch the palette to their input
-// phase instead of running; everything else runs immediately.
+// Activate an entry in the main phase. Two-phase commands switch the palette to their input phase
+// instead of running; everything else (including a setting jump, which is a plain action now) runs.
 function activateEntry(a) {
     if (!a) return;
-    if (a.input === "settings") { enterSettingsPhase(); return; }
     if (a.input === "percent") { enterPercentPhase(); return; }
     if (a.input === "tab") { enterTabsPhase(); return; }
+    if (a.input === "setting") { enterSettingPhase(a); return; }
     run(a);
 }
 
 function runSelected() {
     if (phase === "percent") {
         runJumpToLayer(query.trim());
-        return;
-    }
-    if (phase === "settings") {
-        var s = settingsResults[sel.i];
-        if (s) jumpToSetting(s);
         return;
     }
     if (phase === "tab") {
@@ -738,10 +1301,6 @@ function runSelected() {
     var list = currentList();
     var id = selectedActionId(sel, list, currentVisibleFavs(), query);
     if (id) activateEntry(byId(id));
-}
-
-function jumpToSetting(s) {
-    SendMessage({ command: "go_to_setting", opt_key: s.opt_key, type: s.type, category: s.category || "", label: s.label || "", group: s.group || "" });
 }
 
 function runJumpToLayer(pct) {
@@ -755,16 +1314,6 @@ function runJumpToLayer(pct) {
 
 function jumpToTab(t) {
     SendMessage({ command: "go_to_tab", id: t.id, title: tabTitle(t) });
-}
-
-function enterSettingsPhase() {
-    phase = "settings"; settingsResults = []; query = ""; qEl.value = "";
-    sel = { zone: "list", i: 0 };
-    qEl.placeholder = "Search settings...";
-    syncClearButton();
-    render({ resize: true, resetScroll: true });
-    qEl.focus();
-    SendMessage({ command: "search_settings", q: "" });
 }
 
 function enterPercentPhase() {
@@ -787,8 +1336,16 @@ function enterTabsPhase() {
 }
 
 function exitPhase() {
-    phase = "commands"; settingsResults = []; tabOptions = []; query = ""; qEl.value = "";
+    phase = "commands"; tabOptions = []; query = ""; qEl.value = "";
+    settingId = ""; settingDesc = null; settingRows = []; settingFieldEls = [];
+    settingPreviewIcon = null;
+    closeOtherDropDowns(null);
+    if (headEl) headEl.hidden = false;
     sel = { zone: "list", i: 0 };
+    // why: builtKey caches phase|query so renderCommandsList can skip a rebuild on arrow-nav/click.
+    // Leftover from the setting phase it matches the (empty-query) commands key, which would skip
+    // the rebuild and leave the editor card in the list. Reset it so the commands view is rebuilt.
+    builtKey = "";
     qEl.placeholder = "Search " + ACTIONS.length + " actions";
     syncClearButton();
     render({ resize: true, resetScroll: true });
@@ -797,29 +1354,76 @@ function exitPhase() {
 
 function focusInput() { setTimeout(function () { if (qEl) qEl.focus(); }, 0); }
 
+// Move keyboard focus onto the first editable field of the setting editor card. Deferred so the
+// element is attached and its text is selectable by the time we focus it. For text-editable inputs
+// also select the existing value so the user can type straight over it.
+function focusSettingEditor() {
+    setTimeout(function () {
+        var el = settingFieldEls && settingFieldEls[0];
+        if (!el) return;
+        if (el.focus) el.focus();
+        if ((el.tagName === "INPUT") && el.select)
+            el.select();
+    }, 0);
+}
+
 // ---- init --------------------------------------------------------------------
 function OnInit() {
     qEl = $("q"); listEl = $("list"); favEl = $("favBar"); clearEl = $("clear"); eyeEl = $("favEyebrow"); countEl = $("count");
+    headEl = document.querySelector(".dial-head");
     syncClearButton();
 
     $("clear").onclick = function () {
         query = ""; qEl.value = ""; sel = { zone: "list", i: 0 };
-        if (phase === "settings") SendMessage({ command: "search_settings", q: "" });
         render({ resize: true, resetScroll: true }); qEl.focus();
         syncClearButton();
     };
     qEl.addEventListener("input", function () {
         query = qEl.value; sel = { zone: "list", i: 0 }; syncClearButton();
-        if (phase === "settings") SendMessage({ command: "search_settings", q: query });
         render({ resize: true, resetScroll: true });
+    });
+    // Windowed reveal: as the list scrolls, materialize the next window (append-only, no rebuild) so the
+    // DOM stays bounded to what's near the viewport. Guarded to the commands phase (tabs/percent are tiny).
+    listEl.addEventListener("scroll", function () {
+        if (phase !== "commands")
+            return;
+        var list = currentList();
+        if (renderEnd >= list.length)
+            return;
+        var firstVisible = Math.max(0, Math.floor(listEl.scrollTop / ROW_H));
+        // Reveal the viewport + a full window of lookahead so fast scrolling doesn't hit a blank tail.
+        revealTo(list, revealTarget(list.length, firstVisible, 2 * K_ROWS));
     });
 
     // why: dismiss the fav context menu on any click/scroll away from it (capture scroll to catch nested scrollers).
     document.addEventListener("click", hideFavMenu);
+    // Dismiss an open editor dropdown on any outside click. Toggle/option clicks stopPropagation
+    // so they don't immediately close the menu they just opened/picked from.
+    document.addEventListener("click", function () {
+        if (openDropDownEl) closeEditorDropDown();
+    });
     document.addEventListener("scroll", hideFavMenu, true);
 
     document.addEventListener("keydown", function (e) {
         if (favMenuEl && !favMenuEl.hidden && e.key === "Escape") { e.preventDefault(); hideFavMenu(); return; }
+        // While an editor dropdown menu is open it owns the keys: Escape closes the menu (a second
+        // Esc exits the phase), Enter/arrows select options natively, and we must not apply/exit.
+        if (phase === "setting" && openDropDownEl && openDropDownEl.parentNode) {
+            if (e.key === "Escape") { e.preventDefault(); closeEditorDropDown(); }
+            return;
+        }
+        // Quick-launch a numbered favourite: Alt/Option + digit (0 = the 10th). Only in the
+        // commands phase, where the pinned bar is shown.
+        if (phase === "commands" && e.altKey && !e.ctrlKey && !e.metaKey) {
+            var slotIdx = favIndexForDigit(e.key);
+            var favIds  = currentVisibleFavs();
+            if (slotIdx >= 0 && slotIdx < favIds.length) {
+                e.preventDefault();
+                var fav = byId(favIds[slotIdx]);
+                if (fav) activateEntry(fav);
+                return;
+            }
+        }
         var list = currentList();
         // why: fav bar only exists in the commands phase; other phases are list-only, so an
         // ArrowUp at the top must not jump into a hidden fav zone.
@@ -828,8 +1432,8 @@ function OnInit() {
         //      let Left/Right fall through so they move the caret in the focused search field.
         var lr = e.key === "ArrowLeft" || e.key === "ArrowRight";
         if (e.key === "ArrowDown" || e.key === "ArrowUp" || (lr && sel.zone === "fav")) {
-            // In the percent phase the input is the whole UI - arrows move the caret, not rows.
-            if (phase === "percent") return;
+            // In the percent/setting phases the input controls own the caret - arrows edit text, not rows.
+            if (phase === "percent" || phase === "setting") return;
             e.preventDefault();
             sel = nextSel(sel, e.key, list.length, favs.length);
             // why: entering/leaving the fav zone toggles the eyebrow line, changing launcher height;
@@ -838,6 +1442,7 @@ function OnInit() {
         } else if (e.key === "Enter") {
             e.preventDefault();
             if (phase === "percent") runJumpToLayer(query.trim());
+            else if (phase === "setting") applySetting();
             else runSelected();
         } else if (e.key === "Escape") {
             e.preventDefault();

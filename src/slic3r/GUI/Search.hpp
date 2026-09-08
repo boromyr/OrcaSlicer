@@ -148,6 +148,10 @@ public:
     void show_dialog(Preset::Type type, wxWindow *parent, TextInput *input, wxWindow *ssearch_btn);
     void dlg_sys_color_changed();
     void dlg_msw_rescale();
+
+    // The full gated option set built by init() (after visibility/mode/printer-tech filtering).
+    // Used by the Speed Dial to materialise config settings as first-class actions.
+    const std::vector<Option>& all_options() const { return options; }
 };
 
 //------------------------------------------

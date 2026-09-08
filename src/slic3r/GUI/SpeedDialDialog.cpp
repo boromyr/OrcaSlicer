@@ -11,6 +11,8 @@
 
 #include <libslic3r/Preset.hpp>
 
+#include <boost/nowide/convert.hpp>
+
 #include <algorithm>
 
 #include <wx/display.h>
@@ -127,9 +129,14 @@ void SpeedDialWebDialog::handle_web_command(const nlohmann::json& payload)
     if (command == "request_actions") {
         m_page_ready = true;
         send_actions();
-    } else if (command == "toggle_favourite")
-        wxGetApp().action_registry().set_favourite(payload.value("id", ""), payload.value("fav", false));
-    else if (command == "reorder_favourites") {
+    } else if (command == "toggle_favourite") {
+        // set_favourite() refuses once the bar hits kFavLimit; tell the page so it can undo the
+        // star and show a "favourites are full" hint instead of silently losing the pin.
+        const std::string fav_id = payload.value("id", "");
+        const bool ok          = wxGetApp().action_registry().set_favourite(fav_id, payload.value("fav", false));
+        if (!ok)
+            call_web_handler({{"command", "favourite_full"}, {"limit", (int) ActionRegistry::kFavLimit}, {"id", fav_id}});
+    } else if (command == "reorder_favourites") {
         std::vector<std::string> ids;
         if (payload.contains("ids") && payload["ids"].is_array())
             for (const auto& id : payload["ids"])
@@ -138,21 +145,6 @@ void SpeedDialWebDialog::handle_web_command(const nlohmann::json& payload)
         wxGetApp().action_registry().reorder_favourites(ids);
     } else if (command == "run_action")
         run_action(payload.value("id", ""), payload.value("title", ""), payload.value("param", ""));
-    else if (command == "go_to_setting") {
-        // "Go to setting..." second phase: the page hands back the option it matched.
-        const std::string opt_key = payload.value("opt_key", "");
-        if (!opt_key.empty()) {
-            const int type          = json_int_or(payload, "type", int(Preset::TYPE_INVALID));
-            const std::string label = payload.value("label", "");
-            const std::string group = payload.value("group", "");
-            const std::string cat   = payload.value("category", "");
-            // Track it in the palette's recent-settings list before jumping (persisted).
-            wxGetApp().action_registry().record_setting_recent(opt_key, type, label, cat, group);
-            Hide();
-            wxGetApp().sidebar().jump_to_option(opt_key, Preset::Type(type), from_u8(cat).ToStdWstring());
-        }
-    } else if (command == "search_settings")
-        search_settings(payload.value("q", ""));
     else if (command == "search_tabs")
         search_tabs();
     else if (command == "go_to_tab") {
@@ -163,6 +155,27 @@ void SpeedDialWebDialog::handle_web_command(const nlohmann::json& payload)
             if (wxGetApp().mainframe)
                 wxGetApp().mainframe->select_tab(from_u8(tab_id));
         }
+    } else if (command == "setting_descriptor") {
+        // Inline editor: hand the page the descriptor for the setting it's editing.
+        const std::string id = payload.value("id", "");
+        call_web_handler(
+            {{"command", "setting_descriptor"}, {"descriptor", wxGetApp().action_registry().setting_descriptor(id)}});
+    } else if (command == "set_setting") {
+        // Inline editor submit. Apply the value; on success close the dialog.
+        const std::string id = payload.value("id", "");
+        const nlohmann::json value = payload.contains("value") ? payload["value"] : nlohmann::json(nullptr);
+        if (id.empty() || !wxGetApp().action_registry().apply_setting(id, value)) {
+            call_web_handler({{"command", "apply_failed"}, {"id", id}});
+            return;
+        }
+        Hide();
+    } else if (command == "open_setting_in_sidebar") {
+        // Non-inline-editable setting (points, plugin-backed, float-or-percent): jump the sidebar.
+        Hide();
+        const std::string opt_key  = payload.value("opt_key", "");
+        const std::string category = payload.value("category", "");
+        if (!opt_key.empty())
+            wxGetApp().sidebar().jump_to_option(opt_key, Preset::Type(payload.value("type", int(Preset::TYPE_INVALID))), boost::nowide::widen(category));
     } else if (command == "resize")
         resize_to_content(json_int_or(payload, "height", 0));
 }
@@ -176,18 +189,6 @@ void SpeedDialWebDialog::search_tabs()
             return;
         auto tabs = wxGetApp().action_registry().tab_options();
         call_web_handler({{"command", "tab_results"}, {"tabs", std::move(tabs)}});
-    });
-}
-
-void SpeedDialWebDialog::search_settings(const std::string& query)
-{
-    // Round-trip is async because the webview delivers script messages synchronously on the
-    // GTK/macOS stack; defer the (cheap) search and push the result back to the page.
-    wxGetApp().CallAfter([this, alive = m_alive, query]() {
-        if (!alive->load(std::memory_order_acquire))
-            return;
-        auto results = wxGetApp().action_registry().settings_search(query);
-        call_web_handler({{"command", "settings_results"}, {"results", std::move(results)}});
     });
 }
 

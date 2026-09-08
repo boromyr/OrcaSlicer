@@ -16,18 +16,27 @@
 #include <libslic3r/AppConfig.hpp>
 #include <libslic3r/Config.hpp>
 #include <libslic3r/PresetBundle.hpp>
+#include <libslic3r/Utils.hpp>
 #include <slic3r/plugin/PythonPluginInterface.hpp>
 
 #include <wx/thread.h>
 
 #include <boost/algorithm/string/predicate.hpp>
+#include <boost/any.hpp>
 #include <boost/algorithm/string/trim.hpp>
+#include <boost/filesystem.hpp>
 #include <boost/nowide/convert.hpp>
 
 #include <algorithm>
+#include <cfloat>
 #include <cmath>
+#include <cstdlib>
 #include <ctime>
+#include <fstream>
+#include <iterator>
+#include <string>
 #include <unordered_map>
+#include <unordered_set>
 
 namespace Slic3r { namespace GUI {
 
@@ -131,6 +140,60 @@ std::unique_ptr<AppAction> make_action(const std::string& plugin_key, const std:
 constexpr const char* kCommandPrefix  = "orca_command";
 constexpr const char* kOrcaSourceKey  = "orca";
 constexpr const char* kOrcaSourceName = "OrcaSlicer";
+constexpr const char* kSettingPrefix  = "orca_setting";
+
+// Display context for a setting action's eyebrow, e.g. the "Process" in "Process : Quality : Layers".
+// Keyed by the option's preset type so the palette reads like the settings sidebar tabs.
+std::string setting_type_context(Preset::Type type)
+{
+    switch (type) {
+    case Preset::TYPE_FILAMENT:
+    case Preset::TYPE_SLA_MATERIAL: return _u8L("Filament");
+    case Preset::TYPE_PRINTER:      return _u8L("Printer");
+    case Preset::TYPE_PRINT:
+    case Preset::TYPE_SLA_PRINT:
+    default:                        return _u8L("Process");
+    }
+}
+
+// A config setting exposed as a first-class action: selecting it jumps the sidebar to the option.
+// The id is keyed by opt_key+type (NOT the display label), so renaming/localizing never re-keys
+// the action; title/group/source are purely for display + search. run() performs the jump, and
+// the generic registry run() bumps stats so a jump shows up in "recents" like any other action.
+struct SettingAction : AppAction
+{
+    std::string  opt_key;
+    Preset::Type type;
+    std::wstring category; // localized category, forwarded to jump_to_option
+
+    static std::string id_for(const std::string& opt_key, Preset::Type type)
+    { return std::string(kSettingPrefix) + ":" + opt_key + ":" + std::to_string(int(type)); }
+
+    SettingAction(std::string opt_key_in, Preset::Type type_in, std::string title, std::string group,
+                  std::wstring category_in, std::string source_name)
+        : AppAction(AppActionId{id_for(opt_key_in, type_in)}, std::move(title), kOrcaSourceKey, std::move(source_name))
+        , opt_key(std::move(opt_key_in))
+        , type(type_in)
+        , category(std::move(category_in))
+    {
+        // A setting is a two-phase command: activating it opens the inline editor (the "setting"
+        // phase) instead of running. Native run() is a no-op fallback; the editor applies through
+        // apply_setting().
+        this->kind  = AppActionKind::Command;
+        this->group = std::move(group);
+        this->input = "setting";
+    }
+
+    AppActionRunResult run(const std::string& /*param*/) const override
+    {
+        // Two-phase: the palette collects the edit; native run() is a no-op fallback.
+        return {AppActionRunResult::Level::Success};
+    }
+
+    // The current value's pattern pictogram (e.g. the selected infill pattern), for the search-result
+    // tile. Defined below after the icon helper it delegates to.
+    std::string icon() const override;
+};
 
 // Jump the preview to a layer selected by a 0-100 percent of the layer range. Best-effort:
 // switches to the preview tab and requests a slice (select_view_3D("Preview", false)); if the
@@ -219,9 +282,9 @@ AppActionRunResult run_native_command(const std::string& command_key, const std:
         }
         return {AppActionRunResult::Level::Success};
     }
-    // "go_to_setting"/"go_to_tab" are two-phase: the palette collects the option after
-    // activating it, so dispatch here is a no-op (the actual jump goes through the web command).
-    if (command_key == "go_to_setting" || command_key == "go_to_tab")
+    // "go_to_tab" is two-phase: the palette collects the tab after activating it, so native
+    // dispatch here is a no-op (the jump goes through the go_to_tab web command).
+    if (command_key == "go_to_tab")
         return {AppActionRunResult::Level::Success};
     return {AppActionRunResult::Level::Info, _L("Unknown command.")};
 }
@@ -253,10 +316,9 @@ std::vector<std::unique_ptr<AppAction>> native_commands()
     // why: _u8L (std::string) for titles/groups - make_command takes std::string; _L would
     // return a wxString and silently fail to convert here.
     out.push_back(make_command("slice_and_preview", _u8L("Slice and Preview"), _u8L("Commands")));
-    // Two-phase commands: activating them collects input in the palette, then runs.
+    // Two-phase commands: activating them collects input in the palette, then runs. Settings are
+    // not a command here - they're materialised as first-class SettingActions (see materialize_).
     out.push_back(make_command("go_to_layer", _u8L("Go to layer (percent)"), _u8L("Commands"), "percent"));
-    // The "…" is avoided in the msgid: use ASCII "..." to keep the .pot extraction simple.
-    out.push_back(make_command("go_to_setting", _u8L("Go to setting..."), _u8L("Commands"), "settings"));
     out.push_back(make_command("go_to_tab", _u8L("Go to tab..."), _u8L("Commands"), "tab"));
     out.push_back(make_command("load_project", _u8L("Load Project"), _u8L("Commands")));
     out.push_back(make_command("save_project", _u8L("Save Project"), _u8L("Commands")));
@@ -268,19 +330,305 @@ std::vector<std::unique_ptr<AppAction>> native_commands()
     return out;
 }
 
-// Replicates Sidebar's get_search_inputs(): the configs of every tab supporting the current
-// printer technology, in the current UI mode.
-std::vector<Search::InputInfo> settings_inputs()
+// ---- inline setting editor helpers ------------------------------------------
+
+// The inline editor "control" kind for an option, or "" when it can't be edited inline
+// (plugin-backed values, points, serialized strings, etc.). readonly/legend options are
+// filtered out of the search entirely in materialize_setting_actions(), so they never
+// reach here.
+std::string setting_control(const ConfigOptionDef& def)
 {
-    std::vector<Search::InputInfo> ret;
-    GUI_App& app = wxGetApp();
-    if (!app.preset_bundle)
-        return ret;
-    auto print_tech = app.preset_bundle->printers.get_selected_preset().printer_technology();
-    for (Tab* tab : app.tabs_list)
-        if (tab && tab->supports_printer_technology(print_tech))
-            ret.emplace_back(Search::InputInfo{tab->get_config(), tab->type(), app.get_mode()});
-    return ret;
+    if (def.readonly || def.gui_type == ConfigOptionDef::GUIType::legend ||
+        def.gui_type == ConfigOptionDef::GUIType::one_string || def.is_plugin_backed())
+        return "";
+    // Serialized vectors are entered as ONE semicolon-separated field (e.g. post_process), which the
+    // per-index editor doesn't model - keep them in the open-in-sidebar bucket.
+    if (def.gui_flags.find("serialized") != std::string::npos)
+        return "";
+    switch (def.gui_type) {
+    case ConfigOptionDef::GUIType::color:      return "color";
+    case ConfigOptionDef::GUIType::i_enum_open:
+    case ConfigOptionDef::GUIType::f_enum_open: return "combo";
+    default: break;
+    }
+    switch (def.type) {
+    case coBool:
+    case coBools: return "toggle";
+    case coEnum:
+    case coEnums: return def.enum_values.empty() ? "combo" : "dropdown";
+    case coInt:
+    case coInts:
+    case coFloat:
+    case coFloats:
+    case coPercent:
+    case coPercents: return "number";
+    case coFloatOrPercent:
+    case coFloatsOrPercents: return "percent";
+    case coString:
+    case coStrings: return "text";
+    default: return "";
+    }
+}
+
+// Self-contained base64 encoder (for the tiny pictogram SVGs), avoiding a dependency on the exact
+// wxBase64Encode overload/return type across wx versions.
+std::string base64_encode(const std::string& data)
+{
+    static const char* tbl = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    auto enc = [&](unsigned n, int pad) {
+        // pad = number of extraneous bytes in the final group (0, 1 or 2):
+        //   0 leftover -> 4 chars from all 24 bits
+        //   2 leftover (pad=1) -> 3 chars then '='
+        //   1 leftover (pad=2) -> 2 chars then "=="
+        // The '=' padding always comes LAST; a misplaced '=' decodes as garbage in the webview.
+        std::string out;
+        out.push_back(tbl[(n >> 18) & 63]);
+        out.push_back(tbl[(n >> 12) & 63]);
+        out.push_back(pad >= 2 ? '=' : tbl[(n >> 6) & 63]);
+        out.push_back(pad >= 1 ? '=' : tbl[n & 63]);
+        return out;
+    };
+    std::string out;
+    out.reserve(((data.size() + 2) / 3) * 4);
+    size_t i = 0;
+    for (; i + 3 <= data.size(); i += 3)
+        out += enc(((unsigned char) data[i]) << 16 | ((unsigned char) data[i + 1]) << 8 | ((unsigned char) data[i + 2]), 0);
+    if (i + 1 == data.size())
+        out += enc(((unsigned char) data[i]) << 16, 2);
+    else if (i + 2 == data.size())
+        out += enc(((unsigned char) data[i]) << 16 | ((unsigned char) data[i + 1]) << 8, 1);
+    return out;
+}
+
+// data:URI for the pattern pictogram icons/param_<key>.svg, or "" when there is no such icon.
+// This mirrors the sidebar Choice field (Field.cpp add_item_bitmaps), which loads param_<value>.svg
+// per enum value - most settings have no icon, only pattern-style enums (infill/support patterns).
+// Base64 data URIs are used so the embedded webview renders them identically on every backend
+// (no file:// subresource / CORS restrictions).
+std::string setting_icon_for_key(const std::string& key)
+{
+    if (key.empty())
+        return {};
+
+    const std::string path = (boost::filesystem::path(resources_dir()) / "images" / ("param_" + key + ".svg")).string();
+    // Non-throwing stat: a throwing filesystem_error here would propagate out of snapshot() and
+    // abort the app (the palette opener). exists(fs ::error_code) never throws.
+    boost::system::error_code ec;
+    if (!boost::filesystem::exists(path, ec))
+        return {};
+
+    std::ifstream in(path, std::ios::binary);
+    if (!in)
+        return {};
+    std::string data((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+    if (data.empty())
+        return {};
+
+    return "data:image/svg+xml;base64," + base64_encode(data);
+}
+
+// [{value,key,label,icon}...] for an enum/combo. Ordered by enum_values when present, else by the
+// keys_map iteration. label falls back to the key when enum_labels doesn't provide one. `icon` is
+// the value's pattern pictogram when one exists, empty otherwise.
+nlohmann::json setting_enum_options(const ConfigOptionDef& def)
+{
+    nlohmann::json out = nlohmann::json::array();
+    auto label_at = [&](size_t i, const std::string& key) -> std::string {
+        return (i < def.enum_labels.size() && !def.enum_labels[i].empty()) ? def.enum_labels[i] : key;
+    };
+    if (def.enum_keys_map != nullptr) {
+        std::vector<std::string> ordered;
+        if (!def.enum_values.empty())
+            ordered = def.enum_values;
+        else
+            for (const auto& kv : *def.enum_keys_map)
+                ordered.push_back(kv.first);
+        for (size_t i = 0; i < ordered.size(); ++i) {
+            auto it = def.enum_keys_map->find(ordered[i]);
+            if (it == def.enum_keys_map->end())
+                continue;
+            out.push_back({{"value", it->second},
+                           {"key", ordered[i]},
+                           {"label", label_at(i, ordered[i])},
+                           {"icon", setting_icon_for_key(ordered[i])}});
+        }
+    } else {
+        for (size_t i = 0; i < def.enum_values.size(); ++i)
+            out.push_back({{"value", (long long) i},
+                           {"key", def.enum_values[i]},
+                           {"label", label_at(i, def.enum_values[i])},
+                           {"icon", setting_icon_for_key(def.enum_values[i])}});
+    }
+    return out;
+}
+
+// The pattern pictogram for a setting's CURRENT value (its enum int), empty when it isn't a
+// pattern-style enum or the value has no icon. Used for the search-result tile.
+std::string setting_action_icon(const SettingAction& a)
+{
+    Tab* tab = wxGetApp().get_tab(a.type);
+    if (!tab || !tab->get_config())
+        return {};
+    DynamicPrintConfig* config = tab->get_config();
+    const ConfigOptionDef* def = config->def()->get(a.opt_key);
+    if (!def || def->type != coEnum || (int(def->type) & int(coVectorType)) != 0)
+        return {};
+    // Read the value WITHOUT config->opt_int(): the non-const overload routes through a type-checked
+    // option<ConfigOptionInt>() that returns null for enum values (type() is coEnum, not coInt) and
+    // would deref null. Pull the ConfigOption* and dynamic_cast instead (succeeds: enums derive from
+    // ConfigOptionInt), falling back to the def default when the option is absent.
+    const ConfigOption* opt = (config->has(a.opt_key) ? config->option(a.opt_key) : def->default_value.get());
+    const ConfigOptionInt* int_opt = dynamic_cast<const ConfigOptionInt*>(opt);
+    if (!int_opt)
+        return {};
+    const int value = int_opt->getInt();
+    if (def->enum_keys_map)
+        for (const auto& kv : *def->enum_keys_map)
+            if (kv.second == value)
+                return setting_icon_for_key(kv.first);
+    return {};
+}
+
+std::string SettingAction::icon() const { return setting_action_icon(*this); }
+
+// Current value of the option at vector index `idx` as JSON (bool/number/string), or null for a
+// type the inline editor doesn't render. `config` is the tab's live config; when an option is
+// absent the def's default is shown.
+nlohmann::json setting_value_json(const DynamicPrintConfig& config, const ConfigOptionDef& def, size_t idx)
+{
+    const ConfigOption* opt = config.option(def.opt_key);
+    const ConfigOption* root = opt ? opt : def.default_value.get();
+    if (!root)
+        return nullptr;
+    switch (def.type) {
+    case coBool:    return root->getBool();
+    case coInt:     return root->getInt();
+    case coFloat:   return root->getFloat();
+    case coPercent: return root->getFloat();
+    case coString:  return static_cast<const ConfigOptionString*>(root)->value;
+    case coEnum:    return root->getInt();
+    case coBools: {
+        if (auto v = dynamic_cast<const ConfigOptionBools*>(root))
+            return bool(v->get_at(idx));
+        if (auto v = dynamic_cast<const ConfigOptionBoolsNullable*>(root))
+            return bool(v->get_at(idx) != 0);
+        return nullptr;
+    }
+    case coInts: {
+        if (auto v = dynamic_cast<const ConfigOptionInts*>(root))
+            return v->get_at(idx);
+        if (auto v = dynamic_cast<const ConfigOptionIntsNullable*>(root)) {
+            const int nil = ConfigOptionIntsNullable::nil_value();
+            int val = v->get_at(idx);
+            return val == nil ? nlohmann::json(nullptr) : nlohmann::json(val);
+        }
+        return nullptr;
+    }
+    case coFloats: {
+        if (auto v = dynamic_cast<const ConfigOptionFloats*>(root))
+            return v->get_at(idx);
+        if (auto v = dynamic_cast<const ConfigOptionFloatsNullable*>(root)) {
+            double val = v->get_at(idx);
+            return std::isnan(val) ? nlohmann::json(nullptr) : nlohmann::json(val);
+        }
+        return nullptr;
+    }
+    case coPercents: {
+        if (auto v = dynamic_cast<const ConfigOptionPercents*>(root))
+            return v->get_at(idx);
+        if (auto v = dynamic_cast<const ConfigOptionPercentsNullable*>(root)) {
+            double val = v->get_at(idx);
+            return std::isnan(val) ? nlohmann::json(nullptr) : nlohmann::json(val);
+        }
+        return nullptr;
+    }
+    case coStrings: return static_cast<const ConfigOptionStrings*>(root)->get_at(idx);
+    case coEnums: {
+        if (auto v = dynamic_cast<const ConfigOptionEnumsGeneric*>(root))
+            return v->get_at(idx);
+        if (auto v = dynamic_cast<const ConfigOptionEnumsGenericNullable*>(root)) {
+            const int nil = ConfigOptionEnumsGenericNullable::nil_value();
+            int val = v->get_at(idx);
+            return val == nil ? nlohmann::json(nullptr) : nlohmann::json(val);
+        }
+        return nullptr;
+    }
+    case coFloatOrPercent: return root->serialize();
+    case coFloatsOrPercents: {
+        if (auto v = dynamic_cast<const ConfigOptionFloatsOrPercents*>(root)) {
+            auto ss = v->vserialize();
+            return idx < ss.size() ? ss[idx] : nullptr;
+        }
+        if (auto v = dynamic_cast<const ConfigOptionFloatsOrPercentsNullable*>(root)) {
+            auto ss = v->vserialize();
+            return idx < ss.size() ? ss[idx] : nullptr;
+        }
+        return nullptr;
+    }
+    default: return nullptr;
+    }
+}
+
+// How many scalar values the option currently has (1 for scalars, the array length for vectors).
+size_t setting_value_count(const DynamicPrintConfig& config, const ConfigOptionDef& def)
+{
+    if ((int(def.type) & int(coVectorType)) == 0)
+        return 1;
+    // size() lives on ConfigOptionVectorBase, not ConfigOption - dynamic_cast to it covers every
+    // vector type (and their nullable variants) polymorphically.
+    const ConfigOption* opt = config.option(def.opt_key);
+    if (opt)
+        if (auto v = dynamic_cast<const ConfigOptionVectorBase*>(opt))
+            return v->size();
+    if (def.default_value)
+        if (auto v = dynamic_cast<const ConfigOptionVectorBase*>(def.default_value.get()))
+            return v->size();
+    return 1;
+}
+
+// boost::any for a single element, matching what Slic3r::GUI::change_opt_value expects.
+boost::any setting_any_from_json(const ConfigOptionDef& def, const nlohmann::json& v)
+{
+    if (!v.is_null()) {
+        switch (def.type) {
+        case coBool:    return boost::any(v.is_boolean() ? v.get<bool>() : v.get<int>() != 0);
+        case coInt:     return boost::any(v.get<int>());
+        case coFloat:
+        case coPercent: return boost::any(v.get<double>());
+        case coString:  return boost::any(v.get<std::string>());
+        case coEnum:    return boost::any(v.get<int>());
+        case coBools:   return boost::any(static_cast<unsigned char>(v.get<bool>() ? 1 : 0));
+        case coInts:    return boost::any(v.get<int>());
+        case coFloats:
+        case coPercents: return boost::any(v.get<double>());
+        case coStrings: return boost::any(v.get<std::string>());
+        case coFloatOrPercent:
+        case coFloatsOrPercents: {
+            // change_opt_value detects "percent" via a trailing '%', so trim whitespace first or a
+            // stray space (e.g. "10% ") would be misread as mm.
+            std::string s = v.is_string() ? v.get<std::string>() : std::to_string(v.get<double>());
+            boost::trim(s);
+            // An empty string would make change_opt_value's str.back() UB - bail out to a rejected apply.
+            return s.empty() ? boost::any() : boost::any(s);
+        }
+        case coEnums:   return boost::any(v.get<int>());
+        default: break;
+        }
+    }
+    // Coerce numeric types that may arrive as a different JSON numeric type.
+    if (v.is_number()) {
+        switch (def.type) {
+        case coInt:
+        case coEnums: return boost::any(v.get<int>());
+        case coFloat:
+        case coPercent:
+        case coInts:
+        case coFloats:
+        case coPercents: return boost::any(v.get<double>());
+        default: break;
+        }
+    }
+    return boost::any();
 }
 
 } // namespace
@@ -411,7 +759,9 @@ void ActionRegistry::remove(const std::string& id)
 
 void ActionRegistry::seed_state(AppAction& a) const
 {
-    auto favs   = read_string_array("favourite_actions");
+    // Favourites carry the quick-launch order, so the persisted list is the source of truth
+    // (not re-derived from the frecency sort). Cap it so stale configs can't exceed kFavLimit.
+    auto favs   = favourite_ids();
     a.favourite = std::find(favs.begin(), favs.end(), a.id()) != favs.end();
 
     nlohmann::json stats = read_section("stats", nlohmann::json::object());
@@ -469,18 +819,40 @@ AppActionRunResult ActionRegistry::run(const std::string& id, const std::string&
     return o;
 }
 
-void ActionRegistry::set_favourite(const std::string& id, bool on)
+bool ActionRegistry::set_favourite(const std::string& id, bool on)
 {
     assert(wxThread::IsMain());
-    auto favs = read_string_array("favourite_actions");
+    // Start from the capped, deduped list so a persisted config can never be written back larger.
+    auto favs = favourite_ids();
     auto it   = std::find(favs.begin(), favs.end(), id);
-    if (on && it == favs.end())
+    if (on && it == favs.end()) {
+        if (favs.size() >= kFavLimit)
+            return false; // bar is full - the caller surfaces a hint
         favs.push_back(id);
+    }
     if (!on && it != favs.end())
         favs.erase(it);
     write_section("favourite_actions", nlohmann::json(favs));
     if (AppAction* live = find(id))
         live->favourite = on;
+    return true;
+}
+
+std::vector<std::string> ActionRegistry::favourite_ids() const
+{
+    assert(wxThread::IsMain());
+    // Enforce the cap + dedupe on read so the persisted order can never grow past kFavLimit,
+    // even from an older config. The pinned order is intentionally preserved (slice, not sort).
+    std::vector<std::string> favs = read_string_array("favourite_actions");
+    std::vector<std::string> out;
+    out.reserve(std::min(favs.size(), kFavLimit));
+    for (const auto& id : favs) {
+        if (out.size() >= kFavLimit)
+            break;
+        if (std::find(out.begin(), out.end(), id) == out.end())
+            out.push_back(id);
+    }
+    return out;
 }
 
 void ActionRegistry::reorder_favourites(const std::vector<std::string>& ids)
@@ -496,7 +868,76 @@ void ActionRegistry::reorder_favourites(const std::vector<std::string>& ids)
     for (const auto& id : cur)
         if (std::find(next.begin(), next.end(), id) == next.end())
             next.push_back(id);
+    // never write the bar back larger than the quick-launch slots
+    if (next.size() > kFavLimit)
+        next.resize(kFavLimit);
     write_section("favourite_actions", nlohmann::json(next));
+}
+
+void ActionRegistry::materialize_setting_actions()
+{
+    assert(wxThread::IsMain());
+
+    // Reuse the Sidebar's live searcher: it's the only OptionsSearcher whose groups_and_categories
+    // map is populated (Tab::add_key feeds it at build time), and it already mirrors the current
+    // configs/mode/printer-technology - i.e. exactly what the sidebar's own search would show. A
+    // fresh OptionsSearcher has an empty groups_and_categories, so append_options() would drop every
+    // option and nothing would materialise. Turn each visible option into a SettingAction.
+    const std::vector<Search::Option>& options = wxGetApp().sidebar().get_searcher().all_options();
+
+    // Load the persisted per-action state ONCE (not per-option) so a re-materialised setting keeps
+    // its recency/favourite; mirroring seed_state but amortised over the whole option set.
+    nlohmann::json stats = read_section("stats", nlohmann::json::object());
+    if (!stats.is_object())
+        stats = nlohmann::json::object();
+    const std::vector<std::string> favs = favourite_ids();
+
+    std::unordered_set<std::string> seen;
+    for (const Search::Option& opt : options) {
+        // Omit rows the inline editor can't represent and that aren't useful as a jump target:
+        // readonly (e.g. the detected thread count) and legend (static text) GUI rows. They remain
+        // in the sidebar's own search; only the Speed Dial pool drops them.
+        Tab* tab = wxGetApp().get_tab(opt.type);
+        if (tab && tab->get_config()) {
+            const ConfigOptionDef* def = tab->get_config()->def()->get(opt.opt_key());
+            if (!def || def->readonly || def->gui_type == ConfigOptionDef::GUIType::legend)
+                continue;
+        }
+
+        const std::string id = SettingAction::id_for(opt.opt_key(), opt.type);
+        seen.insert(id);
+
+        const std::wstring label_w = opt.label_local.empty() ? opt.label : opt.label_local;
+
+        // Eyebrow/source = the full settings path "Process : Quality : Layers" (localized). The JS
+        // renders group || source and searches source + " " + group, so putting the whole path in
+        // source both displays it and makes it matchable by any segment (e.g. a "quality" query).
+        std::wstring path = boost::nowide::widen(setting_type_context(opt.type));
+        if (!opt.category_local.empty())
+            path += L" : " + opt.category_local;
+        if (!opt.group_local.empty())
+            path += L" : " + opt.group_local;
+
+        // title = the option leaf name (last label segment); group stays empty so the source path
+        // (above) is the single display/search breadcrumb rather than being duplicated.
+        auto action = std::make_unique<SettingAction>(opt.opt_key(), opt.type, boost::nowide::narrow(label_w),
+                                                      std::string(), opt.category_local, boost::nowide::narrow(path));
+        action->favourite                    = std::find(favs.begin(), favs.end(), id) != favs.end();
+        if (auto it = stats.find(id); it != stats.end() && it->is_object()) {
+            action->count = it->value("count", 0);
+            action->last  = it->value("last", 0LL);
+        }
+        m_actions.insert_or_assign(action->id(), std::shared_ptr<AppAction>(std::move(action)));
+    }
+
+    // Drop SettingActions whose option no longer exists in the current configs (e.g. the printer
+    // technology / UI mode changed). Non-setting actions are untouched.
+    for (auto it = m_actions.begin(); it != m_actions.end();) {
+        if (it->first.rfind(kSettingPrefix, 0) == 0 && !seen.count(it->first))
+            it = m_actions.erase(it);
+        else
+            ++it;
+    }
 }
 
 bool ActionRegistry::should_ask(const std::string& id) const
@@ -517,9 +958,13 @@ void ActionRegistry::suppress_ask(const std::string& id)
 
 // ---- snapshot ---------------------------------------------------------------
 
-nlohmann::json ActionRegistry::snapshot() const
+nlohmann::json ActionRegistry::snapshot()
 {
     assert(wxThread::IsMain());
+    // Settings are first-class actions; make sure the current visible option set is materialised
+    // before we serialise the pool (tabs_list is built by the time the palette opens).
+    materialize_setting_actions();
+
     std::vector<const AppAction*> sorted;
     sorted.reserve(m_actions.size());
     for (const auto& entry : m_actions)
@@ -544,7 +989,8 @@ nlohmann::json ActionRegistry::snapshot() const
                                {"source", a->source_name()},
                                {"group", a->group},
                                {"input", a->input},
-                               {"shortcut", ""}});
+                               {"shortcut", ""},
+                               {"icon", a->icon()}});
     };
 
     nlohmann::json actions = nlohmann::json::array();
@@ -554,7 +1000,8 @@ nlohmann::json ActionRegistry::snapshot() const
     // why: favourites is the ORDERED pin list - it must come from favourite_actions
     // as stored, not be re-derived from the frecency-sorted actions (that would
     // reorder the favourites bar). The page (js) filters out ids with no live action itself.
-    nlohmann::json favourites(read_string_array("favourite_actions"));
+    // Cap on read so the bar cannot exceed the quick-launch slots (kFavLimit).
+    nlohmann::json favourites(favourite_ids());
 
     // Recent = the last-N launched actions by recency (only actions with a run history).
     constexpr size_t kRecentLimit = 5;
@@ -574,49 +1021,6 @@ nlohmann::json ActionRegistry::snapshot() const
         recent_json.push_back(action_to_json(a));
 
     return {{"actions", std::move(actions)}, {"favourites", std::move(favourites)}, {"recent", std::move(recent_json)}};
-}
-
-nlohmann::json ActionRegistry::settings_search(const std::string& query)
-{
-    assert(wxThread::IsMain());
-    std::string q = boost::trim_copy(query);
-    // Empty query: show the recently-jumped-to settings instead of a blank list.
-    if (q.empty())
-        return settings_recent();
-
-    // Use the sidebar's live searcher. It is the instance Tab registration (add_key) populates
-    // with each option's group/category, and it carries the current printer technology. A fresh
-    // OptionsSearcher has an empty groups_and_categories, so init()/append_options() drops every
-    // option and the search returns nothing.
-    Search::OptionsSearcher& searcher = wxGetApp().sidebar().get_searcher();
-    searcher.init(settings_inputs());
-    searcher.search(q, true);
-    auto& found = searcher.found_options();
-
-    constexpr size_t kLimit = 20;
-    const size_t n          = std::min<size_t>(kLimit, found.size());
-    nlohmann::json out      = nlohmann::json::array();
-    for (size_t i = 0; i < n; ++i) {
-        const auto& opt = searcher.get_option(i);
-        // Clean plain label "category : group : label" - OptionsSearcher's own label string
-        // carries ImGui icon control chars + <b>/</b> markup (SUPPORTS_MARKUP), which render
-        // as garbage in the webview. Build it from the Option's localized strings instead.
-        std::wstring plain;
-        const std::wstring* prev = nullptr;
-        for (const std::wstring* const s : {&opt.category_local, &opt.group_local, &opt.label_local})
-            if (s != nullptr && !s->empty() && (prev == nullptr || *prev != *s)) {
-                if (!plain.empty())
-                    plain += L" : ";
-                plain += *s;
-                prev = s;
-            }
-        out.push_back({{"opt_key", opt.opt_key()},
-                       {"type", int(opt.type)},
-                       {"label", boost::nowide::narrow(plain)},
-                       {"category", boost::nowide::narrow(opt.category)},
-                       {"group", boost::nowide::narrow(opt.group)}});
-    }
-    return out;
 }
 
 // ---- tab options (enumerate the MainFrame notebook's current pages) ----------
@@ -640,37 +1044,140 @@ nlohmann::json ActionRegistry::tab_options() const
     return out;
 }
 
-// ---- settings recents (persisted, most-recent-first, capped at 8) -----------
+// ---- inline setting editor (read the current value) --------------------------
 
-nlohmann::json ActionRegistry::settings_recent() const
+nlohmann::json ActionRegistry::setting_descriptor(const std::string& id) const
 {
     assert(wxThread::IsMain());
-    return read_section("recent_settings", nlohmann::json::array());
+    const AppAction*     a  = by_id(id);
+    const SettingAction* sa = dynamic_cast<const SettingAction*>(a);
+    if (!sa)
+        return nlohmann::json::object();
+    Tab* tab = wxGetApp().get_tab(sa->type);
+    if (!tab)
+        return nlohmann::json::object();
+    DynamicPrintConfig* config = tab->get_config();
+    if (!config)
+        return nlohmann::json::object();
+    const ConfigOptionDef* def = config->def()->get(sa->opt_key);
+    if (!def)
+        return nlohmann::json::object();
+
+    const std::string control = setting_control(*def);
+    const bool        vector  = (int(def->type) & int(coVectorType)) != 0;
+
+    nlohmann::json d = {{"id", sa->id()},
+                        {"opt_key", sa->opt_key},
+                        {"type", int(sa->type)},
+                        {"title", a->title()},
+                        {"breadcrumb", a->source_name()},
+                        {"category", boost::nowide::narrow(sa->category)},
+                        {"unit", def->sidetext},
+                        {"tooltip", def->tooltip},
+                        {"editable", !control.empty()},
+                        {"control", control},
+                        {"cardinality", vector ? "vector" : "scalar"}};
+
+    if (!control.empty()) {
+        // Hide unbounded min/max so the page doesn't clamp a sane value to ±FLT_MAX.
+        if (def->min > -FLT_MAX)
+            d["min"] = def->min;
+        if (def->max < FLT_MAX)
+            d["max"] = def->max;
+        if (control == "number")
+            d["is_int"] = (def->type == coInt || def->type == coInts);
+        if (control == "dropdown" || control == "combo")
+            d["enum_options"] = setting_enum_options(*def);
+        if (vector) {
+            nlohmann::json values = nlohmann::json::array();
+            nlohmann::json labels = nlohmann::json::array();
+            const size_t  n      = setting_value_count(*config, *def);
+            for (size_t i = 0; i < n; ++i) {
+                values.push_back(setting_value_json(*config, *def, i));
+                labels.push_back(std::to_string(i + 1));
+            }
+            d["values"]       = std::move(values);
+            d["index_labels"] = std::move(labels);
+        } else {
+            d["value"] = setting_value_json(*config, *def, 0);
+        }
+    }
+    return d;
 }
 
-void ActionRegistry::record_setting_recent(
-    const std::string& opt_key, int type, const std::string& label, const std::string& category, const std::string& group)
+// ---- inline setting editor (write the edited value back) ---------------------
+
+bool ActionRegistry::apply_setting(const std::string& id, const nlohmann::json& value)
 {
     assert(wxThread::IsMain());
-    if (opt_key.empty())
-        return;
+    const AppAction*     a  = by_id(id);
+    const SettingAction* sa = dynamic_cast<const SettingAction*>(a);
+    if (!sa)
+        return false;
+    Tab* tab = wxGetApp().get_tab(sa->type);
+    if (!tab)
+        return false;
+    DynamicPrintConfig* config = tab->get_config();
+    if (!config)
+        return false;
+    const ConfigOptionDef* def = config->def()->get(sa->opt_key);
+    if (!def)
+        return false;
+    const std::string control = setting_control(*def);
+    if (control.empty())
+        return false;
 
-    constexpr size_t kLimit = 8;
-    auto arr                = read_section("recent_settings", nlohmann::json::array());
-    if (!arr.is_array())
-        arr = nlohmann::json::array();
-    auto same = [&](const nlohmann::json& e) {
-        return e.is_object() && e.value("opt_key", std::string()) == opt_key && e.value("type", int(-1)) == type;
-    };
+    const bool   vector = (int(def->type) & int(coVectorType)) != 0;
+    const size_t n      = vector ? (value.is_array() ? value.size() : 0) : 1;
+    if (vector && n == 0)
+        return false;
 
-    nlohmann::json next = nlohmann::json::array();
-    next.push_back({{"opt_key", opt_key}, {"type", type}, {"label", label}, {"category", category}, {"group", group}});
-    for (const auto& e : arr)
-        if (!same(e))
-            next.push_back(e);
-    if (next.size() > kLimit)
-        next.erase(next.begin() + long(kLimit), next.end());
-    write_section("recent_settings", next);
+    for (size_t i = 0; i < n; ++i) {
+        const nlohmann::json& elem = vector ? value[i] : value;
+        boost::any any             = setting_any_from_json(*def, elem);
+        if (any.empty())
+            return false;
+        if (control == "number" && elem.is_number()) {
+            const double d = elem.get<double>();
+            if (d < def->min || d > def->max)
+                return false;
+        }
+        if (control == "percent" && elem.is_string()) {
+            // "mm or %" value: strip a trailing %/whitespace, clamp the numeric part to [min,max].
+            // Reject anything that isn't a well-formed number (which change_opt_value would throw on).
+            std::string s = elem.get<std::string>();
+            boost::trim(s);
+            if (!s.empty() && s.back() == '%')
+                s.pop_back();
+            boost::trim(s);
+            if (s.empty())
+                return false;
+            char* end    = nullptr;
+            const double d = std::strtod(s.c_str(), &end);
+            if (end == s.c_str() || *end != '\0')
+                return false;
+            if (d < def->min || d > def->max)
+                return false;
+        }
+        Slic3r::GUI::change_opt_value(*config, sa->opt_key, any, int(i));
+    }
+
+    // Mark the preset modified like a sidebar edit. Scalar options also get the standard
+    // post-change hook so dependent settings refresh; vector options have no unambiguous scalar
+    // value to pass, so on_value_change is skipped (the config write + dirty flag is still correct).
+    tab->update_dirty();
+    if (!vector) {
+        boost::any any = setting_any_from_json(*def, value);
+        if (!any.empty())
+            tab->on_value_change(sa->opt_key, any);
+    }
+
+    // The config write is separate from the on-screen Field, so repaint the field(s) that display
+    // this option (on whatever page they live, not just the active page) - otherwise the sidebar
+    // shows the "modified" arrow but keeps the stale value pushed to the last edit/reload.
+    if (Page* page = nullptr; tab->get_field(sa->opt_key, &page) && page)
+        page->reload_config();
+    return true;
 }
 
 }} // namespace Slic3r::GUI

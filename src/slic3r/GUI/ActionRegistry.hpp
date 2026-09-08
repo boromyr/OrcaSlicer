@@ -6,6 +6,7 @@
 #include <wx/thread.h>
 
 #include <cassert>
+#include <cstddef>
 #include <memory>
 #include <string>
 #include <string_view>
@@ -29,6 +30,14 @@ struct AppActionRunResult
 
     Level    level = Level::Info;
     wxString message;   // empty = "nothing worth showing"
+};
+
+// Tag carrying a precomputed action id, used by the explicit-id ctor below. It exists so the
+// id ctor and the compose-from-prefix ctor are NOT both reachable from a `const char*` first
+// argument (which would make calls like AppAction("orca_command", ...) ambiguous).
+struct AppActionId
+{
+    std::string id;
 };
 
 // A speed-dial action: identity + user-state seeded from config + how to run itself.
@@ -72,6 +81,11 @@ struct AppAction
     // commands (e.g. a layer percentage); plugins ignore it.
     virtual AppActionRunResult run(const std::string& param = {}) const = 0;
 
+    // Optional data:URI for a small pictogram to show in the palette row/tile/the editor
+    // (e.g. the current infill/pattern). Empty string = fall back to the monogram. Only
+    // SettingAction overrides this; the base returns an empty string.
+    virtual std::string icon() const { return {}; }
+
 protected:
     // The definition is constructor-set and immutable. Refreshes replace an action
     // instead of mutating identity after the registry has indexed it by id.
@@ -79,6 +93,14 @@ protected:
     // display name leaves the id - and its persisted stats/favourite - intact.
     AppAction(std::string_view prefix, std::string title, std::string source_key, std::string source_name)
         : m_id(compose_id(prefix, title, source_key)),
+          m_title(std::move(title)),
+          m_source_key(std::move(source_key)),
+          m_source_name(std::move(source_name)) {}
+
+    // Explicit-id ctor: for actions whose id must NOT be derived from the display title
+    // (e.g. a setting action keyed by opt_key+type, so a rename/localization never re-keys it).
+    AppAction(AppActionId id, std::string title, std::string source_key, std::string source_name)
+        : m_id(std::move(id.id)),
           m_title(std::move(title)),
           m_source_key(std::move(source_key)),
           m_source_name(std::move(source_name)) {}
@@ -122,10 +144,19 @@ public:
     // Always-clean read surface. UI thread only.
     const AppAction*                               by_id(const std::string& id) const;
 
+    // Hard cap on the favourites bar: the numbered quick-launch slots (Alt/Option+1..9, 0).
+    static constexpr size_t kFavLimit = 10;
+
     // Dispatch + write-through (registry is the only thing that touches AppConfig).
     AppActionRunResult run(const std::string& id, const std::string& param = {}); // runs + bumps stats
-    void             set_favourite(const std::string& id, bool on);
+    // Pin/unpin. Returns false when `on` would exceed kFavLimit (the bar is full) so the
+    // caller can surface a "favourites are full" hint instead of silently dropping the pin.
+    bool             set_favourite(const std::string& id, bool on);
     void             reorder_favourites(const std::vector<std::string>& ids);   // persist a new bar order
+
+    // Ordered pinned list (the source of truth), capped at kFavLimit and deduped, matching the
+    // visible bar the palette renders.
+    std::vector<std::string> favourite_ids() const;
 
     // Run-confirm gate, keyed by action id (per-action "don't ask again").
     bool should_ask(const std::string& id) const;
@@ -133,23 +164,7 @@ public:
 
     // Flat, frecency-sorted snapshot for the webview:
     // {actions:[...], favourites:[...], recent:[...]} (recent = last-N launched by recency).
-    nlohmann::json snapshot() const;
-
-    // "Go to setting..." Speed Dial helper: query the current print/filament/printer
-    // config options via the sidebar's live OptionsSearcher (the instance Tab registration
-    // populates with group/category, and which carries the current printer technology) and
-    // return the top matches as JSON. The searcher is re-seeded from the current configs +
-    // user mode on every call so the result always reflects what the sidebar's own search
-    // would show. An empty/whitespace query returns the recent settings list (below), and the
-    // page shows a "type to search" hint when there are no recents.
-    nlohmann::json settings_search(const std::string& query);
-
-    // Recently-jumped-to settings, persisted (most-recent-first, capped at 8). Returns the
-    // stored JSON array [{opt_key,type,label,category,group},...]; record_setting_recent()
-    // prepends an entry (deduped by opt_key+type) and re-persists.
-    nlohmann::json settings_recent() const;
-    void record_setting_recent(const std::string& opt_key, int type, const std::string& label,
-                               const std::string& category, const std::string& group);
+    nlohmann::json snapshot();
 
     // "Go to tab..." Speed Dial helper: enumerate the MainFrame notebook's current pages
     // as [{id,title},...]. Live by construction - built-in tabs (Home/Prepare/Preview/Device/
@@ -158,9 +173,24 @@ public:
     // plugins) aren't separate pages and are not listed. Call on the UI thread; null-safe.
     nlohmann::json tab_options() const;
 
+    // Inline setting editor descriptor for a SettingAction id. Returns the JSON the palette
+    // renders: {id, opt_key, type, title, breadcrumb, category, group, unit, tooltip, editable,
+    // control ("toggle|number|dropdown|combo|text|color"), cardinality ("scalar"|"vector"),
+    // value|values, index_labels[], enum_options[], min|max}. Empty object for a non-setting id.
+    nlohmann::json setting_descriptor(const std::string& id) const;
+    // Apply an edit submitted by the palette. `value` is the control's JSON payload (scalar, or an
+    // array for vector settings). Writes the value(s) into the global preset config and marks the
+    // preset dirty, exactly like a sidebar edit. Returns false on a bad id/type/value.
+    bool apply_setting(const std::string& id, const nlohmann::json& value);
+
 private:
     void         seed_state(AppAction& a) const;               // favourite/stats from config
     AppAction*      find(const std::string& id);
+
+    // (Re)materialise the current visible config settings as SettingActions from the live
+    // searcher (respecting printer-tech + user-mode + visibility filtering), removing stale ones.
+    // Called at the top of snapshot() so the palette always reflects the current configs.
+    void materialize_setting_actions();
 
     // Loader callbacks (marshalled to the UI thread) land here. refresh_source rebuilds
     // one plugin's whole action set; refresh_capability touches a single capability.

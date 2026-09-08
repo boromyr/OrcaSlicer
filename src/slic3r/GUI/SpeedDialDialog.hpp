@@ -22,7 +22,6 @@ private:
     void resize_to_content(int height);
     void run_action(const std::string& id, const std::string& title, const std::string& param = "");
     void send_actions();
-    void search_settings(const std::string& query);
     void search_tabs();
 
     bool m_page_ready{false};
