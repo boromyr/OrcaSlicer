@@ -19,7 +19,7 @@ class TestAppAction final : public AppAction
 public:
     TestAppAction() : AppAction("test", "Action title", "src-key", "Action source") {}
 
-    AppActionRunResult run() const override { return {}; }
+    AppActionRunResult run(const std::string& param = {}) const override { return {}; }
 };
 
 } // namespace
@@ -33,7 +33,7 @@ TEST_CASE("AppAction composes a stable id from prefix:title:source_key", "[speed
 
 TEST_CASE("AppAction definitions are immutable after construction", "[speeddial][actions]")
 {
-    using StringAccessor = const std::string& (AppAction::*)() const;
+    using StringAccessor = const std::string& (AppAction::*) () const;
 
     STATIC_CHECK(std::is_same_v<decltype(&AppAction::id), StringAccessor>);
     STATIC_CHECK(std::is_same_v<decltype(&AppAction::title), StringAccessor>);

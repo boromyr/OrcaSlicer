@@ -1,5 +1,6 @@
 #include "ActionRegistry.hpp"
 
+#include "calib_dlg.hpp"
 #include "GCodeViewer.hpp"
 #include "GLCanvas3D.hpp"
 #include "GUI.hpp"
@@ -231,6 +232,15 @@ void go_to_layer(Plater* plater, const std::string& param)
     }
 }
 
+// Select a named camera view ("top"/"front"/...); Plater::select_view dispatches to the current
+// panel. Shared by the view_* speed-dial commands.
+AppActionRunResult view_command(Plater* plater, const std::string& dir)
+{
+    if (plater)
+        plater->select_view(dir);
+    return {AppActionRunResult::Level::Success};
+}
+
 // Dispatch a built-in command. The CommandAction stays a thin value; the actual GUI work
 // lives here so it can touch the live app state.
 AppActionRunResult run_native_command(const std::string& command_key, const std::string& param)
@@ -267,6 +277,8 @@ AppActionRunResult run_native_command(const std::string& command_key, const std:
     }
     if (command_key == "slice_and_preview") {
         if (plater) {
+            // Actually re-slice (respects the toolbar's current plate/all selection), then show the result.
+            plater->reslice();
             plater->select_view_3D("Preview", false);
             if (app.mainframe)
                 app.mainframe->select_tab(TAB_ID_PREVIEW);
@@ -286,6 +298,200 @@ AppActionRunResult run_native_command(const std::string& command_key, const std:
     // dispatch here is a no-op (the jump goes through the go_to_tab web command).
     if (command_key == "go_to_tab")
         return {AppActionRunResult::Level::Success};
+
+    // ---- Slice -> Export pipeline. Each Plater method self-guards (empty model / error /
+    // background-invalid) and then opens its own save dialog / show_error, mirroring the File menu.
+    if (command_key == "export_gcode") {
+        if (plater)
+            plater->export_gcode(false);
+        return {AppActionRunResult::Level::Success};
+    }
+    if (command_key == "export_stl") {
+        if (plater)
+            plater->export_stl();
+        return {AppActionRunResult::Level::Success};
+    }
+    if (command_key == "export_3mf") {
+        if (plater)
+            plater->export_core_3mf();
+        return {AppActionRunResult::Level::Success};
+    }
+    if (command_key == "export_sliced_file") {
+        if (plater)
+            plater->export_gcode_3mf();
+        return {AppActionRunResult::Level::Success};
+    }
+    if (command_key == "export_all_sliced_file") {
+        if (plater)
+            plater->export_gcode_3mf(true);
+        return {AppActionRunResult::Level::Success};
+    }
+
+    // ---- Calibration wizards. Each mirrors the menu handler (MainFrame.cpp): recreate the dialog
+    // fresh per launch. The palette hides itself and defers dispatch off the webview callback, so a
+    // ShowModal() here is safe (same path as open_preferences). The 3D panel is ensured below.
+    auto calib = [&](auto&& open) -> AppActionRunResult {
+        if (!plater)
+            return {AppActionRunResult::Level::Info, _L("Open the 3D view first.")};
+        // Auto-switch to the Prepare (3D) view instead of prompting: set the 3D panel
+        // synchronously (the wizard's new_project also re-establishes it) and select the
+        // Prepare notebook page so the tab label matches. The palette is hidden and this
+        // dispatch is deferred off the webview callback, so a modal on a switched tab is safe.
+        if (!plater->is_view3D_shown()) {
+            plater->select_view_3D("3D");
+            if (MainFrame* mf = wxGetApp().mainframe; mf)
+                mf->select_tab(TAB_ID_PREPARE);
+        }
+        open(plater);
+        return {AppActionRunResult::Level::Success};
+    };
+    if (command_key == "calib_temperature")
+        return calib([](Plater* p) {
+            Temp_Calibration_Dlg* dlg = new Temp_Calibration_Dlg((wxWindow*) wxGetApp().mainframe, wxID_ANY, p);
+            dlg->ShowModal();
+            dlg->Destroy();
+        });
+    if (command_key == "calib_max_volumetric")
+        return calib([](Plater* p) {
+            MaxVolumetricSpeed_Test_Dlg* dlg = new MaxVolumetricSpeed_Test_Dlg((wxWindow*) wxGetApp().mainframe, wxID_ANY, p);
+            dlg->ShowModal();
+            dlg->Destroy();
+        });
+    if (command_key == "calib_pressure_advance")
+        return calib([](Plater* p) {
+            PA_Calibration_Dlg* dlg = new PA_Calibration_Dlg((wxWindow*) wxGetApp().mainframe, wxID_ANY, p);
+            dlg->ShowModal();
+            dlg->Destroy();
+        });
+    if (command_key == "calib_flow_ratio")
+        return calib([](Plater* p) {
+            FlowRateCalibrationDialog* dlg = new FlowRateCalibrationDialog((wxWindow*) wxGetApp().mainframe, wxID_ANY, p);
+            dlg->ShowModal();
+            dlg->Destroy();
+        });
+    if (command_key == "calib_retraction")
+        return calib([](Plater* p) {
+            Retraction_Test_Dlg* dlg = new Retraction_Test_Dlg((wxWindow*) wxGetApp().mainframe, wxID_ANY, p);
+            dlg->ShowModal();
+            dlg->Destroy();
+        });
+    if (command_key == "calib_cornering")
+        return calib([](Plater* p) {
+            Cornering_Test_Dlg* dlg = new Cornering_Test_Dlg((wxWindow*) wxGetApp().mainframe, wxID_ANY, p);
+            dlg->ShowModal();
+            dlg->Destroy();
+        });
+    if (command_key == "calib_input_shaping_freq")
+        return calib([](Plater* p) {
+            Input_Shaping_Freq_Test_Dlg* dlg = new Input_Shaping_Freq_Test_Dlg((wxWindow*) wxGetApp().mainframe, wxID_ANY, p);
+            dlg->ShowModal();
+            dlg->Destroy();
+        });
+    if (command_key == "calib_input_shaping_damp")
+        return calib([](Plater* p) {
+            Input_Shaping_Damp_Test_Dlg* dlg = new Input_Shaping_Damp_Test_Dlg((wxWindow*) wxGetApp().mainframe, wxID_ANY, p);
+            dlg->ShowModal();
+            dlg->Destroy();
+        });
+    if (command_key == "calib_vfa")
+        return calib([](Plater* p) {
+            VFA_Test_Dlg* dlg = new VFA_Test_Dlg((wxWindow*) wxGetApp().mainframe, wxID_ANY, p);
+            dlg->ShowModal();
+            dlg->Destroy();
+        });
+
+    // ---- View controls. select_view dispatches to the current panel; named views + perspective
+    // toggle + fit-to-bed mirror the View menu items (MainFrame.cpp). reset_window_layout is direct.
+    if (command_key == "view_top")
+        return view_command(plater, "top");
+    if (command_key == "view_bottom")
+        return view_command(plater, "bottom");
+    if (command_key == "view_front")
+        return view_command(plater, "front");
+    if (command_key == "view_rear")
+        return view_command(plater, "rear");
+    if (command_key == "view_left")
+        return view_command(plater, "left");
+    if (command_key == "view_right")
+        return view_command(plater, "right");
+    if (command_key == "view_iso")
+        return view_command(plater, "iso");
+    if (command_key == "view_default") {
+        if (plater) {
+            plater->select_view("plate");
+            if (GLCanvas3D* canvas = plater->get_current_canvas3D())
+                canvas->zoom_to_bed();
+        }
+        return {AppActionRunResult::Level::Success};
+    }
+    if (command_key == "view_fit_bed") {
+        if (plater)
+            if (GLCanvas3D* canvas = plater->get_current_canvas3D())
+                canvas->zoom_to_bed();
+        return {AppActionRunResult::Level::Success};
+    }
+    if (command_key == "view_toggle_perspective") {
+        if (plater)
+            plater->get_camera().select_next_type();
+        return {AppActionRunResult::Level::Success};
+    }
+    if (command_key == "reset_window_layout") {
+        if (plater)
+            plater->reset_window_layout();
+        return {AppActionRunResult::Level::Success};
+    }
+
+    // ---- Object / interaction operations (single-phase). Each mirrors a toolbar/menu action and is
+    // guarded by an existing can_* / selection check so nothing crashes on empty selection or a busy
+    // background worker, and returns a friendly Info instead. Structural ops self-update()/schedule a
+    // re-slice; transform ops (mirror/center/drop) post their own schedule-background event. We only
+    // need the underlying object (not a specific object index), so a non-capturing lambda is used as
+    // the guard/op pair below. Rotate/scale by angle/factor, duplicate (modal count dialog) and
+    // cut/segment/merge (unimplemented on Plater) are deliberately left out of this MVP.
+    auto obj = [&](bool (*ok)(Plater*), void (*op)(Plater*)) -> AppActionRunResult {
+        if (!plater)
+            return {AppActionRunResult::Level::Info, _L("Open the 3D view first.")};
+        // Object ops read the Prepare (3D) canvas selection, so ensure that view before guarding so
+        // a launch from the Preview/other tab doesn't report a spuriously empty selection.
+        if (!plater->is_view3D_shown()) {
+            plater->select_view_3D("3D");
+            if (MainFrame* mf = wxGetApp().mainframe; mf)
+                mf->select_tab(TAB_ID_PREPARE);
+        }
+        if (!ok(plater))
+            return {AppActionRunResult::Level::Info, _L("Select an object first.")};
+        op(plater);
+        return {AppActionRunResult::Level::Success};
+    };
+    if (command_key == "obj_delete")
+        return obj([](Plater* p) { return !p->is_selection_empty(); }, [](Plater* p) { p->remove_selected(); });
+    if (command_key == "obj_delete_all")
+        return obj([](Plater* p) { return p->can_delete_all(); }, [](Plater* p) { p->delete_all_objects_from_model(); });
+    if (command_key == "obj_mirror_x")
+        return obj([](Plater* p) { return p->can_mirror(); }, [](Plater* p) { p->mirror(Axis::X); });
+    if (command_key == "obj_mirror_y")
+        return obj([](Plater* p) { return p->can_mirror(); }, [](Plater* p) { p->mirror(Axis::Y); });
+    if (command_key == "obj_mirror_z")
+        return obj([](Plater* p) { return p->can_mirror(); }, [](Plater* p) { p->mirror(Axis::Z); });
+    if (command_key == "obj_split_objects")
+        return obj([](Plater* p) { return p->can_split_to_objects(); }, [](Plater* p) { p->split_object(true); });
+    if (command_key == "obj_split_parts")
+        return obj([](Plater* p) { return p->can_split_to_volumes(); }, [](Plater* p) { p->split_volume(); });
+    if (command_key == "obj_center")
+        return obj([](Plater* p) { return !p->is_selection_empty(); }, [](Plater* p) { p->center_selection(); });
+    if (command_key == "obj_drop")
+        return obj([](Plater* p) { return !p->is_selection_empty(); }, [](Plater* p) { p->drop_selection(); });
+    if (command_key == "obj_fit_volume")
+        return obj([](Plater* p) { return p->can_scale_to_print_volume(); }, [](Plater* p) { p->scale_selection_to_fit_print_volume(); });
+    if (command_key == "obj_instances_up")
+        return obj([](Plater* p) { return p->can_increase_instances(); }, [](Plater* p) { p->increase_instances(); });
+    if (command_key == "obj_instances_down")
+        return obj([](Plater* p) { return p->can_decrease_instances(); }, [](Plater* p) { p->decrease_instances(); });
+    if (command_key == "obj_arrange")
+        return obj([](Plater* p) { return p->can_arrange(); }, [](Plater* p) { p->arrange(); });
+    // Auto-orient has no dedicated can_*; can_arrange covers "objects exist + UI worker idle".
+    if (command_key == "obj_orient")
+        return obj([](Plater* p) { return p->can_arrange(); }, [](Plater* p) { p->orient(); });
     return {AppActionRunResult::Level::Info, _L("Unknown command.")};
 }
 
@@ -315,7 +521,7 @@ std::vector<std::unique_ptr<AppAction>> native_commands()
     std::vector<std::unique_ptr<AppAction>> out;
     // why: _u8L (std::string) for titles/groups - make_command takes std::string; _L would
     // return a wxString and silently fail to convert here.
-    out.push_back(make_command("slice_and_preview", _u8L("Slice and Preview"), _u8L("Commands")));
+    out.push_back(make_command("slice_and_preview", _u8L("Slice and Preview"), _u8L("Slice & Export")));
     // Two-phase commands: activating them collects input in the palette, then runs. Settings are
     // not a command here - they're materialised as first-class SettingActions (see materialize_).
     out.push_back(make_command("go_to_layer", _u8L("Go to layer (percent)"), _u8L("Commands"), "percent"));
@@ -327,6 +533,55 @@ std::vector<std::unique_ptr<AppAction>> native_commands()
     out.push_back(make_command("mode_simple", _u8L("Mode: Simple"), _u8L("Mode")));
     out.push_back(make_command("mode_advanced", _u8L("Mode: Advanced"), _u8L("Mode")));
     out.push_back(make_command("mode_expert", _u8L("Mode: Expert"), _u8L("Mode")));
+
+    // Slice -> Export pipeline. Each runs a public Plater method; the methods self-guard (empty
+    // model / error / background-invalid) and open their own save dialog / show_error.
+    out.push_back(make_command("export_gcode", _u8L("Export G-code"), _u8L("Slice & Export")));
+    out.push_back(make_command("export_stl", _u8L("Export STL"), _u8L("Slice & Export")));
+    out.push_back(make_command("export_3mf", _u8L("Export 3MF"), _u8L("Slice & Export")));
+    out.push_back(make_command("export_sliced_file", _u8L("Export Sliced File"), _u8L("Slice & Export")));
+    out.push_back(make_command("export_all_sliced_file", _u8L("Export All Sliced Files"), _u8L("Slice & Export")));
+
+    // Calibration wizards (one command per dialog mirroring the Calibration menu, MainFrame.cpp).
+    out.push_back(make_command("calib_temperature", _u8L("Temperature Calibration"), _u8L("Calibration")));
+    out.push_back(make_command("calib_max_volumetric", _u8L("Max Volumetric Speed Calibration"), _u8L("Calibration")));
+    out.push_back(make_command("calib_pressure_advance", _u8L("Pressure Advance Calibration"), _u8L("Calibration")));
+    out.push_back(make_command("calib_flow_ratio", _u8L("Flow Ratio Calibration"), _u8L("Calibration")));
+    out.push_back(make_command("calib_retraction", _u8L("Retraction Calibration"), _u8L("Calibration")));
+    out.push_back(make_command("calib_cornering", _u8L("Cornering Calibration"), _u8L("Calibration")));
+    out.push_back(make_command("calib_input_shaping_freq", _u8L("Input Shaping Frequency Calibration"), _u8L("Calibration")));
+    out.push_back(make_command("calib_input_shaping_damp", _u8L("Input Shaping Damping Calibration"), _u8L("Calibration")));
+    out.push_back(make_command("calib_vfa", _u8L("VFA Calibration"), _u8L("Calibration")));
+
+    // View controls (mirror the View menu; most duplicate the Ctrl+0..6 shortcuts).
+    out.push_back(make_command("view_top", _u8L("View: Top"), _u8L("View")));
+    out.push_back(make_command("view_bottom", _u8L("View: Bottom"), _u8L("View")));
+    out.push_back(make_command("view_front", _u8L("View: Front"), _u8L("View")));
+    out.push_back(make_command("view_rear", _u8L("View: Rear"), _u8L("View")));
+    out.push_back(make_command("view_left", _u8L("View: Left"), _u8L("View")));
+    out.push_back(make_command("view_right", _u8L("View: Right"), _u8L("View")));
+    out.push_back(make_command("view_iso", _u8L("View: Isometric"), _u8L("View")));
+    out.push_back(make_command("view_default", _u8L("View: Default"), _u8L("View")));
+    out.push_back(make_command("view_fit_bed", _u8L("Fit Bed to View"), _u8L("View")));
+    out.push_back(make_command("view_toggle_perspective", _u8L("Toggle Perspective"), _u8L("View")));
+    out.push_back(make_command("reset_window_layout", _u8L("Reset Window Layout"), _u8L("View")));
+
+    // Object operations (single-phase). Each maps to a public Plater method guarded by a can_* /
+    // selection check in run_native_command; structural ops self-update()/schedule re-slice.
+    out.push_back(make_command("obj_delete", _u8L("Delete Selected"), _u8L("Object")));
+    out.push_back(make_command("obj_delete_all", _u8L("Delete All Objects"), _u8L("Object")));
+    out.push_back(make_command("obj_mirror_x", _u8L("Mirror X"), _u8L("Object")));
+    out.push_back(make_command("obj_mirror_y", _u8L("Mirror Y"), _u8L("Object")));
+    out.push_back(make_command("obj_mirror_z", _u8L("Mirror Z"), _u8L("Object")));
+    out.push_back(make_command("obj_split_objects", _u8L("Split to Objects"), _u8L("Object")));
+    out.push_back(make_command("obj_split_parts", _u8L("Split to Parts"), _u8L("Object")));
+    out.push_back(make_command("obj_center", _u8L("Center Selected on Plate"), _u8L("Object")));
+    out.push_back(make_command("obj_drop", _u8L("Drop to Bed"), _u8L("Object")));
+    out.push_back(make_command("obj_fit_volume", _u8L("Scale to Fit Print Volume"), _u8L("Object")));
+    out.push_back(make_command("obj_instances_up", _u8L("Increase Instances"), _u8L("Object")));
+    out.push_back(make_command("obj_instances_down", _u8L("Decrease Instances"), _u8L("Object")));
+    out.push_back(make_command("obj_arrange", _u8L("Auto-Arrange"), _u8L("Object")));
+    out.push_back(make_command("obj_orient", _u8L("Auto-Orient"), _u8L("Object")));
     return out;
 }
 
