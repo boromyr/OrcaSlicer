@@ -9,10 +9,6 @@
 #include "Plater.hpp"
 #include "Widgets/WebViewHostDialog.hpp"
 
-#include <libslic3r/Preset.hpp>
-
-#include <boost/nowide/convert.hpp>
-
 #include <algorithm>
 
 #include <wx/display.h>
@@ -155,27 +151,6 @@ void SpeedDialWebDialog::handle_web_command(const nlohmann::json& payload)
             if (wxGetApp().mainframe)
                 wxGetApp().mainframe->select_tab(from_u8(tab_id));
         }
-    } else if (command == "setting_descriptor") {
-        // Inline editor: hand the page the descriptor for the setting it's editing.
-        const std::string id = payload.value("id", "");
-        call_web_handler(
-            {{"command", "setting_descriptor"}, {"descriptor", wxGetApp().action_registry().setting_descriptor(id)}});
-    } else if (command == "set_setting") {
-        // Inline editor submit. Apply the value; on success close the dialog.
-        const std::string id = payload.value("id", "");
-        const nlohmann::json value = payload.contains("value") ? payload["value"] : nlohmann::json(nullptr);
-        if (id.empty() || !wxGetApp().action_registry().apply_setting(id, value)) {
-            call_web_handler({{"command", "apply_failed"}, {"id", id}});
-            return;
-        }
-        Hide();
-    } else if (command == "open_setting_in_sidebar") {
-        // Non-inline-editable setting (points, plugin-backed, float-or-percent): jump the sidebar.
-        Hide();
-        const std::string opt_key  = payload.value("opt_key", "");
-        const std::string category = payload.value("category", "");
-        if (!opt_key.empty())
-            wxGetApp().sidebar().jump_to_option(opt_key, Preset::Type(payload.value("type", int(Preset::TYPE_INVALID))), boost::nowide::widen(category));
     } else if (command == "resize")
         resize_to_content(json_int_or(payload, "height", 0));
 }

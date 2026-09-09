@@ -173,16 +173,6 @@ public:
     // plugins) aren't separate pages and are not listed. Call on the UI thread; null-safe.
     nlohmann::json tab_options() const;
 
-    // Inline setting editor descriptor for a SettingAction id. Returns the JSON the palette
-    // renders: {id, opt_key, type, title, breadcrumb, category, group, unit, tooltip, editable,
-    // control ("toggle|number|dropdown|combo|text|color"), cardinality ("scalar"|"vector"),
-    // value|values, index_labels[], enum_options[], min|max}. Empty object for a non-setting id.
-    nlohmann::json setting_descriptor(const std::string& id) const;
-    // Apply an edit submitted by the palette. `value` is the control's JSON payload (scalar, or an
-    // array for vector settings). Writes the value(s) into the global preset config and marks the
-    // preset dirty, exactly like a sidebar edit. Returns false on a bad id/type/value.
-    bool apply_setting(const std::string& id, const nlohmann::json& value);
-
 private:
     void         seed_state(AppAction& a) const;               // favourite/stats from config
     AppAction*      find(const std::string& id);

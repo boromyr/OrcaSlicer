@@ -180,17 +180,15 @@ struct SettingAction : AppAction
         , type(type_in)
         , category(std::move(category_in))
     {
-        // A setting is a two-phase command: activating it opens the inline editor (the "setting"
-        // phase) instead of running. Native run() is a no-op fallback; the editor applies through
-        // apply_setting().
+        // A setting is a single-phase command: activating it jumps the sidebar to the option
+        // (like the sidebar's own settings search), then the dial closes. run() performs the jump.
         this->kind  = AppActionKind::Command;
         this->group = std::move(group);
-        this->input = "setting";
     }
 
     AppActionRunResult run(const std::string& /*param*/) const override
     {
-        // Two-phase: the palette collects the edit; native run() is a no-op fallback.
+        wxGetApp().sidebar().jump_to_option(opt_key, type, category);
         return {AppActionRunResult::Level::Success};
     }
 
@@ -693,45 +691,7 @@ std::vector<std::unique_ptr<AppAction>> native_commands()
     return out;
 }
 
-// ---- inline setting editor helpers ------------------------------------------
-
-// The inline editor "control" kind for an option, or "" when it can't be edited inline
-// (plugin-backed values, points, serialized strings, etc.). readonly/legend options are
-// filtered out of the search entirely in materialize_setting_actions(), so they never
-// reach here.
-std::string setting_control(const ConfigOptionDef& def)
-{
-    if (def.readonly || def.gui_type == ConfigOptionDef::GUIType::legend ||
-        def.gui_type == ConfigOptionDef::GUIType::one_string || def.is_plugin_backed())
-        return "";
-    // Serialized vectors are entered as ONE semicolon-separated field (e.g. post_process), which the
-    // per-index editor doesn't model - keep them in the open-in-sidebar bucket.
-    if (def.gui_flags.find("serialized") != std::string::npos)
-        return "";
-    switch (def.gui_type) {
-    case ConfigOptionDef::GUIType::color:      return "color";
-    case ConfigOptionDef::GUIType::i_enum_open:
-    case ConfigOptionDef::GUIType::f_enum_open: return "combo";
-    default: break;
-    }
-    switch (def.type) {
-    case coBool:
-    case coBools: return "toggle";
-    case coEnum:
-    case coEnums: return def.enum_values.empty() ? "combo" : "dropdown";
-    case coInt:
-    case coInts:
-    case coFloat:
-    case coFloats:
-    case coPercent:
-    case coPercents: return "number";
-    case coFloatOrPercent:
-    case coFloatsOrPercents: return "percent";
-    case coString:
-    case coStrings: return "text";
-    default: return "";
-    }
-}
+// ---- setting action helpers --------------------------------------------------
 
 // Self-contained base64 encoder (for the tiny pictogram SVGs), avoiding a dependency on the exact
 // wxBase64Encode overload/return type across wx versions.
@@ -790,41 +750,6 @@ std::string setting_icon_for_key(const std::string& key)
     return "data:image/svg+xml;base64," + base64_encode(data);
 }
 
-// [{value,key,label,icon}...] for an enum/combo. Ordered by enum_values when present, else by the
-// keys_map iteration. label falls back to the key when enum_labels doesn't provide one. `icon` is
-// the value's pattern pictogram when one exists, empty otherwise.
-nlohmann::json setting_enum_options(const ConfigOptionDef& def)
-{
-    nlohmann::json out = nlohmann::json::array();
-    auto label_at = [&](size_t i, const std::string& key) -> std::string {
-        return (i < def.enum_labels.size() && !def.enum_labels[i].empty()) ? def.enum_labels[i] : key;
-    };
-    if (def.enum_keys_map != nullptr) {
-        std::vector<std::string> ordered;
-        if (!def.enum_values.empty())
-            ordered = def.enum_values;
-        else
-            for (const auto& kv : *def.enum_keys_map)
-                ordered.push_back(kv.first);
-        for (size_t i = 0; i < ordered.size(); ++i) {
-            auto it = def.enum_keys_map->find(ordered[i]);
-            if (it == def.enum_keys_map->end())
-                continue;
-            out.push_back({{"value", it->second},
-                           {"key", ordered[i]},
-                           {"label", label_at(i, ordered[i])},
-                           {"icon", setting_icon_for_key(ordered[i])}});
-        }
-    } else {
-        for (size_t i = 0; i < def.enum_values.size(); ++i)
-            out.push_back({{"value", (long long) i},
-                           {"key", def.enum_values[i]},
-                           {"label", label_at(i, def.enum_values[i])},
-                           {"icon", setting_icon_for_key(def.enum_values[i])}});
-    }
-    return out;
-}
-
 // The pattern pictogram for a setting's CURRENT value (its enum int), empty when it isn't a
 // pattern-style enum or the value has no icon. Used for the search-result tile.
 std::string setting_action_icon(const SettingAction& a)
@@ -853,146 +778,6 @@ std::string setting_action_icon(const SettingAction& a)
 }
 
 std::string SettingAction::icon() const { return setting_action_icon(*this); }
-
-// Current value of the option at vector index `idx` as JSON (bool/number/string), or null for a
-// type the inline editor doesn't render. `config` is the tab's live config; when an option is
-// absent the def's default is shown.
-nlohmann::json setting_value_json(const DynamicPrintConfig& config, const ConfigOptionDef& def, size_t idx)
-{
-    const ConfigOption* opt = config.option(def.opt_key);
-    const ConfigOption* root = opt ? opt : def.default_value.get();
-    if (!root)
-        return nullptr;
-    switch (def.type) {
-    case coBool:    return root->getBool();
-    case coInt:     return root->getInt();
-    case coFloat:   return root->getFloat();
-    case coPercent: return root->getFloat();
-    case coString:  return static_cast<const ConfigOptionString*>(root)->value;
-    case coEnum:    return root->getInt();
-    case coBools: {
-        if (auto v = dynamic_cast<const ConfigOptionBools*>(root))
-            return bool(v->get_at(idx));
-        if (auto v = dynamic_cast<const ConfigOptionBoolsNullable*>(root))
-            return bool(v->get_at(idx) != 0);
-        return nullptr;
-    }
-    case coInts: {
-        if (auto v = dynamic_cast<const ConfigOptionInts*>(root))
-            return v->get_at(idx);
-        if (auto v = dynamic_cast<const ConfigOptionIntsNullable*>(root)) {
-            const int nil = ConfigOptionIntsNullable::nil_value();
-            int val = v->get_at(idx);
-            return val == nil ? nlohmann::json(nullptr) : nlohmann::json(val);
-        }
-        return nullptr;
-    }
-    case coFloats: {
-        if (auto v = dynamic_cast<const ConfigOptionFloats*>(root))
-            return v->get_at(idx);
-        if (auto v = dynamic_cast<const ConfigOptionFloatsNullable*>(root)) {
-            double val = v->get_at(idx);
-            return std::isnan(val) ? nlohmann::json(nullptr) : nlohmann::json(val);
-        }
-        return nullptr;
-    }
-    case coPercents: {
-        if (auto v = dynamic_cast<const ConfigOptionPercents*>(root))
-            return v->get_at(idx);
-        if (auto v = dynamic_cast<const ConfigOptionPercentsNullable*>(root)) {
-            double val = v->get_at(idx);
-            return std::isnan(val) ? nlohmann::json(nullptr) : nlohmann::json(val);
-        }
-        return nullptr;
-    }
-    case coStrings: return static_cast<const ConfigOptionStrings*>(root)->get_at(idx);
-    case coEnums: {
-        if (auto v = dynamic_cast<const ConfigOptionEnumsGeneric*>(root))
-            return v->get_at(idx);
-        if (auto v = dynamic_cast<const ConfigOptionEnumsGenericNullable*>(root)) {
-            const int nil = ConfigOptionEnumsGenericNullable::nil_value();
-            int val = v->get_at(idx);
-            return val == nil ? nlohmann::json(nullptr) : nlohmann::json(val);
-        }
-        return nullptr;
-    }
-    case coFloatOrPercent: return root->serialize();
-    case coFloatsOrPercents: {
-        if (auto v = dynamic_cast<const ConfigOptionFloatsOrPercents*>(root)) {
-            auto ss = v->vserialize();
-            return idx < ss.size() ? ss[idx] : nullptr;
-        }
-        if (auto v = dynamic_cast<const ConfigOptionFloatsOrPercentsNullable*>(root)) {
-            auto ss = v->vserialize();
-            return idx < ss.size() ? ss[idx] : nullptr;
-        }
-        return nullptr;
-    }
-    default: return nullptr;
-    }
-}
-
-// How many scalar values the option currently has (1 for scalars, the array length for vectors).
-size_t setting_value_count(const DynamicPrintConfig& config, const ConfigOptionDef& def)
-{
-    if ((int(def.type) & int(coVectorType)) == 0)
-        return 1;
-    // size() lives on ConfigOptionVectorBase, not ConfigOption - dynamic_cast to it covers every
-    // vector type (and their nullable variants) polymorphically.
-    const ConfigOption* opt = config.option(def.opt_key);
-    if (opt)
-        if (auto v = dynamic_cast<const ConfigOptionVectorBase*>(opt))
-            return v->size();
-    if (def.default_value)
-        if (auto v = dynamic_cast<const ConfigOptionVectorBase*>(def.default_value.get()))
-            return v->size();
-    return 1;
-}
-
-// boost::any for a single element, matching what Slic3r::GUI::change_opt_value expects.
-boost::any setting_any_from_json(const ConfigOptionDef& def, const nlohmann::json& v)
-{
-    if (!v.is_null()) {
-        switch (def.type) {
-        case coBool:    return boost::any(v.is_boolean() ? v.get<bool>() : v.get<int>() != 0);
-        case coInt:     return boost::any(v.get<int>());
-        case coFloat:
-        case coPercent: return boost::any(v.get<double>());
-        case coString:  return boost::any(v.get<std::string>());
-        case coEnum:    return boost::any(v.get<int>());
-        case coBools:   return boost::any(static_cast<unsigned char>(v.get<bool>() ? 1 : 0));
-        case coInts:    return boost::any(v.get<int>());
-        case coFloats:
-        case coPercents: return boost::any(v.get<double>());
-        case coStrings: return boost::any(v.get<std::string>());
-        case coFloatOrPercent:
-        case coFloatsOrPercents: {
-            // change_opt_value detects "percent" via a trailing '%', so trim whitespace first or a
-            // stray space (e.g. "10% ") would be misread as mm.
-            std::string s = v.is_string() ? v.get<std::string>() : std::to_string(v.get<double>());
-            boost::trim(s);
-            // An empty string would make change_opt_value's str.back() UB - bail out to a rejected apply.
-            return s.empty() ? boost::any() : boost::any(s);
-        }
-        case coEnums:   return boost::any(v.get<int>());
-        default: break;
-        }
-    }
-    // Coerce numeric types that may arrive as a different JSON numeric type.
-    if (v.is_number()) {
-        switch (def.type) {
-        case coInt:
-        case coEnums: return boost::any(v.get<int>());
-        case coFloat:
-        case coPercent:
-        case coInts:
-        case coFloats:
-        case coPercents: return boost::any(v.get<double>());
-        default: break;
-        }
-    }
-    return boost::any();
-}
 
 } // namespace
 
@@ -1257,16 +1042,6 @@ void ActionRegistry::materialize_setting_actions()
 
     std::unordered_set<std::string> seen;
     for (const Search::Option& opt : options) {
-        // Omit rows the inline editor can't represent and that aren't useful as a jump target:
-        // readonly (e.g. the detected thread count) and legend (static text) GUI rows. They remain
-        // in the sidebar's own search; only the Speed Dial pool drops them.
-        Tab* tab = wxGetApp().get_tab(opt.type);
-        if (tab && tab->get_config()) {
-            const ConfigOptionDef* def = tab->get_config()->def()->get(opt.opt_key());
-            if (!def || def->readonly || def->gui_type == ConfigOptionDef::GUIType::legend)
-                continue;
-        }
-
         const std::string id = SettingAction::id_for(opt.opt_key(), opt.type);
         seen.insert(id);
 
@@ -1466,142 +1241,6 @@ nlohmann::json ActionRegistry::tab_options() const
         out.push_back({{"id", id.ToStdString()}, {"title", notebook->GetPageText(i).ToStdString()}});
     }
     return out;
-}
-
-// ---- inline setting editor (read the current value) --------------------------
-
-nlohmann::json ActionRegistry::setting_descriptor(const std::string& id) const
-{
-    assert(wxThread::IsMain());
-    const AppAction*     a  = by_id(id);
-    const SettingAction* sa = dynamic_cast<const SettingAction*>(a);
-    if (!sa)
-        return nlohmann::json::object();
-    Tab* tab = wxGetApp().get_tab(sa->type);
-    if (!tab)
-        return nlohmann::json::object();
-    DynamicPrintConfig* config = tab->get_config();
-    if (!config)
-        return nlohmann::json::object();
-    const ConfigOptionDef* def = config->def()->get(sa->opt_key);
-    if (!def)
-        return nlohmann::json::object();
-
-    const std::string control = setting_control(*def);
-    const bool        vector  = (int(def->type) & int(coVectorType)) != 0;
-
-    nlohmann::json d = {{"id", sa->id()},
-                        {"opt_key", sa->opt_key},
-                        {"type", int(sa->type)},
-                        {"title", a->title()},
-                        {"breadcrumb", a->source_name()},
-                        {"category", boost::nowide::narrow(sa->category)},
-                        {"unit", def->sidetext},
-                        {"tooltip", def->tooltip},
-                        {"editable", !control.empty()},
-                        {"control", control},
-                        {"cardinality", vector ? "vector" : "scalar"}};
-
-    if (!control.empty()) {
-        // Hide unbounded min/max so the page doesn't clamp a sane value to ±FLT_MAX.
-        if (def->min > -FLT_MAX)
-            d["min"] = def->min;
-        if (def->max < FLT_MAX)
-            d["max"] = def->max;
-        if (control == "number")
-            d["is_int"] = (def->type == coInt || def->type == coInts);
-        if (control == "dropdown" || control == "combo")
-            d["enum_options"] = setting_enum_options(*def);
-        if (vector) {
-            nlohmann::json values = nlohmann::json::array();
-            nlohmann::json labels = nlohmann::json::array();
-            const size_t  n      = setting_value_count(*config, *def);
-            for (size_t i = 0; i < n; ++i) {
-                values.push_back(setting_value_json(*config, *def, i));
-                labels.push_back(std::to_string(i + 1));
-            }
-            d["values"]       = std::move(values);
-            d["index_labels"] = std::move(labels);
-        } else {
-            d["value"] = setting_value_json(*config, *def, 0);
-        }
-    }
-    return d;
-}
-
-// ---- inline setting editor (write the edited value back) ---------------------
-
-bool ActionRegistry::apply_setting(const std::string& id, const nlohmann::json& value)
-{
-    assert(wxThread::IsMain());
-    const AppAction*     a  = by_id(id);
-    const SettingAction* sa = dynamic_cast<const SettingAction*>(a);
-    if (!sa)
-        return false;
-    Tab* tab = wxGetApp().get_tab(sa->type);
-    if (!tab)
-        return false;
-    DynamicPrintConfig* config = tab->get_config();
-    if (!config)
-        return false;
-    const ConfigOptionDef* def = config->def()->get(sa->opt_key);
-    if (!def)
-        return false;
-    const std::string control = setting_control(*def);
-    if (control.empty())
-        return false;
-
-    const bool   vector = (int(def->type) & int(coVectorType)) != 0;
-    const size_t n      = vector ? (value.is_array() ? value.size() : 0) : 1;
-    if (vector && n == 0)
-        return false;
-
-    for (size_t i = 0; i < n; ++i) {
-        const nlohmann::json& elem = vector ? value[i] : value;
-        boost::any any             = setting_any_from_json(*def, elem);
-        if (any.empty())
-            return false;
-        if (control == "number" && elem.is_number()) {
-            const double d = elem.get<double>();
-            if (d < def->min || d > def->max)
-                return false;
-        }
-        if (control == "percent" && elem.is_string()) {
-            // "mm or %" value: strip a trailing %/whitespace, clamp the numeric part to [min,max].
-            // Reject anything that isn't a well-formed number (which change_opt_value would throw on).
-            std::string s = elem.get<std::string>();
-            boost::trim(s);
-            if (!s.empty() && s.back() == '%')
-                s.pop_back();
-            boost::trim(s);
-            if (s.empty())
-                return false;
-            char* end    = nullptr;
-            const double d = std::strtod(s.c_str(), &end);
-            if (end == s.c_str() || *end != '\0')
-                return false;
-            if (d < def->min || d > def->max)
-                return false;
-        }
-        Slic3r::GUI::change_opt_value(*config, sa->opt_key, any, int(i));
-    }
-
-    // Mark the preset modified like a sidebar edit. Scalar options also get the standard
-    // post-change hook so dependent settings refresh; vector options have no unambiguous scalar
-    // value to pass, so on_value_change is skipped (the config write + dirty flag is still correct).
-    tab->update_dirty();
-    if (!vector) {
-        boost::any any = setting_any_from_json(*def, value);
-        if (!any.empty())
-            tab->on_value_change(sa->opt_key, any);
-    }
-
-    // The config write is separate from the on-screen Field, so repaint the field(s) that display
-    // this option (on whatever page they live, not just the active page) - otherwise the sidebar
-    // shows the "modified" arrow but keeps the stale value pushed to the last edit/reload.
-    if (Page* page = nullptr; tab->get_field(sa->opt_key, &page) && page)
-        page->reload_config();
-    return true;
 }
 
 }} // namespace Slic3r::GUI
