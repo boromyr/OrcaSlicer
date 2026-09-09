@@ -389,22 +389,6 @@ std::vector<NativeCommand> build_command_catalog()
     });
 
     // ---- Printer / device connection ----
-    add("connect_printer", _u8L("Connect Printer"), _u8L("Printer"), [](const std::string&) {
-        if (Plater* plater = wxGetApp().plater())
-            plater->connect_to_printer();
-        return AppActionRunResult{AppActionRunResult::Level::Success};
-    });
-    add("disconnect_printer", _u8L("Disconnect Printer"), _u8L("Printer"), [](const std::string&) {
-        DeviceManager* dev = wxGetApp().getDeviceManager();
-        if (!dev)
-            return AppActionRunResult{AppActionRunResult::Level::Info, _L("Printer connection is unavailable.")};
-        if (MachineObject* machine = dev->get_selected_machine()) {
-            machine->disconnect();
-            dev->set_selected_machine("");
-            return AppActionRunResult{AppActionRunResult::Level::Success};
-        }
-        return AppActionRunResult{AppActionRunResult::Level::Info, _L("Printer is not connected.")};
-    });
     add("sync_ams", _u8L("Synchronize Filament List from AMS"), _u8L("Printer"), [](const std::string&) {
         Plater* plater     = wxGetApp().plater();
         DeviceManager* dev = wxGetApp().getDeviceManager();

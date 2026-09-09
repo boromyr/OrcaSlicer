@@ -354,9 +354,6 @@ public:
     void add_file();
     // Returns false when no object was added (e.g. the user cancelled the load dialog).
     bool add_model(bool imperial_units = false, std::string fname = "");
-    // Opens the connection/management dialog appropriate for the current printer's
-    // technology: the machine picker for BBL/printer-agents, the print-host dialog otherwise.
-    void connect_to_printer();
     void import_zip_archive();
     void import_sl1_archive();
     void extract_config_from_project();
