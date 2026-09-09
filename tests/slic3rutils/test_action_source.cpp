@@ -53,3 +53,11 @@ TEST_CASE("ActionRegistry takes exclusive ownership of published actions", "[spe
 
     STATIC_CHECK(std::is_same_v<decltype(&ActionRegistry::upsert), ExpectedUpsert>);
 }
+
+// A dynamic "Go to Plate N" action is keyed by plate index (not the display title), so renaming
+// a plate never re-keys it - the same contract as a setting action.
+TEST_CASE("Go-to-plate actions are keyed by index, not title", "[speeddial][actions]")
+{
+    CHECK(AppAction::compose_id("orca_plate_goto", "0", "orca") == "orca_plate_goto:0:orca");
+    CHECK(AppAction::compose_id("orca_plate_goto", "2", "orca") == "orca_plate_goto:2:orca");
+}

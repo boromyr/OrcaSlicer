@@ -192,6 +192,11 @@ private:
     // Called at the top of snapshot() so the palette always reflects the current configs.
     void materialize_setting_actions();
 
+    // (Re)materialise one "Go to Plate N" action per live plate, so the palette lists every plate
+    // directly on each spawn (no second-phase picker). FFF-editor only; SLA/gcode modes have no
+    // plate UI, so nothing is materialised and stale ids are dropped. Called at the top of snapshot().
+    void materialize_plate_actions();
+
     // Loader callbacks (marshalled to the UI thread) land here. refresh_source rebuilds
     // one plugin's whole action set; refresh_capability touches a single capability.
     void refresh_source(const std::string& plugin_key, ActionChange change);

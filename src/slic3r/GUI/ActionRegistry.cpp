@@ -10,6 +10,7 @@
 #include "MainFrame.hpp"
 #include "Notebook.hpp"
 #include "Plater.hpp"
+#include "PlateSettingsDialog.hpp"
 #include "Search.hpp"
 #include "Tab.hpp"
 #include "slic3r/plugin/PluginManager.hpp"
@@ -33,6 +34,7 @@
 #include <cmath>
 #include <cstdlib>
 #include <ctime>
+#include <exception>
 #include <fstream>
 #include <iterator>
 #include <string>
@@ -142,6 +144,7 @@ constexpr const char* kCommandPrefix  = "orca_command";
 constexpr const char* kOrcaSourceKey  = "orca";
 constexpr const char* kOrcaSourceName = "OrcaSlicer";
 constexpr const char* kSettingPrefix  = "orca_setting";
+constexpr const char* kPlateGotoPrefix = "orca_plate_goto";
 
 // Display context for a setting action's eyebrow, e.g. the "Process" in "Process : Quality : Layers".
 // Keyed by the option's preset type so the palette reads like the settings sidebar tabs.
@@ -492,6 +495,80 @@ AppActionRunResult run_native_command(const std::string& command_key, const std:
     // Auto-orient has no dedicated can_*; can_arrange covers "objects exist + UI worker idle".
     if (command_key == "obj_orient")
         return obj([](Plater* p) { return p->can_arrange(); }, [](Plater* p) { p->orient(); });
+
+    // ---- Plate management. Plates are a filament (FFF) feature: SLA builds a single plate with
+    // no plate UI, and gcode-only mode has no editable project - so gate every plate op on FFF +
+    // the normal editor (mirroring where the plate toolbar/menu live). These act on the CURRENT
+    // plate (delete/duplicate take -1) except plate_goto, which jumps to the index in `param`.
+    auto plate_plater = [&]() -> Plater* {
+        return (plater && plater->printer_technology() == ptFFF && !plater->only_gcode_mode()) ? plater : nullptr;
+    };
+    const AppActionRunResult plate_unavailable{AppActionRunResult::Level::Info, _L("Plates are a filament (FFF) feature.")};
+
+    if (command_key == "plate_add") {
+        if (Plater* p = plate_plater(); p) {
+            if (!p->can_add_plate())
+                return {AppActionRunResult::Level::Info, _L("Cannot add another plate (maximum reached).")};
+            p->add_plate();
+            return {AppActionRunResult::Level::Success};
+        }
+        return plate_unavailable;
+    }
+    if (command_key == "plate_duplicate") {
+        if (Plater* p = plate_plater(); p) {
+            if (!p->can_add_plate())
+                return {AppActionRunResult::Level::Info, _L("Cannot duplicate a plate (maximum reached).")};
+            p->duplicate_plate();
+            return {AppActionRunResult::Level::Success};
+        }
+        return plate_unavailable;
+    }
+    if (command_key == "plate_delete") {
+        if (Plater* p = plate_plater(); p) {
+            if (!p->can_delete_plate())
+                return {AppActionRunResult::Level::Info, _L("Cannot delete the only plate.")};
+            p->delete_plate();
+            return {AppActionRunResult::Level::Success};
+        }
+        return plate_unavailable;
+    }
+    if (command_key == "plate_rename") {
+        if (Plater* p = plate_plater(); p) {
+            PartPlate* curr = p->get_partplate_list().get_curr_plate();
+            PlateNameEditDialog dlg((wxWindow*) wxGetApp().mainframe, wxID_ANY, _L("Edit Plate Name"));
+            dlg.set_plate_name(from_u8(curr->get_plate_name()));
+            if (dlg.ShowModal() == wxID_YES)
+                curr->set_plate_name(dlg.get_plate_name().ToUTF8().data());
+            return {AppActionRunResult::Level::Success};
+        }
+        return plate_unavailable;
+    }
+    if (command_key == "plate_toggle_lock") {
+        if (Plater* p = plate_plater(); p) {
+            PartPlateList& plates  = p->get_partplate_list();
+            const int      index   = plates.get_curr_plate_index();
+            p->take_snapshot("lock partplate");
+            plates.lock_plate(index, !plates.is_locked(index));
+            return {AppActionRunResult::Level::Success};
+        }
+        return plate_unavailable;
+    }
+    if (command_key == "plate_goto") {
+        if (Plater* p = plate_plater(); p) {
+            PartPlateList& plates = p->get_partplate_list();
+            const int      count  = plates.get_plate_count();
+            if (count <= 0)
+                return {AppActionRunResult::Level::Info, _L("No plates available.")};
+            int index = 0;
+            try {
+                index = std::stoi(param);
+            } catch (const std::exception&) {}
+            index = std::clamp(index, 0, count - 1);
+            p->select_plate(index, false);
+            return {AppActionRunResult::Level::Success};
+        }
+        return plate_unavailable;
+    }
     return {AppActionRunResult::Level::Info, _L("Unknown command.")};
 }
 
@@ -514,6 +591,29 @@ struct CommandAction : AppAction
 
 std::unique_ptr<AppAction> make_command(std::string key, std::string title, std::string group, std::string input = "")
 { return std::make_unique<CommandAction>(std::move(key), std::move(title), std::move(group), std::move(input)); }
+
+// A dynamic "Go to Plate N" action, one per live plate, rebuilt on every snapshot() (so a
+// rename/move immediately shows up). id is keyed by plate index, NOT the display title, so
+// renaming a plate never re-keys it - the same contract as SettingAction. A pinned "Go to
+// Plate N" whose plate is deleted simply stops resolving (visibleFavourites drops dead pins).
+struct PlateAction : AppAction
+{
+    int plate_index;
+
+    static std::string id_for(int index)
+    { return AppAction::compose_id(kPlateGotoPrefix, std::to_string(index), kOrcaSourceKey); }
+
+    PlateAction(int index, std::string title, std::string source_name)
+        : AppAction(AppActionId{id_for(index)}, std::move(title), kOrcaSourceKey, std::move(source_name))
+        , plate_index(index)
+    {
+        this->kind  = AppActionKind::Command;
+        this->group = _u8L("Plate");
+    }
+
+    AppActionRunResult run(const std::string& /*param*/) const override
+    { return run_native_command("plate_goto", std::to_string(plate_index)); }
+};
 
 // The built-in palette commands, registered once at init().
 std::vector<std::unique_ptr<AppAction>> native_commands()
@@ -582,6 +682,14 @@ std::vector<std::unique_ptr<AppAction>> native_commands()
     out.push_back(make_command("obj_instances_down", _u8L("Decrease Instances"), _u8L("Object")));
     out.push_back(make_command("obj_arrange", _u8L("Auto-Arrange"), _u8L("Object")));
     out.push_back(make_command("obj_orient", _u8L("Auto-Orient"), _u8L("Object")));
+
+    // Plate management. These act on the CURRENT plate (like Plater::delete_plate(-1)); the
+    // per-plate "Go to Plate N" actions are dynamic and materialised in materialize_plate_actions().
+    out.push_back(make_command("plate_add", _u8L("Add Plate"), _u8L("Plate")));
+    out.push_back(make_command("plate_duplicate", _u8L("Duplicate Plate"), _u8L("Plate")));
+    out.push_back(make_command("plate_delete", _u8L("Delete Plate"), _u8L("Plate")));
+    out.push_back(make_command("plate_rename", _u8L("Rename Plate"), _u8L("Plate")));
+    out.push_back(make_command("plate_toggle_lock", _u8L("Toggle Plate Lock"), _u8L("Plate")));
     return out;
 }
 
@@ -1195,6 +1303,65 @@ void ActionRegistry::materialize_setting_actions()
     }
 }
 
+void ActionRegistry::materialize_plate_actions()
+{
+    assert(wxThread::IsMain());
+
+    // Plates are a filament (FFF) feature: SLA has a single plate and no plate UI, and gcode-only
+    // mode has no editable project - so no "Go to Plate N" actions are offered there.
+    Plater* plater = wxTheApp ? wxGetApp().plater() : nullptr;
+    if (!plater || plater->printer_technology() != ptFFF || plater->only_gcode_mode()) {
+        // Drop any stale plate actions (e.g. the printer technology switched to SLA).
+        for (auto it = m_actions.begin(); it != m_actions.end();) {
+            if (it->first.rfind(kPlateGotoPrefix, 0) == 0)
+                it = m_actions.erase(it);
+            else
+                ++it;
+        }
+        return;
+    }
+
+    // Persisted per-action state, read ONCE (mirrors materialize_setting_actions) so a relisted
+    // "Go to Plate N" keeps its recency/favourite when the plate is renamed - the id is index-keyed.
+    nlohmann::json stats = read_section("stats", nlohmann::json::object());
+    if (!stats.is_object())
+        stats = nlohmann::json::object();
+    const std::vector<std::string> favs = favourite_ids();
+
+    const std::vector<PartPlate*>& list = plater->get_partplate_list().get_plate_list();
+    std::unordered_set<std::string> seen;
+    for (size_t i = 0; i < list.size(); ++i) {
+        PartPlate* plate = list[i];
+        if (!plate)
+            continue;
+        const std::string id = PlateAction::id_for(int(i));
+        seen.insert(id);
+
+        // "Go to Plate N" + " (name)" when the plate is named, matching the object-list label.
+        std::string title(_u8L("Go to Plate"));
+        title += " " + std::to_string(i + 1);
+        const std::string name = plate->get_plate_name();
+        if (!name.empty())
+            title += " (" + name + ")";
+
+        auto action     = std::make_unique<PlateAction>(int(i), title, kOrcaSourceName);
+        action->favourite = std::find(favs.begin(), favs.end(), id) != favs.end();
+        if (auto it = stats.find(id); it != stats.end() && it->is_object()) {
+            action->count = it->value("count", 0);
+            action->last  = it->value("last", 0LL);
+        }
+        m_actions.insert_or_assign(action->id(), std::shared_ptr<AppAction>(std::move(action)));
+    }
+
+    // Drop plate actions whose index no longer exists (a plate was deleted / moved to the front).
+    for (auto it = m_actions.begin(); it != m_actions.end();) {
+        if (it->first.rfind(kPlateGotoPrefix, 0) == 0 && !seen.count(it->first))
+            it = m_actions.erase(it);
+        else
+            ++it;
+    }
+}
+
 bool ActionRegistry::should_ask(const std::string& id) const
 {
     assert(wxThread::IsMain());
@@ -1216,9 +1383,11 @@ void ActionRegistry::suppress_ask(const std::string& id)
 nlohmann::json ActionRegistry::snapshot()
 {
     assert(wxThread::IsMain());
-    // Settings are first-class actions; make sure the current visible option set is materialised
-    // before we serialise the pool (tabs_list is built by the time the palette opens).
+    // Settings and plates are first-class actions; make sure the current visible option set and the
+    // live plate list are materialised before we serialise the pool (tabs_list is built by the time
+    // the palette opens).
     materialize_setting_actions();
+    materialize_plate_actions();
 
     std::vector<const AppAction*> sorted;
     sorted.reserve(m_actions.size());
