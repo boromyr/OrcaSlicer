@@ -61,3 +61,13 @@ TEST_CASE("Go-to-plate actions are keyed by index, not title", "[speeddial][acti
     CHECK(AppAction::compose_id("orca_plate_goto", "0", "orca") == "orca_plate_goto:0:orca");
     CHECK(AppAction::compose_id("orca_plate_goto", "2", "orca") == "orca_plate_goto:2:orca");
 }
+
+// A dynamic "Open recent project" action is keyed by file path (not the display name), so renaming
+// a project or reordering the recents list never re-keys it - the same contract as a setting action.
+TEST_CASE("Recent-project actions are keyed by path, not title", "[speeddial][actions]")
+{
+    CHECK(AppAction::compose_id("orca_recent_project", "/a/b/project.3mf", "orca") ==
+          "orca_recent_project:/a/b/project.3mf:orca");
+    CHECK(AppAction::compose_id("orca_recent_project", "C:/Data/cube.3mf", "orca") ==
+          "orca_recent_project:C:/Data/cube.3mf:orca");
+}

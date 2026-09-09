@@ -5,7 +5,7 @@ const vm = require("vm"), assert = require("assert"), fs = require("fs");
 const ctx = {};
 vm.createContext(ctx);
 vm.runInContext(fs.readFileSync(__dirname + "/fuzzy-search.js", "utf8"), ctx);
-const { FoldChar, Norm, EscapeRegExp, FuzzyRanges, WholeWordRanges } = ctx;
+const { FoldChar, Norm, NormText, EscapeRegExp, FuzzyRanges, WholeWordRanges, FuzzyRangesNorm, WholeWordRangesNorm } = ctx;
 
 // FoldChar / Norm: accents fold, case only folds when case-insensitive.
 assert.equal(FoldChar("é"), "e");
@@ -33,5 +33,16 @@ assert.deepEqual(WholeWordRanges("a.b", "a", false), [[0, 1]]);      // '.' is a
 // EscapeRegExp: regex metachars in the query are treated literally by whole-word.
 assert.equal(EscapeRegExp("a.b*"), "a\\.b\\*");
 assert.deepEqual(WholeWordRanges("c++ tool", "c", false), [[0, 1]]); // '+' would be a regex error unescaped
+
+// FuzzyRangesNorm: prefers the most-contiguous (smallest-span) occurrence over greedy-leftmost, so a
+// stray earlier character does not steal the highlight from a later tight word.
+assert.deepEqual(FuzzyRangesNorm(NormText("Auto-Orient", false), NormText("orient", false)), [[5, 11]]);
+// A contiguous run inside a larger word is also preferred over a scattered greedy pick.
+assert.deepEqual(FuzzyRangesNorm(NormText("AutoOriented", false), NormText("orient", false)), [[4, 10]]);
+assert.equal(FuzzyRangesNorm(NormText("Measure", false), NormText("xyz", false)), null); // no subsequence
+
+// WholeWordRangesNorm: \b-bounded literal against a pre-normalized haystack, offsets in original coords.
+assert.deepEqual(WholeWordRangesNorm(NormText("Auto-Orient", false), NormText("orient", false)), [[5, 11]]);
+assert.equal(WholeWordRangesNorm(NormText("AutoOriented", false), NormText("orient", false)), null); // inside a word
 
 console.log("ok");

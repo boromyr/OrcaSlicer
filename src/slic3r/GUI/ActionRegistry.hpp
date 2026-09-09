@@ -81,11 +81,6 @@ struct AppAction
     // commands (e.g. a layer percentage); plugins ignore it.
     virtual AppActionRunResult run(const std::string& param = {}) const = 0;
 
-    // Optional data:URI for a small pictogram to show in the palette row/tile/the editor
-    // (e.g. the current infill/pattern). Empty string = fall back to the monogram. Only
-    // SettingAction overrides this; the base returns an empty string.
-    virtual std::string icon() const { return {}; }
-
 protected:
     // The definition is constructor-set and immutable. Refreshes replace an action
     // instead of mutating identity after the registry has indexed it by id.
@@ -186,6 +181,11 @@ private:
     // directly on each spawn (no second-phase picker). FFF-editor only; SLA/gcode modes have no
     // plate UI, so nothing is materialised and stale ids are dropped. Called at the top of snapshot().
     void materialize_plate_actions();
+
+    // (Re)materialise one "Open recent project <name>" action per recent project file, so the
+    // palette lists every recent project and can load it by clicking. Keyed by file path (stable);
+    // files that no longer exist are skipped and their stale ids dropped. Called at the top of snapshot().
+    void materialize_recent_project_actions();
 
     // Loader callbacks (marshalled to the UI thread) land here. refresh_source rebuilds
     // one plugin's whole action set; refresh_capability touches a single capability.

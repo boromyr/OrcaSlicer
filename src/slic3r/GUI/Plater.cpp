@@ -7138,6 +7138,7 @@ struct Plater::priv
     void on_action_publish(wxCommandEvent &evt);
     void on_action_print_plate(SimpleEvent&);
     void open_machine_select_dialog(int plate_idx, PrintFromType print_type = PrintFromType::FROM_NORMAL);
+    void connect_to_printer();
     void on_action_print_all(SimpleEvent&);
     void on_action_export_gcode(SimpleEvent&);
     void on_action_send_gcode(SimpleEvent&);
@@ -12728,6 +12729,22 @@ void Plater::priv::open_machine_select_dialog(int plate_idx, PrintFromType print
     m_select_machine_dlg->ShowModal();
 }
 
+void Plater::priv::connect_to_printer()
+{
+    // BBL network (vendor BBL, not print-host) and printer-agents mode surface the real
+    // machine picker (lists discovered printers, connects on selection). Everything else
+    // is a print-host printer: the Connection button's dialog (host/API-key config).
+    PresetBundle* pb           = wxGetApp().preset_bundle;
+    const bool    bbl_or_agent = (pb && pb->use_bbl_network()) ||
+                                 wxGetApp().app_config->get_bool("use_printer_agents");
+    if (bbl_or_agent)
+        open_machine_select_dialog(q->get_partplate_list().get_curr_plate_index());
+    else {
+        PhysicalPrinterDialog dlg(q->GetParent());
+        dlg.ShowModal();
+    }
+}
+
 void Plater::priv::on_action_send_to_multi_machine(SimpleEvent&)
 {
     if (!m_send_multi_dlg)
@@ -17510,6 +17527,8 @@ void Plater::collapse_sidebar(bool collapse) { p->collapse_sidebar(collapse); }
 Sidebar::DockingState Plater::get_sidebar_docking_state() const { return p->get_sidebar_docking_state(); }
 
 void Plater::reset_window_layout() { p->reset_window_layout(); }
+
+void Plater::connect_to_printer() { p->connect_to_printer(); }
 
 //BBS
 void Plater::select_curr_plate_all() { p->select_curr_plate_all(); }

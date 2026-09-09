@@ -39,37 +39,60 @@ var qEl = null, listEl = null, favEl = null, clearEl = null, eyeEl = null, count
 
 // ---- pure helpers (no DOM; unit-tested) -------------------------------------
 // Pre-normalized haystacks, cached on the action object. The fold is length-preserving (1:1 per
-// char) so the ranges FuzzyRangesNorm returns slice the ORIGINAL title/source text correctly. The
-// action objects arrive from C++ and are stable for the dialog's lifetime, so we compute these once.
+// char) so the ranges FuzzyRangesNorm returns slice the ORIGINAL title/group/source text correctly.
+// The action objects arrive from C++ and are stable for the dialog's lifetime, so we compute these once.
 function titleNorm(a) {
     if (a._tn === undefined)
         a._tn = NormText(a.title, false);
     return a._tn;
 }
-function otherNorm(a) {
-    if (a._on === undefined)
-        a._on = NormText((a.source || "") + " " + (a.group || ""), false);
-    return a._on;
+// The eyebrow (header) line shows group when present, else source. Settings keep an empty group so
+// their source path is the eyebrow; commands / plates / recents carry a non-empty group. Splitting the
+// two lets a match range stay aligned to whichever string the eyebrow actually renders.
+function groupNorm(a) {
+    if (a._gn === undefined)
+        a._gn = NormText(a.group || "", false);
+    return a._gn;
+}
+function sourceNorm(a) {
+    if (a._sn === undefined)
+        a._sn = NormText(a.source || "", false);
+    return a._sn;
 }
 
-// Relevance score for a single field vs the current query needle, or -1 when there's no match.
-// Higher is better: an earlier start and a more contiguous (fewer gaps) match beat a scattered late one.
-function matchScoreNorm(haystackNorm) {
-    if (!searchNeedle) return -1;
-    var r = FuzzyRangesNorm(haystackNorm || "", searchNeedle);
-    if (!r) return -1;
-    var gaps = 0;
-    for (var i = 1; i < r.length; i++)
-        gaps += r[i][0] - r[i - 1][1];
-    return 1000 - r[0][0] * 10 - gaps * 10;
+// Match one pre-normalized field vs the current needle. Returns {score, ranges, contiguous} when the
+// needle is present, else null. wwRe is a compiled whole-word (\b-bounded) regex for the current needle.
+// A whole-word hit is preferred - it highlights the full word (e.g. "orient" in "Auto-Orient", not the
+// stray "o" of "Auto") and marks a perfect match. Otherwise FuzzyRangesNorm (which now prefers the
+// most-contiguous run) is used. score is higher for an earlier start and fewer gaps; contiguous marks
+// a perfect match - the whole needle landed as one unbroken run.
+function fieldMatchScore(norm, wwRe) {
+    if (!searchNeedle) return null;
+    if (wwRe) {
+        var m = wwRe.exec(norm || "");
+        if (m)
+            return {score: 1000 - m.index * 10, ranges: [[m.index, m.index + m[0].length]], contiguous: true};
+    }
+    var r = FuzzyRangesNorm(norm || "", searchNeedle);
+    if (!r) return null;
+    var gaps = 0, len = 0;
+    for (var i = 0; i < r.length; i++) {
+        if (i > 0)
+            gaps += r[i][0] - r[i - 1][1];
+        len += r[i][1] - r[i][0];
+    }
+    return {score: 1000 - r[0][0] * 10 - gaps * 10, ranges: r, contiguous: r.length === 1 && len === searchNeedle.length};
 }
 
-// Per-action score: title matches rank above a source/group-only match of equal quality.
-function actionSearchScore(a) {
-    var title = matchScoreNorm(titleNorm(a));
-    var other = matchScoreNorm(otherNorm(a));
-    if (title < 0 && other < 0) return -1;
-    return Math.max(title < 0 ? -1e9 : title + 10000, other < 0 ? -1e9 : other);
+// Combine the per-field match scores into one comparable value. Ranking tiers, strongest first:
+//   tier (contiguous/perfect vs fuzzy) > field (title > group > source) > start/gaps.
+// The additive weights keep every contiguous match above every fuzzy one regardless of field.
+function scoreFields(t, g, s) {
+    var best = -1;
+    if (t) best = Math.max(best, (t.contiguous ? 100000 : 0) + 2000 + t.score);
+    if (g) best = Math.max(best, (g.contiguous ? 100000 : 0) + 1000 + g.score);
+    if (s) best = Math.max(best, (s.contiguous ? 100000 : 0) + s.score);
+    return best;
 }
 
 // The unified main-phase search: every action (command/plugin/setting) matching the query, ranked
@@ -82,15 +105,27 @@ function searchActions(actions, query) {
     matchIndex = {};
     if (!q) { searchNeedle = ""; return list.slice(0); }
     searchNeedle = NormText(q, false);
+    // Compiled once per pass, reused over every field: non-global so no exec()/lastIndex state leaks
+    // between fields, and EscapeRegExp keeps regex metachars in the query literal.
+    var wwRe = new RegExp("\\b" + EscapeRegExp(searchNeedle) + "\\b");
 
     var scored = [];
     for (var i = 0; i < list.length; i++) {
         var a = list[i];
-        var s = actionSearchScore(a);
-        if (s < 0) continue;
-        var titleMatch = FuzzyRangesNorm(titleNorm(a), searchNeedle);
-        matchIndex[a.id] = { title: titleMatch, source: FuzzyRangesNorm(otherNorm(a), searchNeedle), useTitle: !!titleMatch };
-        scored.push({ a: a, s: s });
+        var t = fieldMatchScore(titleNorm(a), wwRe);
+        var g = fieldMatchScore(groupNorm(a), wwRe);
+        var s = fieldMatchScore(sourceNorm(a), wwRe);
+        var score = scoreFields(t, g, s);
+        if (score < 0) continue;
+        // Ranges are per-field against the ACTUAL text drawn: title for the row-name, and group (or
+        // source when group is empty) for the eyebrow - so highlight offsets stay aligned to the label.
+        matchIndex[a.id] = {
+            title: t ? t.ranges : null,
+            group: g ? g.ranges : null,
+            source: s ? s.ranges : null,
+            useEyebrowGroup: !!(a.group)
+        };
+        scored.push({ a: a, s: score });
     }
     scored.sort(function (x, y) {
         if (x.s !== y.s) return y.s - x.s;
@@ -112,7 +147,7 @@ function buildKey() { return phase + "|" + (query || "").trim(); }
 
 function visibleFavourites(favourites, actions) {
     // why: a fav whose id has no live action (plugin unloaded/disabled) renders a dead
-    //      monogram tile whose click run()s to a silent no-op; drop it from the quick-bar.
+    //      placeholder tile whose click run()s to a silent no-op; drop it from the quick-bar.
     var seen = {};
     (actions || []).forEach(function (a) { seen[a.id] = true; });
     return (favourites || []).filter(function (id, i, arr) {
@@ -164,21 +199,42 @@ function shouldRenderActionList(query) {
     return !!((query || "").trim());
 }
 
-// Put an action's pattern pictogram into a tile (search row or favourites tile) when it has one,
-// otherwise fall back to the monogram. Toggles the has-icon class so CSS neutralises the hue.
+// Monogram code for a tile: title initial, escalated on collision by PREPENDING the source
+// initial (pi+ti, e.g. "GC"), then a 1-based ordinal - so same-titled items stay distinct.
+// why: ordinal is assigned by id, not by list order - list order is frecency-sorted and
+// reshuffles as usage changes, which would otherwise flip who's "1" and who's "2" across runs.
+function monogramFor(item, list, titleOf, sourceOf, idOf) {
+    var items = list || [];
+    var title = titleOf(item) || " ";
+    var ti = title.charAt(0).toUpperCase();
+    var sameTitle = items.filter(function (o) { return (titleOf(o) || " ").charAt(0).toUpperCase() === ti; });
+    if (sameTitle.length <= 1)
+        return ti;
+    var source = sourceOf(item) || " ";
+    var pi = source.charAt(0).toUpperCase();
+    var sameSource = sameTitle.filter(function (o) { return (sourceOf(o) || " ").charAt(0).toUpperCase() === pi; });
+    if (sameSource.length <= 1)
+        return pi + ti;
+    sameSource.sort(function (a, b) { return idOf(a) < idOf(b) ? -1 : idOf(a) > idOf(b) ? 1 : 0; });
+    for (var i = 0; i < sameSource.length; i++)
+        if (sameSource[i] === item || idOf(sameSource[i]) === idOf(item))
+            return pi + ti + (i + 1);
+    return pi + ti;
+}
+
+// Action tile code - see monogramFor for the escalation ladder. Settings are actions now, so
+// they share this ladder (title initial, then source, then a stable ordinal).
+function tileCode(action, actions) {
+    return monogramFor(action, actions,
+        function (o) { return o.title; },
+        function (o) { return o.source; },
+        function (o) { return o.id; });
+}
+
+// Put an action's monogram into a tile (search row or favourites tile). A null action (a tab row
+// with no backing action) renders an empty tile.
 function fillTile(tile, a) {
-    tile.classList.remove("has-icon");
-    if (a && a.icon) {
-        tile.textContent = "";
-        var img = document.createElement("img");
-        img.className = "tile-icon";
-        img.src = a.icon;
-        img.alt = "";
-        tile.appendChild(img);
-        tile.classList.add("has-icon");
-    } else {
-        tile.textContent = a ? tileCode(a, ACTIONS) : "";
-    }
+    tile.textContent = a ? tileCode(a, ACTIONS) : "";
 }
 
 // The active list for the main phase. A typed query ranks every action (commands/plugins/settings)
@@ -222,38 +278,6 @@ function actionLabel(action, actions) {
             label += " (" + action.id + ")";
     }
     return label;
-}
-
-// Monogram code for a tile: title initial, escalated on collision by PREPENDING the source
-// initial (pi+ti, e.g. "GC"), then a 1-based ordinal - so same-titled items stay distinct.
-// why: ordinal is assigned by id, not by list order - list order is frecency-sorted and
-// reshuffles as usage changes, which would otherwise flip who's "1" and who's "2" across runs.
-function monogramFor(item, list, titleOf, sourceOf, idOf) {
-    var items = list || [];
-    var title = titleOf(item) || " ";
-    var ti = title.charAt(0).toUpperCase();
-    var sameTitle = items.filter(function (o) { return (titleOf(o) || " ").charAt(0).toUpperCase() === ti; });
-    if (sameTitle.length <= 1)
-        return ti;
-    var source = sourceOf(item) || " ";
-    var pi = source.charAt(0).toUpperCase();
-    var sameSource = sameTitle.filter(function (o) { return (sourceOf(o) || " ").charAt(0).toUpperCase() === pi; });
-    if (sameSource.length <= 1)
-        return pi + ti;
-    sameSource.sort(function (a, b) { return idOf(a) < idOf(b) ? -1 : idOf(a) > idOf(b) ? 1 : 0; });
-    for (var i = 0; i < sameSource.length; i++)
-        if (sameSource[i] === item || idOf(sameSource[i]) === idOf(item))
-            return pi + ti + (i + 1);
-    return pi + ti;
-}
-
-// Action tile code - see monogramFor for the escalation ladder. Settings are actions now, so
-// they share this ladder (title initial, then source, then a stable ordinal).
-function tileCode(action, actions) {
-    return monogramFor(action, actions,
-        function (o) { return o.title; },
-        function (o) { return o.source; },
-        function (o) { return o.id; });
 }
 
 function syncClearButton() {
@@ -542,7 +566,12 @@ function renderActionRow(a, i) {
     var left = document.createElement("div");
     left.className = "row-left";
     var mi = matchIndex[a.id];
-    var sourceEl = markedText("row-eyebrow", a.group || a.source, mi ? mi.source : null);
+    // The eyebrow shows group when present, else source. Highlight with the ranges of whichever of the
+    // two the eyebrow actually renders (so a "Recent Projects"/"Object" header match lights up like a
+    // setting path does - the offsets are computed against the same string we are marking).
+    var eyebrow = a.group || a.source;
+    var eyebrowMatch = mi ? (mi.useEyebrowGroup ? mi.group : mi.source) : null;
+    var sourceEl = markedText("row-eyebrow", eyebrow, eyebrowMatch);
     var line = document.createElement("div");
     line.className = "row-line";
     var name = markedText("row-name", a.title, mi ? mi.title : null);
@@ -675,8 +704,8 @@ function renderCommandsList() {
     updateSelection();
 }
 
-// A tab row: no star/unpin (tabs aren't pinnable), tile monogram from the title. Uses tabTitle so
-// pages added with an empty text (e.g. Home) still show a label and an icon letter.
+// A tab row: no star/unpin (tabs aren't pinnable), placeholder tile (tabs have no pictogram). Uses
+// tabTitle so pages added with an empty text (e.g. Home) still show a label.
 function renderTabRow(t, i) {
     var label = tabTitle(t);
     var row = document.createElement("div");
@@ -686,7 +715,7 @@ function renderTabRow(t, i) {
     var tile = document.createElement("div");
     tile.className = "tile";
     tile.style.setProperty("--h", hue(t.id));
-    tile.textContent = label.charAt(0).toUpperCase();
+    fillTile(tile, null);
 
     var left = document.createElement("div");
     left.className = "row-left";

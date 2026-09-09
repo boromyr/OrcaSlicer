@@ -59,7 +59,7 @@ assert.equal(ctx.tabTitle({ id: "home" }), "Home",
 assert.equal(ctx.tabTitle({ id: "prepare", title: "Prepare" }), "Prepare",
   "a populated title is kept as-is");
 assert.equal(ctx.tabTitle({ id: "prepare", title: " Prepare" }), "Prepare",
-  "a leading space from the Notebook button label is trimmed so the icon letter shows");
+  "a leading space from the Notebook button label is trimmed so the label shows cleanly");
 assert.equal(ctx.filterTabs([{ id: "home", title: "" }], "home").length, 1,
   "an untitled tab still matches a typed query via the id/title fallback");
 assert.equal(ctx.filterTabs([{ id: "prepare", title: " Prepare" }], "prepare").length, 1,
@@ -81,6 +81,33 @@ assert.equal(ctx.searchActions(pool, "layer").length >= 2, true,
   "both a setting and a command match the same query in the same list");
 assert.equal(ctx.searchActions(pool, "surface")[0].id, "c2",
   "a later-but-precise match still ranks by relevance, not by pool type");
+
+// A perfect match (the needle as one contiguous run) outranks a fuzzy match of the same field - and a
+// contiguous GROUP/header hit ("Recent Projects") beats a scattered fuzzy TITLE hit ("Retraction Length"),
+// which is what the old flat title-bonus ranking got backwards.
+const perfectPool = [
+  { id: "set", title: "Retraction Length", source: "Process : Quality : Retraction", group: "", input: "" },
+  { id: "recent", title: "myproject.3mf", source: "/home/me/projects/myproject.3mf", group: "Recent Projects", input: "" }
+];
+assert.equal(ctx.searchActions(perfectPool, "recent")[0].id, "recent",
+  "a contiguous header/group match ranks above a scattered fuzzy title match");
+// Within a perfect match, the row-name (title) outranks the header (group): the action whose TITLE
+// contains the needle perfectly beats the action whose GROUP does, both being contiguous matches.
+const titleFirstPool = [
+  { id: "grp", title: "Delete Selected", source: "OrcaSlicer", group: "Object", input: "" },
+  { id: "t", title: "Object Preview", source: "OrcaSlicer", group: "View", input: "" }
+];
+assert.equal(ctx.searchActions(titleFirstPool, "object")[0].id, "t",
+  "a perfect title match ranks above an equally-perfect group match");
+
+// Highlighting: the needle is matched as a whole word / most-contiguous run, so "orient" lights up the
+// whole word in "Auto-Orient" instead of the stray "o" of "Auto" plus "rient" (greedy-leftmost).
+const orientPool = [
+  { id: "ao", title: "Auto-Orient", source: "OrcaSlicer", group: "Object", input: "" }
+];
+ctx.searchActions(orientPool, "orient");
+assert.deepEqual(ctx.matchIndex.ao.title, [[5, 11]],
+  "a whole-word match highlights the full word, not a scattered fuzzy pick");
 
 // commandList (the main-phase list) delegates to the ranked search for a typed query and returns
 // the mixed recents (no discrimination) for an empty query.

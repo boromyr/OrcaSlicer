@@ -34,24 +34,44 @@ function NormText(text, caseSensitive) {
 // Match a PRE-normalized haystack against a PRE-normalized needle (both produced by NormText with the
 // same caseSensitive flag). Skipping the per-character fold makes repeated matching (per keystroke over a
 // cached pool) cheap. Returns ranges in original coordinates, or null on no match.
+// Prefers the most-contiguous (smallest-span) occurrence over greedy-leftmost: a scattered match that
+// spans a stray earlier character is worse than a tight run later, so "orient" against a normalized
+// "auto-orient" returns [[5,11]] (the word) not [[3,4],[6,11]]. A fully contiguous run is the optimum
+// and short-circuits early.
 function FuzzyRangesNorm(haystackNorm, needleNorm) {
   const t = haystackNorm || "";
   const needle = needleNorm || "";
   if (!needle)
     return null;
-  const ranges = [];
-  let qi = 0;
-  for (let i = 0; i < t.length && qi < needle.length; i++) {
-    if (t[i] === needle[qi]) {
-      const last = ranges[ranges.length - 1];
-      if (last && last[1] === i)
-        last[1] = i + 1;
-      else
-        ranges.push([i, i + 1]);
-      qi++;
+  const n = t.length, nl = needle.length;
+  let best = null; // {ranges, span, start}
+  for (let start = 0; start < n; start++) {
+    if (t[start] !== needle[0])
+      continue;
+    let qi = 0;
+    const ranges = [];
+    let lastEnd = start;
+    for (let i = start; i < n && qi < nl; i++) {
+      if (t[i] === needle[qi]) {
+        const last = ranges[ranges.length - 1];
+        if (last && last[1] === i)
+          last[1] = i + 1;
+        else
+          ranges.push([i, i + 1]);
+        lastEnd = i + 1;
+        qi++;
+      }
+    }
+    if (qi !== nl)
+      continue;
+    const span = lastEnd - start;
+    if (!best || span < best.span || (span === best.span && start < best.start)) {
+      best = { ranges, span, start };
+      if (span === nl)
+        return ranges; // can't beat a fully contiguous run
     }
   }
-  return qi === needle.length ? ranges : null;
+  return best ? best.ranges : null;
 }
 
 function EscapeRegExp(value) {
@@ -94,4 +114,19 @@ function WholeWordRanges(text, query, caseSensitive) {
   while ((match = re.exec(haystack)) !== null)
     ranges.push([match.index, match.index + match[0].length]);
   return ranges.length > 0 ? ranges : null;
+}
+
+// Same whole-word (\b-bounded) match as WholeWordRanges, but against PRE-normalized haystack/needle
+// (NormText output, so offsets stay length-aligned to the original text). Returns the first match as
+// [[i, i+len]] in original coordinates, or null. Non-global so the caller can reuse one compiled regex
+// across many fields without re-setting lastIndex. Skipping the per-char fold keeps the Speed Dial's
+// per-keystroke scan over thousands of cached settings cheap.
+function WholeWordRangesNorm(haystackNorm, needleNorm) {
+  const t = haystackNorm || "";
+  const needle = needleNorm || "";
+  if (!needle)
+    return null;
+  const re = new RegExp(`\\b${EscapeRegExp(needle)}\\b`);
+  const match = re.exec(t);
+  return match ? [[match.index, match.index + match[0].length]] : null;
 }

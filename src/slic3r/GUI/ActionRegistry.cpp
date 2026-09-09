@@ -1,41 +1,29 @@
 #include "ActionRegistry.hpp"
 
-#include "calib_dlg.hpp"
-#include "GCodeViewer.hpp"
-#include "GLCanvas3D.hpp"
 #include "GUI.hpp"
 #include "GUI_App.hpp"
 #include "I18N.hpp"
-#include "IMSlider.hpp"
 #include "MainFrame.hpp"
+#include "NativeCommands.hpp"
 #include "Notebook.hpp"
 #include "Plater.hpp"
-#include "PlateSettingsDialog.hpp"
 #include "Search.hpp"
 #include "Tab.hpp"
 #include "slic3r/plugin/PluginManager.hpp"
 
 #include <libslic3r/AppConfig.hpp>
 #include <libslic3r/Config.hpp>
-#include <libslic3r/PresetBundle.hpp>
-#include <libslic3r/Utils.hpp>
 #include <slic3r/plugin/PythonPluginInterface.hpp>
 
 #include <wx/thread.h>
 
-#include <boost/algorithm/string/predicate.hpp>
-#include <boost/any.hpp>
-#include <boost/algorithm/string/trim.hpp>
 #include <boost/filesystem.hpp>
 #include <boost/nowide/convert.hpp>
 
 #include <algorithm>
-#include <cfloat>
 #include <cmath>
-#include <cstdlib>
 #include <ctime>
 #include <exception>
-#include <fstream>
 #include <iterator>
 #include <string>
 #include <unordered_map>
@@ -145,6 +133,7 @@ constexpr const char* kOrcaSourceKey  = "orca";
 constexpr const char* kOrcaSourceName = "OrcaSlicer";
 constexpr const char* kSettingPrefix  = "orca_setting";
 constexpr const char* kPlateGotoPrefix = "orca_plate_goto";
+constexpr const char* kRecentProjectPrefix = "orca_recent_project";
 
 // Display context for a setting action's eyebrow, e.g. the "Process" in "Process : Quality : Layers".
 // Keyed by the option's preset type so the palette reads like the settings sidebar tabs.
@@ -168,7 +157,7 @@ struct SettingAction : AppAction
 {
     std::string  opt_key;
     Preset::Type type;
-    std::wstring category; // localized category, forwarded to jump_to_option
+    std::wstring category;      // localized category, forwarded to jump_to_option
 
     static std::string id_for(const std::string& opt_key, Preset::Type type)
     { return std::string(kSettingPrefix) + ":" + opt_key + ":" + std::to_string(int(type)); }
@@ -191,404 +180,31 @@ struct SettingAction : AppAction
         wxGetApp().sidebar().jump_to_option(opt_key, type, category);
         return {AppActionRunResult::Level::Success};
     }
-
-    // The current value's pattern pictogram (e.g. the selected infill pattern), for the search-result
-    // tile. Defined below after the icon helper it delegates to.
-    std::string icon() const override;
 };
 
-// Jump the preview to a layer selected by a 0-100 percent of the layer range. Best-effort:
-// switches to the preview tab and requests a slice (select_view_3D("Preview", false)); if the
-// slicer result is already present the slider is repositioned immediately, otherwise the user
-// can re-run after slicing.
-void go_to_layer(Plater* plater, const std::string& param)
-{
-    if (!plater)
-        return;
-    double pct = 50.0;
-    try {
-        pct = std::stod(param);
-    } catch (const std::exception&) {}
-    pct = std::clamp(pct, 0.0, 100.0);
 
-    GLCanvas3D* canvas = plater->get_current_canvas3D();
-    if (!canvas)
-        return;
-    GCodeViewer& viewer = canvas->get_gcode_viewer();
-    IMSlider* layers    = viewer.get_layers_slider();
-    IMSlider* moves     = viewer.get_moves_slider();
-    if (!layers || layers->GetMaxValue() <= 0)
-        return; // no slice result yet - the slice request above will populate it
-
-    const double max = double(layers->GetMaxValue());
-    const int target = int(std::lround(pct / 100.0 * max));
-    layers->SetHigherValue(target);
-    // In "one layer" mode the lower handle follows the higher one (mirrors arrow-key nav).
-    if (layers->is_one_layer())
-        layers->SetLowerValue(target);
-    layers->set_as_dirty();
-    if (moves) {
-        moves->SetHigherValue(moves->GetMaxValue());
-        moves->set_as_dirty();
-    }
-}
-
-// Select a named camera view ("top"/"front"/...); Plater::select_view dispatches to the current
-// panel. Shared by the view_* speed-dial commands.
-AppActionRunResult view_command(Plater* plater, const std::string& dir)
-{
-    if (plater)
-        plater->select_view(dir);
-    return {AppActionRunResult::Level::Success};
-}
-
-// Dispatch a built-in command. The CommandAction stays a thin value; the actual GUI work
-// lives here so it can touch the live app state.
-AppActionRunResult run_native_command(const std::string& command_key, const std::string& param)
-{
-    GUI_App& app = wxGetApp();
-    if (app.is_closing())
-        return {};
-
-    Plater* plater = app.plater();
-
-    if (command_key == "save_project") {
-        if (plater)
-            plater->save_project(false);
-        return {AppActionRunResult::Level::Success};
-    }
-    if (command_key == "save_project_as") {
-        if (plater)
-            plater->save_project(true);
-        return {AppActionRunResult::Level::Success};
-    }
-    if (command_key == "load_project") {
-        if (plater)
-            plater->load_project();
-        return {AppActionRunResult::Level::Success};
-    }
-    if (command_key == "open_preferences") {
-        app.open_preferences();
-        return {AppActionRunResult::Level::Success};
-    }
-    if (command_key == "mode_simple" || command_key == "mode_advanced" || command_key == "mode_expert") {
-        const int mode = command_key == "mode_simple" ? comSimple : command_key == "mode_advanced" ? comAdvanced : comExpert;
-        app.save_mode(mode);
-        return {AppActionRunResult::Level::Success};
-    }
-    if (command_key == "slice_and_preview") {
-        if (plater) {
-            // Actually re-slice (respects the toolbar's current plate/all selection), then show the result.
-            plater->reslice();
-            plater->select_view_3D("Preview", false);
-            if (app.mainframe)
-                app.mainframe->select_tab(TAB_ID_PREVIEW);
-        }
-        return {AppActionRunResult::Level::Success};
-    }
-    if (command_key == "go_to_layer") {
-        if (plater) {
-            plater->select_view_3D("Preview", false);
-            if (app.mainframe)
-                app.mainframe->select_tab(TAB_ID_PREVIEW);
-            go_to_layer(plater, param);
-        }
-        return {AppActionRunResult::Level::Success};
-    }
-    // "go_to_tab" is two-phase: the palette collects the tab after activating it, so native
-    // dispatch here is a no-op (the jump goes through the go_to_tab web command).
-    if (command_key == "go_to_tab")
-        return {AppActionRunResult::Level::Success};
-
-    // ---- Slice -> Export pipeline. Each Plater method self-guards (empty model / error /
-    // background-invalid) and then opens its own save dialog / show_error, mirroring the File menu.
-    if (command_key == "export_gcode") {
-        if (plater)
-            plater->export_gcode(false);
-        return {AppActionRunResult::Level::Success};
-    }
-    if (command_key == "export_stl") {
-        if (plater)
-            plater->export_stl();
-        return {AppActionRunResult::Level::Success};
-    }
-    if (command_key == "export_3mf") {
-        if (plater)
-            plater->export_core_3mf();
-        return {AppActionRunResult::Level::Success};
-    }
-    if (command_key == "export_sliced_file") {
-        if (plater)
-            plater->export_gcode_3mf();
-        return {AppActionRunResult::Level::Success};
-    }
-    if (command_key == "export_all_sliced_file") {
-        if (plater)
-            plater->export_gcode_3mf(true);
-        return {AppActionRunResult::Level::Success};
-    }
-
-    // ---- Calibration wizards. Each mirrors the menu handler (MainFrame.cpp): recreate the dialog
-    // fresh per launch. The palette hides itself and defers dispatch off the webview callback, so a
-    // ShowModal() here is safe (same path as open_preferences). The 3D panel is ensured below.
-    auto calib = [&](auto&& open) -> AppActionRunResult {
-        if (!plater)
-            return {AppActionRunResult::Level::Info, _L("Open the 3D view first.")};
-        // Auto-switch to the Prepare (3D) view instead of prompting: set the 3D panel
-        // synchronously (the wizard's new_project also re-establishes it) and select the
-        // Prepare notebook page so the tab label matches. The palette is hidden and this
-        // dispatch is deferred off the webview callback, so a modal on a switched tab is safe.
-        if (!plater->is_view3D_shown()) {
-            plater->select_view_3D("3D");
-            if (MainFrame* mf = wxGetApp().mainframe; mf)
-                mf->select_tab(TAB_ID_PREPARE);
-        }
-        open(plater);
-        return {AppActionRunResult::Level::Success};
-    };
-    if (command_key == "calib_temperature")
-        return calib([](Plater* p) {
-            Temp_Calibration_Dlg* dlg = new Temp_Calibration_Dlg((wxWindow*) wxGetApp().mainframe, wxID_ANY, p);
-            dlg->ShowModal();
-            dlg->Destroy();
-        });
-    if (command_key == "calib_max_volumetric")
-        return calib([](Plater* p) {
-            MaxVolumetricSpeed_Test_Dlg* dlg = new MaxVolumetricSpeed_Test_Dlg((wxWindow*) wxGetApp().mainframe, wxID_ANY, p);
-            dlg->ShowModal();
-            dlg->Destroy();
-        });
-    if (command_key == "calib_pressure_advance")
-        return calib([](Plater* p) {
-            PA_Calibration_Dlg* dlg = new PA_Calibration_Dlg((wxWindow*) wxGetApp().mainframe, wxID_ANY, p);
-            dlg->ShowModal();
-            dlg->Destroy();
-        });
-    if (command_key == "calib_flow_ratio")
-        return calib([](Plater* p) {
-            FlowRateCalibrationDialog* dlg = new FlowRateCalibrationDialog((wxWindow*) wxGetApp().mainframe, wxID_ANY, p);
-            dlg->ShowModal();
-            dlg->Destroy();
-        });
-    if (command_key == "calib_retraction")
-        return calib([](Plater* p) {
-            Retraction_Test_Dlg* dlg = new Retraction_Test_Dlg((wxWindow*) wxGetApp().mainframe, wxID_ANY, p);
-            dlg->ShowModal();
-            dlg->Destroy();
-        });
-    if (command_key == "calib_cornering")
-        return calib([](Plater* p) {
-            Cornering_Test_Dlg* dlg = new Cornering_Test_Dlg((wxWindow*) wxGetApp().mainframe, wxID_ANY, p);
-            dlg->ShowModal();
-            dlg->Destroy();
-        });
-    if (command_key == "calib_input_shaping_freq")
-        return calib([](Plater* p) {
-            Input_Shaping_Freq_Test_Dlg* dlg = new Input_Shaping_Freq_Test_Dlg((wxWindow*) wxGetApp().mainframe, wxID_ANY, p);
-            dlg->ShowModal();
-            dlg->Destroy();
-        });
-    if (command_key == "calib_input_shaping_damp")
-        return calib([](Plater* p) {
-            Input_Shaping_Damp_Test_Dlg* dlg = new Input_Shaping_Damp_Test_Dlg((wxWindow*) wxGetApp().mainframe, wxID_ANY, p);
-            dlg->ShowModal();
-            dlg->Destroy();
-        });
-    if (command_key == "calib_vfa")
-        return calib([](Plater* p) {
-            VFA_Test_Dlg* dlg = new VFA_Test_Dlg((wxWindow*) wxGetApp().mainframe, wxID_ANY, p);
-            dlg->ShowModal();
-            dlg->Destroy();
-        });
-
-    // ---- View controls. select_view dispatches to the current panel; named views + perspective
-    // toggle + fit-to-bed mirror the View menu items (MainFrame.cpp). reset_window_layout is direct.
-    if (command_key == "view_top")
-        return view_command(plater, "top");
-    if (command_key == "view_bottom")
-        return view_command(plater, "bottom");
-    if (command_key == "view_front")
-        return view_command(plater, "front");
-    if (command_key == "view_rear")
-        return view_command(plater, "rear");
-    if (command_key == "view_left")
-        return view_command(plater, "left");
-    if (command_key == "view_right")
-        return view_command(plater, "right");
-    if (command_key == "view_iso")
-        return view_command(plater, "iso");
-    if (command_key == "view_default") {
-        if (plater) {
-            plater->select_view("plate");
-            if (GLCanvas3D* canvas = plater->get_current_canvas3D())
-                canvas->zoom_to_bed();
-        }
-        return {AppActionRunResult::Level::Success};
-    }
-    if (command_key == "view_fit_bed") {
-        if (plater)
-            if (GLCanvas3D* canvas = plater->get_current_canvas3D())
-                canvas->zoom_to_bed();
-        return {AppActionRunResult::Level::Success};
-    }
-    if (command_key == "view_toggle_perspective") {
-        if (plater)
-            plater->get_camera().select_next_type();
-        return {AppActionRunResult::Level::Success};
-    }
-    if (command_key == "reset_window_layout") {
-        if (plater)
-            plater->reset_window_layout();
-        return {AppActionRunResult::Level::Success};
-    }
-
-    // ---- Object / interaction operations (single-phase). Each mirrors a toolbar/menu action and is
-    // guarded by an existing can_* / selection check so nothing crashes on empty selection or a busy
-    // background worker, and returns a friendly Info instead. Structural ops self-update()/schedule a
-    // re-slice; transform ops (mirror/center/drop) post their own schedule-background event. We only
-    // need the underlying object (not a specific object index), so a non-capturing lambda is used as
-    // the guard/op pair below. Rotate/scale by angle/factor, duplicate (modal count dialog) and
-    // cut/segment/merge (unimplemented on Plater) are deliberately left out of this MVP.
-    auto obj = [&](bool (*ok)(Plater*), void (*op)(Plater*)) -> AppActionRunResult {
-        if (!plater)
-            return {AppActionRunResult::Level::Info, _L("Open the 3D view first.")};
-        // Object ops read the Prepare (3D) canvas selection, so ensure that view before guarding so
-        // a launch from the Preview/other tab doesn't report a spuriously empty selection.
-        if (!plater->is_view3D_shown()) {
-            plater->select_view_3D("3D");
-            if (MainFrame* mf = wxGetApp().mainframe; mf)
-                mf->select_tab(TAB_ID_PREPARE);
-        }
-        if (!ok(plater))
-            return {AppActionRunResult::Level::Info, _L("Select an object first.")};
-        op(plater);
-        return {AppActionRunResult::Level::Success};
-    };
-    if (command_key == "obj_delete")
-        return obj([](Plater* p) { return !p->is_selection_empty(); }, [](Plater* p) { p->remove_selected(); });
-    if (command_key == "obj_delete_all")
-        return obj([](Plater* p) { return p->can_delete_all(); }, [](Plater* p) { p->delete_all_objects_from_model(); });
-    if (command_key == "obj_mirror_x")
-        return obj([](Plater* p) { return p->can_mirror(); }, [](Plater* p) { p->mirror(Axis::X); });
-    if (command_key == "obj_mirror_y")
-        return obj([](Plater* p) { return p->can_mirror(); }, [](Plater* p) { p->mirror(Axis::Y); });
-    if (command_key == "obj_mirror_z")
-        return obj([](Plater* p) { return p->can_mirror(); }, [](Plater* p) { p->mirror(Axis::Z); });
-    if (command_key == "obj_split_objects")
-        return obj([](Plater* p) { return p->can_split_to_objects(); }, [](Plater* p) { p->split_object(true); });
-    if (command_key == "obj_split_parts")
-        return obj([](Plater* p) { return p->can_split_to_volumes(); }, [](Plater* p) { p->split_volume(); });
-    if (command_key == "obj_center")
-        return obj([](Plater* p) { return !p->is_selection_empty(); }, [](Plater* p) { p->center_selection(); });
-    if (command_key == "obj_drop")
-        return obj([](Plater* p) { return !p->is_selection_empty(); }, [](Plater* p) { p->drop_selection(); });
-    if (command_key == "obj_fit_volume")
-        return obj([](Plater* p) { return p->can_scale_to_print_volume(); }, [](Plater* p) { p->scale_selection_to_fit_print_volume(); });
-    if (command_key == "obj_instances_up")
-        return obj([](Plater* p) { return p->can_increase_instances(); }, [](Plater* p) { p->increase_instances(); });
-    if (command_key == "obj_instances_down")
-        return obj([](Plater* p) { return p->can_decrease_instances(); }, [](Plater* p) { p->decrease_instances(); });
-    if (command_key == "obj_arrange")
-        return obj([](Plater* p) { return p->can_arrange(); }, [](Plater* p) { p->arrange(); });
-    // Auto-orient has no dedicated can_*; can_arrange covers "objects exist + UI worker idle".
-    if (command_key == "obj_orient")
-        return obj([](Plater* p) { return p->can_arrange(); }, [](Plater* p) { p->orient(); });
-
-    // ---- Plate management. Plates are a filament (FFF) feature: SLA builds a single plate with
-    // no plate UI, and gcode-only mode has no editable project - so gate every plate op on FFF +
-    // the normal editor (mirroring where the plate toolbar/menu live). These act on the CURRENT
-    // plate (delete/duplicate take -1) except plate_goto, which jumps to the index in `param`.
-    auto plate_plater = [&]() -> Plater* {
-        return (plater && plater->printer_technology() == ptFFF && !plater->only_gcode_mode()) ? plater : nullptr;
-    };
-    const AppActionRunResult plate_unavailable{AppActionRunResult::Level::Info, _L("Plates are a filament (FFF) feature.")};
-
-    if (command_key == "plate_add") {
-        if (Plater* p = plate_plater(); p) {
-            if (!p->can_add_plate())
-                return {AppActionRunResult::Level::Info, _L("Cannot add another plate (maximum reached).")};
-            p->add_plate();
-            return {AppActionRunResult::Level::Success};
-        }
-        return plate_unavailable;
-    }
-    if (command_key == "plate_duplicate") {
-        if (Plater* p = plate_plater(); p) {
-            if (!p->can_add_plate())
-                return {AppActionRunResult::Level::Info, _L("Cannot duplicate a plate (maximum reached).")};
-            p->duplicate_plate();
-            return {AppActionRunResult::Level::Success};
-        }
-        return plate_unavailable;
-    }
-    if (command_key == "plate_delete") {
-        if (Plater* p = plate_plater(); p) {
-            if (!p->can_delete_plate())
-                return {AppActionRunResult::Level::Info, _L("Cannot delete the only plate.")};
-            p->delete_plate();
-            return {AppActionRunResult::Level::Success};
-        }
-        return plate_unavailable;
-    }
-    if (command_key == "plate_rename") {
-        if (Plater* p = plate_plater(); p) {
-            PartPlate* curr = p->get_partplate_list().get_curr_plate();
-            PlateNameEditDialog dlg((wxWindow*) wxGetApp().mainframe, wxID_ANY, _L("Edit Plate Name"));
-            dlg.set_plate_name(from_u8(curr->get_plate_name()));
-            if (dlg.ShowModal() == wxID_YES)
-                curr->set_plate_name(dlg.get_plate_name().ToUTF8().data());
-            return {AppActionRunResult::Level::Success};
-        }
-        return plate_unavailable;
-    }
-    if (command_key == "plate_toggle_lock") {
-        if (Plater* p = plate_plater(); p) {
-            PartPlateList& plates  = p->get_partplate_list();
-            const int      index   = plates.get_curr_plate_index();
-            p->take_snapshot("lock partplate");
-            plates.lock_plate(index, !plates.is_locked(index));
-            return {AppActionRunResult::Level::Success};
-        }
-        return plate_unavailable;
-    }
-    if (command_key == "plate_goto") {
-        if (Plater* p = plate_plater(); p) {
-            PartPlateList& plates = p->get_partplate_list();
-            const int      count  = plates.get_plate_count();
-            if (count <= 0)
-                return {AppActionRunResult::Level::Info, _L("No plates available.")};
-            int index = 0;
-            try {
-                index = std::stoi(param);
-            } catch (const std::exception&) {}
-            index = std::clamp(index, 0, count - 1);
-            p->select_plate(index, false);
-            return {AppActionRunResult::Level::Success};
-        }
-        return plate_unavailable;
-    }
-    return {AppActionRunResult::Level::Info, _L("Unknown command.")};
-}
-
-// A built-in command action. source_key is the constant "orca" so a renamed title never
-// re-keys the action (matches the plugin source-key contract).
+// A built-in command action. Thin value: identity + presentation come from the NativeCommands
+// catalog, and run() routes back to it - the catalog is the single source of truth for its
+// behaviour. source_key is the constant "orca" so a renamed title never re-keys the action
+// (matches the plugin source-key contract).
 struct CommandAction : AppAction
 {
+    static std::unique_ptr<CommandAction> make(const NativeCommand& c)
+    { return std::unique_ptr<CommandAction>(new CommandAction(c)); }
+
     std::string command_key;
 
-    CommandAction(std::string command_key, std::string title, std::string group, std::string input = "")
-        : AppAction(kCommandPrefix, std::move(title), kOrcaSourceKey, kOrcaSourceName), command_key(std::move(command_key))
+    AppActionRunResult run(const std::string& param) const override { return NativeCommands::run(command_key, param); }
+
+private:
+    explicit CommandAction(const NativeCommand& c)
+        : AppAction(kCommandPrefix, c.title, kOrcaSourceKey, kOrcaSourceName), command_key(c.key)
     {
         this->kind  = AppActionKind::Command;
-        this->group = std::move(group);
-        this->input = std::move(input);
+        this->group = c.group;
+        this->input = c.input;
     }
-
-    AppActionRunResult run(const std::string& param) const override { return run_native_command(command_key, param); }
 };
-
-std::unique_ptr<AppAction> make_command(std::string key, std::string title, std::string group, std::string input = "")
-{ return std::make_unique<CommandAction>(std::move(key), std::move(title), std::move(group), std::move(input)); }
 
 // A dynamic "Go to Plate N" action, one per live plate, rebuilt on every snapshot() (so a
 // rename/move immediately shows up). id is keyed by plate index, NOT the display title, so
@@ -610,174 +226,37 @@ struct PlateAction : AppAction
     }
 
     AppActionRunResult run(const std::string& /*param*/) const override
-    { return run_native_command("plate_goto", std::to_string(plate_index)); }
+    { return NativeCommands::run("plate_goto", std::to_string(plate_index)); }
 };
 
-// The built-in palette commands, registered once at init().
-std::vector<std::unique_ptr<AppAction>> native_commands()
+// A dynamic "Open recent project <name>" action, one per recent project file, rebuilt on every
+// snapshot() (like PlateAction) so the list always reflects the current recents. The id is keyed
+// by the file PATH, NOT the display title - the same contract as SettingAction/PlateAction, so a
+// rename of a project (or a reordered recents list) never re-keys the action. A pinned recent whose
+// file is deleted simply stops resolving (visibleFavourites drops dead pins). run() loads the
+// project through MainFrame::open_recent_project so the existing missing-file handling is reused.
+struct RecentProjectAction : AppAction
 {
-    std::vector<std::unique_ptr<AppAction>> out;
-    // why: _u8L (std::string) for titles/groups - make_command takes std::string; _L would
-    // return a wxString and silently fail to convert here.
-    out.push_back(make_command("slice_and_preview", _u8L("Slice and Preview"), _u8L("Slice & Export")));
-    // Two-phase commands: activating them collects input in the palette, then runs. Settings are
-    // not a command here - they're materialised as first-class SettingActions (see materialize_).
-    out.push_back(make_command("go_to_layer", _u8L("Go to layer (percent)"), _u8L("Commands"), "percent"));
-    out.push_back(make_command("go_to_tab", _u8L("Go to tab..."), _u8L("Commands"), "tab"));
-    out.push_back(make_command("load_project", _u8L("Load Project"), _u8L("Commands")));
-    out.push_back(make_command("save_project", _u8L("Save Project"), _u8L("Commands")));
-    out.push_back(make_command("save_project_as", _u8L("Save Project As"), _u8L("Commands")));
-    out.push_back(make_command("open_preferences", _u8L("Preferences"), _u8L("Commands")));
-    out.push_back(make_command("mode_simple", _u8L("Mode: Simple"), _u8L("Mode")));
-    out.push_back(make_command("mode_advanced", _u8L("Mode: Advanced"), _u8L("Mode")));
-    out.push_back(make_command("mode_expert", _u8L("Mode: Expert"), _u8L("Mode")));
+    std::string file_path;
 
-    // Slice -> Export pipeline. Each runs a public Plater method; the methods self-guard (empty
-    // model / error / background-invalid) and open their own save dialog / show_error.
-    out.push_back(make_command("export_gcode", _u8L("Export G-code"), _u8L("Slice & Export")));
-    out.push_back(make_command("export_stl", _u8L("Export STL"), _u8L("Slice & Export")));
-    out.push_back(make_command("export_3mf", _u8L("Export 3MF"), _u8L("Slice & Export")));
-    out.push_back(make_command("export_sliced_file", _u8L("Export Sliced File"), _u8L("Slice & Export")));
-    out.push_back(make_command("export_all_sliced_file", _u8L("Export All Sliced Files"), _u8L("Slice & Export")));
+    static std::string id_for(const std::string& path)
+    { return AppAction::compose_id(kRecentProjectPrefix, path, kOrcaSourceKey); }
 
-    // Calibration wizards (one command per dialog mirroring the Calibration menu, MainFrame.cpp).
-    out.push_back(make_command("calib_temperature", _u8L("Temperature Calibration"), _u8L("Calibration")));
-    out.push_back(make_command("calib_max_volumetric", _u8L("Max Volumetric Speed Calibration"), _u8L("Calibration")));
-    out.push_back(make_command("calib_pressure_advance", _u8L("Pressure Advance Calibration"), _u8L("Calibration")));
-    out.push_back(make_command("calib_flow_ratio", _u8L("Flow Ratio Calibration"), _u8L("Calibration")));
-    out.push_back(make_command("calib_retraction", _u8L("Retraction Calibration"), _u8L("Calibration")));
-    out.push_back(make_command("calib_cornering", _u8L("Cornering Calibration"), _u8L("Calibration")));
-    out.push_back(make_command("calib_input_shaping_freq", _u8L("Input Shaping Frequency Calibration"), _u8L("Calibration")));
-    out.push_back(make_command("calib_input_shaping_damp", _u8L("Input Shaping Damping Calibration"), _u8L("Calibration")));
-    out.push_back(make_command("calib_vfa", _u8L("VFA Calibration"), _u8L("Calibration")));
+    RecentProjectAction(std::string path, std::string title, std::string source)
+        : AppAction(AppActionId{id_for(path)}, std::move(title), kOrcaSourceKey, std::move(source))
+        , file_path(std::move(path))
+    {
+        this->kind  = AppActionKind::Command;
+        this->group = _u8L("Recent Projects");
+    }
 
-    // View controls (mirror the View menu; most duplicate the Ctrl+0..6 shortcuts).
-    out.push_back(make_command("view_top", _u8L("View: Top"), _u8L("View")));
-    out.push_back(make_command("view_bottom", _u8L("View: Bottom"), _u8L("View")));
-    out.push_back(make_command("view_front", _u8L("View: Front"), _u8L("View")));
-    out.push_back(make_command("view_rear", _u8L("View: Rear"), _u8L("View")));
-    out.push_back(make_command("view_left", _u8L("View: Left"), _u8L("View")));
-    out.push_back(make_command("view_right", _u8L("View: Right"), _u8L("View")));
-    out.push_back(make_command("view_iso", _u8L("View: Isometric"), _u8L("View")));
-    out.push_back(make_command("view_default", _u8L("View: Default"), _u8L("View")));
-    out.push_back(make_command("view_fit_bed", _u8L("Fit Bed to View"), _u8L("View")));
-    out.push_back(make_command("view_toggle_perspective", _u8L("Toggle Perspective"), _u8L("View")));
-    out.push_back(make_command("reset_window_layout", _u8L("Reset Window Layout"), _u8L("View")));
-
-    // Object operations (single-phase). Each maps to a public Plater method guarded by a can_* /
-    // selection check in run_native_command; structural ops self-update()/schedule re-slice.
-    out.push_back(make_command("obj_delete", _u8L("Delete Selected"), _u8L("Object")));
-    out.push_back(make_command("obj_delete_all", _u8L("Delete All Objects"), _u8L("Object")));
-    out.push_back(make_command("obj_mirror_x", _u8L("Mirror X"), _u8L("Object")));
-    out.push_back(make_command("obj_mirror_y", _u8L("Mirror Y"), _u8L("Object")));
-    out.push_back(make_command("obj_mirror_z", _u8L("Mirror Z"), _u8L("Object")));
-    out.push_back(make_command("obj_split_objects", _u8L("Split to Objects"), _u8L("Object")));
-    out.push_back(make_command("obj_split_parts", _u8L("Split to Parts"), _u8L("Object")));
-    out.push_back(make_command("obj_center", _u8L("Center Selected on Plate"), _u8L("Object")));
-    out.push_back(make_command("obj_drop", _u8L("Drop to Bed"), _u8L("Object")));
-    out.push_back(make_command("obj_fit_volume", _u8L("Scale to Fit Print Volume"), _u8L("Object")));
-    out.push_back(make_command("obj_instances_up", _u8L("Increase Instances"), _u8L("Object")));
-    out.push_back(make_command("obj_instances_down", _u8L("Decrease Instances"), _u8L("Object")));
-    out.push_back(make_command("obj_arrange", _u8L("Auto-Arrange"), _u8L("Object")));
-    out.push_back(make_command("obj_orient", _u8L("Auto-Orient"), _u8L("Object")));
-
-    // Plate management. These act on the CURRENT plate (like Plater::delete_plate(-1)); the
-    // per-plate "Go to Plate N" actions are dynamic and materialised in materialize_plate_actions().
-    out.push_back(make_command("plate_add", _u8L("Add Plate"), _u8L("Plate")));
-    out.push_back(make_command("plate_duplicate", _u8L("Duplicate Plate"), _u8L("Plate")));
-    out.push_back(make_command("plate_delete", _u8L("Delete Plate"), _u8L("Plate")));
-    out.push_back(make_command("plate_rename", _u8L("Rename Plate"), _u8L("Plate")));
-    out.push_back(make_command("plate_toggle_lock", _u8L("Toggle Plate Lock"), _u8L("Plate")));
-    return out;
-}
-
-// ---- setting action helpers --------------------------------------------------
-
-// Self-contained base64 encoder (for the tiny pictogram SVGs), avoiding a dependency on the exact
-// wxBase64Encode overload/return type across wx versions.
-std::string base64_encode(const std::string& data)
-{
-    static const char* tbl = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-    auto enc = [&](unsigned n, int pad) {
-        // pad = number of extraneous bytes in the final group (0, 1 or 2):
-        //   0 leftover -> 4 chars from all 24 bits
-        //   2 leftover (pad=1) -> 3 chars then '='
-        //   1 leftover (pad=2) -> 2 chars then "=="
-        // The '=' padding always comes LAST; a misplaced '=' decodes as garbage in the webview.
-        std::string out;
-        out.push_back(tbl[(n >> 18) & 63]);
-        out.push_back(tbl[(n >> 12) & 63]);
-        out.push_back(pad >= 2 ? '=' : tbl[(n >> 6) & 63]);
-        out.push_back(pad >= 1 ? '=' : tbl[n & 63]);
-        return out;
-    };
-    std::string out;
-    out.reserve(((data.size() + 2) / 3) * 4);
-    size_t i = 0;
-    for (; i + 3 <= data.size(); i += 3)
-        out += enc(((unsigned char) data[i]) << 16 | ((unsigned char) data[i + 1]) << 8 | ((unsigned char) data[i + 2]), 0);
-    if (i + 1 == data.size())
-        out += enc(((unsigned char) data[i]) << 16, 2);
-    else if (i + 2 == data.size())
-        out += enc(((unsigned char) data[i]) << 16 | ((unsigned char) data[i + 1]) << 8, 1);
-    return out;
-}
-
-// data:URI for the pattern pictogram icons/param_<key>.svg, or "" when there is no such icon.
-// This mirrors the sidebar Choice field (Field.cpp add_item_bitmaps), which loads param_<value>.svg
-// per enum value - most settings have no icon, only pattern-style enums (infill/support patterns).
-// Base64 data URIs are used so the embedded webview renders them identically on every backend
-// (no file:// subresource / CORS restrictions).
-std::string setting_icon_for_key(const std::string& key)
-{
-    if (key.empty())
-        return {};
-
-    const std::string path = (boost::filesystem::path(resources_dir()) / "images" / ("param_" + key + ".svg")).string();
-    // Non-throwing stat: a throwing filesystem_error here would propagate out of snapshot() and
-    // abort the app (the palette opener). exists(fs ::error_code) never throws.
-    boost::system::error_code ec;
-    if (!boost::filesystem::exists(path, ec))
-        return {};
-
-    std::ifstream in(path, std::ios::binary);
-    if (!in)
-        return {};
-    std::string data((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
-    if (data.empty())
-        return {};
-
-    return "data:image/svg+xml;base64," + base64_encode(data);
-}
-
-// The pattern pictogram for a setting's CURRENT value (its enum int), empty when it isn't a
-// pattern-style enum or the value has no icon. Used for the search-result tile.
-std::string setting_action_icon(const SettingAction& a)
-{
-    Tab* tab = wxGetApp().get_tab(a.type);
-    if (!tab || !tab->get_config())
-        return {};
-    DynamicPrintConfig* config = tab->get_config();
-    const ConfigOptionDef* def = config->def()->get(a.opt_key);
-    if (!def || def->type != coEnum || (int(def->type) & int(coVectorType)) != 0)
-        return {};
-    // Read the value WITHOUT config->opt_int(): the non-const overload routes through a type-checked
-    // option<ConfigOptionInt>() that returns null for enum values (type() is coEnum, not coInt) and
-    // would deref null. Pull the ConfigOption* and dynamic_cast instead (succeeds: enums derive from
-    // ConfigOptionInt), falling back to the def default when the option is absent.
-    const ConfigOption* opt = (config->has(a.opt_key) ? config->option(a.opt_key) : def->default_value.get());
-    const ConfigOptionInt* int_opt = dynamic_cast<const ConfigOptionInt*>(opt);
-    if (!int_opt)
-        return {};
-    const int value = int_opt->getInt();
-    if (def->enum_keys_map)
-        for (const auto& kv : *def->enum_keys_map)
-            if (kv.second == value)
-                return setting_icon_for_key(kv.first);
-    return {};
-}
-
-std::string SettingAction::icon() const { return setting_action_icon(*this); }
+    AppActionRunResult run(const std::string& /*param*/) const override
+    {
+        if (MainFrame* mf = wxGetApp().mainframe; mf)
+            mf->open_recent_project(size_t(-1), wxString::FromUTF8(file_path));
+        return {AppActionRunResult::Level::Success};
+    }
+};
 
 } // namespace
 
@@ -838,9 +317,10 @@ void ActionRegistry::init()
 
     // Built-in palette commands (Save/Load, Preferences, Mode switch, Slice/Preview, Go to layer).
     // Register after plugins so the plugin ids win on any (unlikely) id collision - ids are distinct
-    // by prefix, so this is order-independent.
-    for (auto& action : native_commands())
-        upsert(std::move(action));
+    // by prefix, so this is order-independent. The catalog lives in NativeCommands - the registry
+    // only materialises thin CommandAction values from it.
+    for (const NativeCommand& c : NativeCommands::catalog())
+        upsert(CommandAction::make(c));
 }
 
 void ActionRegistry::refresh_source(const std::string& plugin_key, ActionChange change)
@@ -1060,6 +540,7 @@ void ActionRegistry::materialize_setting_actions()
         // (above) is the single display/search breadcrumb rather than being duplicated.
         auto action = std::make_unique<SettingAction>(opt.opt_key(), opt.type, boost::nowide::narrow(label_w),
                                                       std::string(), opt.category_local, boost::nowide::narrow(path));
+
         action->favourite                    = std::find(favs.begin(), favs.end(), id) != favs.end();
         if (auto it = stats.find(id); it != stats.end() && it->is_object()) {
             action->count = it->value("count", 0);
@@ -1137,6 +618,55 @@ void ActionRegistry::materialize_plate_actions()
     }
 }
 
+void ActionRegistry::materialize_recent_project_actions()
+{
+    assert(wxThread::IsMain());
+
+    // Persisted per-action state, read ONCE (mirrors materialize_plate_actions) so a relisted recent
+    // project keeps its recency/favourite when the recents list reorders - the id is path-keyed.
+    nlohmann::json stats = read_section("stats", nlohmann::json::object());
+    if (!stats.is_object())
+        stats = nlohmann::json::object();
+    const std::vector<std::string> favs = favourite_ids();
+
+    // app_config stores recents oldest-first; the palette shows newest-first.
+    std::vector<std::string> recents = wxGetApp().app_config->get_recent_projects();
+    std::reverse(recents.begin(), recents.end());
+
+    std::unordered_set<std::string> seen;
+    for (const std::string& path : recents) {
+        // Skip projects whose file is gone; the stale id is dropped below.
+        boost::system::error_code ec;
+        if (path.empty() || !boost::filesystem::exists(boost::filesystem::path(path), ec))
+            continue;
+
+        const std::string id = RecentProjectAction::id_for(path);
+        seen.insert(id);
+
+        // Title = file basename; source/eyebrow = the full path so search can match either.
+        boost::filesystem::path p(path);
+        std::string title = p.filename().string();
+        if (title.empty())
+            title = path;
+
+        auto action          = std::make_unique<RecentProjectAction>(path, std::move(title), path);
+        action->favourite    = std::find(favs.begin(), favs.end(), id) != favs.end();
+        if (auto it = stats.find(id); it != stats.end() && it->is_object()) {
+            action->count = it->value("count", 0);
+            action->last  = it->value("last", 0LL);
+        }
+        m_actions.insert_or_assign(action->id(), std::shared_ptr<AppAction>(std::move(action)));
+    }
+
+    // Drop recent-project actions whose file no longer exists / was removed from the recents list.
+    for (auto it = m_actions.begin(); it != m_actions.end();) {
+        if (it->first.rfind(kRecentProjectPrefix, 0) == 0 && !seen.count(it->first))
+            it = m_actions.erase(it);
+        else
+            ++it;
+    }
+}
+
 bool ActionRegistry::should_ask(const std::string& id) const
 {
     assert(wxThread::IsMain());
@@ -1163,6 +693,7 @@ nlohmann::json ActionRegistry::snapshot()
     // the palette opens).
     materialize_setting_actions();
     materialize_plate_actions();
+    materialize_recent_project_actions();
 
     std::vector<const AppAction*> sorted;
     sorted.reserve(m_actions.size());
@@ -1188,8 +719,7 @@ nlohmann::json ActionRegistry::snapshot()
                                {"source", a->source_name()},
                                {"group", a->group},
                                {"input", a->input},
-                               {"shortcut", ""},
-                               {"icon", a->icon()}});
+                               {"shortcut", ""}});
     };
 
     nlohmann::json actions = nlohmann::json::array();
