@@ -10,6 +10,7 @@
 #include "IMSlider.hpp"
 #include "MainFrame.hpp"
 #include "Plater.hpp"
+#include "PluginsDialog.hpp"
 #include "PlateSettingsDialog.hpp"
 #include "DeviceCore/DevManager.h"
 
@@ -472,6 +473,24 @@ std::vector<NativeCommand> build_command_catalog()
     add("export_config", _u8L("Export Preset Bundle"), _u8L("Export"), [](const std::string&) {
         if (MainFrame* mf = wxGetApp().mainframe)
             mf->export_config();
+        return AppActionRunResult{AppActionRunResult::Level::Success};
+    });
+
+    // ---- Plugins ----
+    add("open_plugins", _u8L("Open Plugins"), _u8L("Plugins"), [](const std::string&) {
+        wxGetApp().open_plugins_dialog();
+        return AppActionRunResult{AppActionRunResult::Level::Success};
+    });
+    add("refresh_plugins", _u8L("Refresh Plugins"), _u8L("Plugins"), [](const std::string&) {
+        wxGetApp().refresh_plugins();
+        return AppActionRunResult{AppActionRunResult::Level::Success};
+    });
+    add("install_plugin", _u8L("Install Plugin"), _u8L("Plugins"), [](const std::string&) {
+        open_plugin_hub();
+        return AppActionRunResult{AppActionRunResult::Level::Success};
+    });
+    add("install_local_plugin", _u8L("Install Local Plugin"), _u8L("Plugins"), [](const std::string&) {
+        wxGetApp().install_local_plugin();
         return AppActionRunResult{AppActionRunResult::Level::Success};
     });
 

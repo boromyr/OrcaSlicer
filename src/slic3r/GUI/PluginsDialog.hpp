@@ -24,6 +24,8 @@
 #include <wx/string.h>
 #include <wx/timer.h>
 
+#include <boost/filesystem.hpp>
+
 class wxTimer;
 
 namespace Slic3r {
@@ -33,6 +35,22 @@ struct PluginCapabilityId;
 enum class PluginCapabilityType;
 
 namespace GUI {
+
+// Dialog-independent plugin-management actions, shared by the Plugins dialog and the speed dial:
+// they never require the webview dialog to be open.
+
+// Rescans local plugins and (optionally) re-fetches cloud metadata. Blocking: run off the UI
+// thread. Used by PluginsDialog (behind its progress dialog) and GUI_App::refresh_plugins().
+void refresh_plugin_metadata_blocking(bool fetch_cloud);
+
+// Opens the Cloud plugin hub in the default browser. No dialog needed.
+void open_plugin_hub();
+
+// Synchronously installs a local plugin package (.py/.whl). Runs on the UI thread but keeps it
+// responsive by performing the install on a worker behind a modal progress dialog. `parent` owns
+// the overwrite prompt and the progress dialog. On success `message` carries the localized
+// confirmation; on a user-cancelled overwrite it is empty; on failure it carries the reason.
+bool install_local_plugin_package(const boost::filesystem::path& package_file, wxWindow* parent, wxString& message);
 
 class PluginsDialog : public Slic3r::GUI::WebViewHostDialog
 {
