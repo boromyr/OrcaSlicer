@@ -192,6 +192,7 @@ class MainFrame : public DPIFrame
     {
         FileHistory(int max) : wxFileHistory(max) {}
         std::wstring GetThumbnailUrl(int index) const;
+        bool        GetPublished(int index) const;
 
         virtual void AddFileToHistory(const wxString &file);
         virtual void RemoveFileFromHistory(size_t i);
@@ -202,6 +203,7 @@ class MainFrame : public DPIFrame
         void SetMaxFiles(int max);
     private:
         std::deque<std::string> m_thumbnails;
+        std::deque<bool>        m_published_files; // parallel to m_thumbnails: is it a published 3mf?
         bool m_load_called = false;
     };
 
@@ -355,6 +357,8 @@ public:
     bool can_upload() const;
     void save_project();
     bool save_project_as(const wxString& filename = wxString());
+    // Open the Publish dialog and export the selected settings as a published 3MF.
+    void publish_project();
 
     void        add_to_recent_projects(const wxString& filename);
     void        get_recent_projects(boost::property_tree::wptree &tree, int images);
