@@ -44,6 +44,7 @@
 // BBS
 #include "PartPlate.hpp"
 #include "Preferences.hpp"
+#include "Widgets/Button.hpp"
 #include "Widgets/ProgressDialog.hpp"
 #include "BindDialog.hpp"
 #include "../Utils/MacDarkMode.hpp"
@@ -106,6 +107,27 @@ enum class ERescaleTarget
     Mainframe,
     SettingsDialog
 };
+
+namespace {
+
+// Space opens the speed dial, but it is the activation key for buttons, checkboxes and other
+// controls. CHAR_HOOK runs before the focused child, so only take Space when the focused window has
+// no keyboard-activation meaning of its own. Canvases (GLCanvas3D) and panels are not wxControls and
+// fall through to "open"; Notebook and wxWebView are wxControls that don't use Space, so allow them.
+bool focus_keeps_space(wxWindow* focus)
+{
+    if (!focus)
+        return false;
+    if (dynamic_cast<wxTextEntryBase*>(focus))
+        return true; // typing a space into a text field
+    if (dynamic_cast<::Button*>(focus))
+        return true; // custom button: Space clicks it (it is a wxWindow, not a wxControl)
+    if (dynamic_cast<wxControl*>(focus) && !dynamic_cast<Notebook*>(focus) && !dynamic_cast<wxWebView*>(focus))
+        return true; // stock button/checkbox/choice/list/etc. keep Space
+    return false;
+}
+
+} // namespace
 
 #ifdef __WXGTK__
 // A thin transparent panel placed at a window edge to handle resize.
@@ -703,12 +725,12 @@ DPIFrame(NULL, wxID_ANY, "", wxDefaultPosition, wxDefaultSize, BORDERLESS_FRAME_
             return;}
 #endif
         // Orca: open the speed dial from any page with a bare Space. Only when no modifier is held (so
-        // editing shortcuts like Ctrl+Shift+Space in the canvas still reach it) and while no text field
-        // is focused, so typing a space into the search box or a parameter value isn't hijacked.
+        // editing shortcuts like Ctrl+Shift+Space in the canvas still reach it) and the focused window
+        // doesn't use Space to activate itself (buttons, checkboxes, list/choice controls, text fields),
+        // so a bare Space there still clicks/toggles instead of being hijacked.
         if (!evt.CmdDown() && !evt.ShiftDown() && !evt.AltDown() && evt.GetKeyCode() == WXK_SPACE) {
-            wxWindow* focus = wxWindow::FindFocus();
-            if (focus && dynamic_cast<wxTextEntryBase*>(focus)) {
-                evt.Skip(); // typing in a text field - let the space reach it
+            if (focus_keeps_space(wxWindow::FindFocus())) {
+                evt.Skip(); // let the focused control keep Space
                 return;
             }
             wxGetApp().open_speed_dial();
