@@ -31,6 +31,19 @@
 
 namespace Slic3r { namespace GUI {
 
+std::vector<std::string> cap_favourites(const std::vector<std::string>& ids, size_t limit)
+{
+    std::vector<std::string> out;
+    out.reserve(std::min(ids.size(), limit));
+    for (const auto& id : ids) {
+        if (out.size() >= limit)
+            break;
+        if (std::find(out.begin(), out.end(), id) == out.end())
+            out.push_back(id);
+    }
+    return out;
+}
+
 namespace {
 
 constexpr const char* kConfigSection = "speed_dial";
@@ -468,18 +481,8 @@ bool ActionRegistry::set_favourite(const std::string& id, bool on)
 std::vector<std::string> ActionRegistry::favourite_ids() const
 {
     assert(wxThread::IsMain());
-    // Enforce the cap + dedupe on read so the persisted order can never grow past kFavLimit,
-    // even from an older config. The pinned order is intentionally preserved (slice, not sort).
-    std::vector<std::string> favs = read_string_array("favourite_actions");
-    std::vector<std::string> out;
-    out.reserve(std::min(favs.size(), kFavLimit));
-    for (const auto& id : favs) {
-        if (out.size() >= kFavLimit)
-            break;
-        if (std::find(out.begin(), out.end(), id) == out.end())
-            out.push_back(id);
-    }
-    return out;
+    // Enforce the cap + dedupe on read so the persisted order can never grow past kFavLimit, even from an older config.
+    return cap_favourites(read_string_array("favourite_actions"), kFavLimit);
 }
 
 void ActionRegistry::reorder_favourites(const std::vector<std::string>& ids)
@@ -496,8 +499,7 @@ void ActionRegistry::reorder_favourites(const std::vector<std::string>& ids)
         if (std::find(next.begin(), next.end(), id) == next.end())
             next.push_back(id);
     // never write the bar back larger than the quick-launch slots
-    if (next.size() > kFavLimit)
-        next.resize(kFavLimit);
+    next = cap_favourites(next, kFavLimit);
     write_section("favourite_actions", nlohmann::json(next));
 }
 

@@ -186,4 +186,29 @@ assert.equal(ctx.revealTarget(100, -5, 50), 50, "negative start is clamped to th
 assert.equal(ctx.revealTarget(200, 50, 100), 150, "a scroll viewpoint reveals a window past the current rows");
 assert.equal(ctx.revealTarget(10, 0, 50), 10, "a list shorter than one window stays fully materialized");
 
+// visibleFavourites: the quick-bar drops pins whose action no longer exists (plugin unloaded,
+// command removed) and collapses duplicate ids, keeping the persisted pin order.
+assert.deepEqual(ctx.visibleFavourites(["a", "b", "c"], [{ id: "a" }, { id: "b" }]),
+    ["a", "b"], "a pin with no live action is dropped from the quick-bar");
+assert.deepEqual(ctx.visibleFavourites(["b", "a", "b"], [{ id: "a" }, { id: "b" }]),
+    ["b", "a"], "duplicate pins collapse to the first occurrence");
+assert.deepEqual(ctx.visibleFavourites([], [{ id: "a" }]), [], "no pins renders an empty quick-bar");
+assert.deepEqual(ctx.visibleFavourites(["a"], []), [], "a stale config with no actions renders nothing");
+
+// tileCode: monogram ladder - title initial, then title+source initials, then a stable ordinal
+// by id. The ordinal is keyed by id, not by list order, so frecency reshuffles never renumber tiles.
+const monoPool = [
+    { id: "z", title: "Repair", source: "Mesh Tools" },
+    { id: "a", title: "Repair", source: "Mesh Tools" },
+    { id: "b", title: "Repair", source: "Filament" }
+];
+assert.equal(ctx.tileCode(monoPool[0], monoPool), "MR2",
+    "same title+source resolves to source+title initials with an id-keyed ordinal (id z sorts after id a)");
+assert.equal(ctx.tileCode(monoPool[1], monoPool), "MR1",
+    "the earlier id is numbered first among same-title+source tiles");
+assert.equal(ctx.tileCode(monoPool[2], monoPool), "FR",
+    "same title but different source resolves to source+title initials");
+assert.equal(ctx.tileCode({ id: "x", title: "Slice", source: "OrcaSlicer" }, [{ id: "x", title: "Slice", source: "OrcaSlicer" }]),
+    "S", "a unique title resolves to the bare title initial");
+
 console.log("ok");

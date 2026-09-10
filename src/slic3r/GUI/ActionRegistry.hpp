@@ -106,6 +106,10 @@ private:
     std::string m_source_name; // display name of the action's source
 };
 
+// Cap + dedupe a persisted favourite-id list, preserving first-occurrence order. A stale or
+// hand-edited config must never grow the quick-launch bar past `limit`, and a duplicated id must collapse to its first pin.
+std::vector<std::string> cap_favourites(const std::vector<std::string>& ids, size_t limit);
+
 // Self-contained sink and single owner of runnable actions for the app session.
 //
 // Workflow:

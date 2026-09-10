@@ -1,10 +1,13 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include "slic3r/GUI/ActionRegistry.hpp"
+#include "slic3r/GUI/NativeCommands.hpp"
 
 #include <memory>
+#include <set>
 #include <string>
 #include <type_traits>
+#include <vector>
 
 using Slic3r::GUI::AppAction;
 using Slic3r::GUI::AppActionRunResult;
@@ -80,4 +83,32 @@ TEST_CASE("Command actions are keyed by catalog key, not display title", "[speed
     // The second field is the stable key, so distinct commands never collide.
     CHECK(AppAction::compose_id("orca_command", "save_project", "orca") !=
           AppAction::compose_id("orca_command", "load_project", "orca"));
+}
+
+// The quick-launch cap must stay 10 to match the numbered Alt/Option+1..9,0 keys. The web palette
+// mirrors it as K_FAV_LIMIT (asserted in speeddial.test.js); the C++ side pins it here.
+static_assert(Slic3r::GUI::ActionRegistry::kFavLimit == 10, "kFavLimit must stay 10");
+
+TEST_CASE("Favourite lists are capped and deduped preserving order", "[speeddial][actions]")
+{
+    using Slic3r::GUI::cap_favourites;
+
+    CHECK(cap_favourites({}, 10) == std::vector<std::string>{});
+    CHECK(cap_favourites({"a", "b", "a"}, 10) == std::vector<std::string>{"a", "b"});
+    CHECK(cap_favourites({"c", "a", "b", "c"}, 3) == std::vector<std::string>{"c", "a", "b"});
+    CHECK(cap_favourites({"a", "b"}, 0) == std::vector<std::string>{});
+}
+
+TEST_CASE("Native command catalog has unique keys and present titles", "[speeddial][actions]")
+{
+    const std::vector<Slic3r::GUI::NativeCommand>& commands = Slic3r::GUI::NativeCommands::catalog();
+    CHECK_FALSE(commands.empty());
+
+    std::set<std::string> seen;
+    for (const auto& c : commands) {
+        CHECK_FALSE(c.key.empty());
+        CHECK_FALSE(c.title.empty());
+        // A duplicated key would silently shadow the earlier command in the palette.
+        CHECK(seen.insert(c.key).second);
+    }
 }
