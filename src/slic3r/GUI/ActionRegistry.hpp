@@ -2,6 +2,8 @@
 
 #include <nlohmann/json.hpp>
 
+#include <libslic3r/Config.hpp>
+
 #include <wx/string.h>
 #include <wx/thread.h>
 
@@ -75,6 +77,9 @@ struct AppAction
     // Second-phase input descriptor for the palette: "percent" (jump to layer by a 0-100
     // value) or "tab" (pick a notebook tab). Empty = run immediately on activation.
     std::string input;
+    // Settings mode required to edit this action (SettingActions only). The palette prompts before
+    // running an action whose mode is above the user's current mode. comSimple for everything else.
+    ConfigOptionMode required_mode = comSimple;
 
     virtual ~AppAction() = default;
     // Re-resolves + runs (UI thread). `param` carries an optional per-run argument for
@@ -105,6 +110,13 @@ private:
     std::string m_source_key;  // stable identity of the action's source (e.g. plugin_key)
     std::string m_source_name; // display name of the action's source
 };
+
+// True when a setting at `setting_mode` cannot be edited in `current_mode` and the UI must switch
+// first. Developer settings are handled as a separate prompt by the Speed Dial.
+inline bool requires_mode_switch(ConfigOptionMode setting_mode, ConfigOptionMode current_mode)
+{
+    return setting_mode > current_mode;
+}
 
 // Cap + dedupe a persisted favourite-id list, preserving first-occurrence order. A stale or
 // hand-edited config must never grow the quick-launch bar past `limit`, and a duplicated id must collapse to its first pin.

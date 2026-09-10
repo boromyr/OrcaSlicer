@@ -112,3 +112,91 @@ TEST_CASE("Native command catalog has unique keys and present titles", "[speeddi
         CHECK(seen.insert(c.key).second);
     }
 }
+
+// The Help-menu commands, wiki/YouTube links and the developer-mode toggle are part of the palette.
+// Guard their presence and that they stay grouped with their peers, so a catalog edit cannot drop
+// or scatter them. Groups are compared to the peer's own group to stay independent of translation.
+TEST_CASE("Native command catalog includes the Help and developer-mode commands", "[speeddial][actions]")
+{
+    const std::vector<Slic3r::GUI::NativeCommand>& commands = Slic3r::GUI::NativeCommands::catalog();
+    auto find = [&commands](const std::string& key) -> const Slic3r::GUI::NativeCommand* {
+        for (const auto& c : commands)
+            if (c.key == key)
+                return &c;
+        return nullptr;
+    };
+
+    const Slic3r::GUI::NativeCommand* first = find("help_keyboard_shortcuts");
+    REQUIRE(first != nullptr);
+    for (const char* key : {"help_setup_wizard", "help_open_config_folder", "help_troubleshoot", "help_network_test",
+                            "help_tip_of_the_day", "help_check_updates", "help_about", "open_wiki", "open_youtube"}) {
+        const Slic3r::GUI::NativeCommand* c = find(key);
+        REQUIRE(c != nullptr);
+        CHECK(c->group == first->group);
+    }
+
+    const Slic3r::GUI::NativeCommand* mode_simple = find("mode_simple");
+    const Slic3r::GUI::NativeCommand* dev_mode    = find("toggle_developer_mode");
+    REQUIRE(mode_simple != nullptr);
+    REQUIRE(dev_mode != nullptr);
+    CHECK(dev_mode->group == mode_simple->group);
+}
+
+// Every "Add Primitive" item and shipped handy model has a palette command, grouped as in the Add
+// menu. Groups are compared to a peer's own group to stay independent of translation.
+TEST_CASE("Native command catalog covers the Add menus", "[speeddial][actions]")
+{
+    const std::vector<Slic3r::GUI::NativeCommand>& commands = Slic3r::GUI::NativeCommands::catalog();
+    auto group_of = [&commands](const std::string& key) -> const std::string* {
+        for (const auto& c : commands)
+            if (c.key == key)
+                return &c.group;
+        return nullptr;
+    };
+
+    const std::string* primitive_group = group_of("add_primitive_cube");
+    REQUIRE(primitive_group != nullptr);
+    for (const char* key : {"add_primitive_cylinder", "add_primitive_sphere", "add_primitive_cone", "add_primitive_disc",
+                            "add_primitive_torus", "add_primitive_text", "add_primitive_svg"}) {
+        const std::string* group = group_of(key);
+        INFO(key);
+        REQUIRE(group != nullptr);
+        CHECK(*group == *primitive_group);
+    }
+
+    const std::string* handy_group = group_of("add_handy_orca_cube");
+    REQUIRE(handy_group != nullptr);
+    for (const char* key : {"add_handy_orcasliced_combo", "add_handy_orca_badge", "add_handy_orca_tolerance_test",
+                            "add_handy_3dbenchy", "add_handy_cali_cat", "add_handy_autodesk_fdm_test", "add_handy_voron_cube",
+                            "add_handy_stanford_bunny", "add_handy_orca_string_hell"}) {
+        const std::string* group = group_of(key);
+        INFO(key);
+        REQUIRE(group != nullptr);
+        CHECK(*group == *handy_group);
+    }
+}
+
+// A setting whose mode is above the user's current mode must be prompted before it can be edited.
+// Developer settings (comDevelop) are above every non-developer mode, so they always prompt then.
+TEST_CASE("Settings above the current mode require a switch", "[speeddial][actions]")
+{
+    using Slic3r::GUI::requires_mode_switch;
+    using Slic3r::comAdvanced;
+    using Slic3r::comDevelop;
+    using Slic3r::comExpert;
+    using Slic3r::comSimple;
+
+    CHECK(requires_mode_switch(comAdvanced, comSimple));
+    CHECK(requires_mode_switch(comExpert, comSimple));
+    CHECK(requires_mode_switch(comExpert, comAdvanced));
+    CHECK(requires_mode_switch(comDevelop, comSimple));
+    CHECK(requires_mode_switch(comDevelop, comAdvanced));
+    CHECK(requires_mode_switch(comDevelop, comExpert));
+
+    CHECK_FALSE(requires_mode_switch(comSimple, comSimple));
+    CHECK_FALSE(requires_mode_switch(comSimple, comAdvanced));
+    CHECK_FALSE(requires_mode_switch(comAdvanced, comAdvanced));
+    CHECK_FALSE(requires_mode_switch(comAdvanced, comExpert));
+    CHECK_FALSE(requires_mode_switch(comExpert, comExpert));
+    CHECK_FALSE(requires_mode_switch(comDevelop, comDevelop));
+}

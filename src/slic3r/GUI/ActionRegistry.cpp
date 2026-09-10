@@ -162,6 +162,17 @@ std::string setting_type_context(Preset::Type type)
     }
 }
 
+// Stable, non-localized mode token for the webview, which maps it to a badge ("Developer" etc.).
+const char* mode_key(ConfigOptionMode mode)
+{
+    switch (mode) {
+    case comAdvanced: return "advanced";
+    case comExpert: return "expert";
+    case comDevelop: return "develop";
+    default: return "simple";
+    }
+}
+
 // A config setting exposed as a first-class action: selecting it jumps the sidebar to the option.
 // The id is keyed by opt_key+type (NOT the display label), so renaming/localizing never re-keys
 // the action; title/group/source are purely for display + search. run() performs the jump, and
@@ -180,7 +191,8 @@ struct SettingAction : AppAction
                   std::string title,
                   std::string group,
                   std::wstring category_in,
-                  std::string source_name)
+                  std::string source_name,
+                  ConfigOptionMode mode_in)
         : AppAction(AppActionId{id_for(opt_key_in, type_in)}, std::move(title), kOrcaSourceKey, std::move(source_name))
         , opt_key(std::move(opt_key_in))
         , type(type_in)
@@ -188,8 +200,9 @@ struct SettingAction : AppAction
     {
         // A setting is a single-phase command: activating it jumps the sidebar to the option
         // (like the sidebar's own settings search), then the dial closes. run() performs the jump.
-        this->kind  = AppActionKind::Command;
-        this->group = std::move(group);
+        this->kind          = AppActionKind::Command;
+        this->group         = std::move(group);
+        this->required_mode = mode_in;
     }
 
     AppActionRunResult run(const std::string& /*param*/) const override
@@ -509,10 +522,9 @@ void ActionRegistry::materialize_setting_actions()
 
     // Reuse the Sidebar's live searcher: it's the only OptionsSearcher whose groups_and_categories
     // map is populated (Tab::add_key feeds it at build time), and it already mirrors the current
-    // configs/mode/printer-technology - i.e. exactly what the sidebar's own search would show. A
-    // fresh OptionsSearcher has an empty groups_and_categories, so append_options() would drop every
-    // option and nothing would materialise. Turn each visible option into a SettingAction.
-    const std::vector<Search::Option>& options = wxGetApp().sidebar().get_searcher().all_options();
+    // configs/printer-technology. Use the all-modes view so the Speed Dial lists every setting,
+    // including those above the user's current mode, and can prompt to switch before jumping.
+    const std::vector<Search::Option>& options = wxGetApp().sidebar().get_searcher().all_modes_options();
 
     // Load the persisted per-action state ONCE (not per-option) so a re-materialised setting keeps
     // its recency/favourite; mirroring seed_state but amortised over the whole option set.
@@ -540,7 +552,7 @@ void ActionRegistry::materialize_setting_actions()
         // title = the option leaf name (last label segment); group stays empty so the source path
         // (above) is the single display/search breadcrumb rather than being duplicated.
         auto action = std::make_unique<SettingAction>(opt.opt_key(), opt.type, boost::nowide::narrow(label_w), std::string(),
-                                                      opt.category_local, boost::nowide::narrow(path));
+                                                      opt.category_local, boost::nowide::narrow(path), opt.mode);
 
         action->favourite = std::find(favs.begin(), favs.end(), id) != favs.end();
         if (auto it = stats.find(id); it != stats.end() && it->is_object()) {
@@ -726,7 +738,8 @@ nlohmann::json ActionRegistry::snapshot()
                                {"source", a->source_name()},
                                {"group", a->group},
                                {"input", a->input},
-                               {"shortcut", ""}});
+                               {"shortcut", ""},
+                               {"mode", mode_key(a->required_mode)}});
     };
 
     nlohmann::json actions = nlohmann::json::array();
@@ -765,7 +778,10 @@ nlohmann::json ActionRegistry::snapshot()
     for (const AppAction* a : recent)
         recent_json.push_back(action_to_json(a));
 
-    return {{"actions", std::move(actions)}, {"favourites", std::move(favourites)}, {"recent", std::move(recent_json)}};
+    return {{"actions", std::move(actions)},
+            {"favourites", std::move(favourites)},
+            {"recent", std::move(recent_json)},
+            {"user_mode", mode_key(wxGetApp().get_mode())}};
 }
 
 // ---- tab options (enumerate the MainFrame notebook's current pages) ----------

@@ -10,6 +10,11 @@ var sel = { zone: "list", i: 0 };   // zone: 'list' | 'fav'
 var lastResizeHeight = 0;
 var matchIndex = {};
 
+// The user's current settings mode (from the C++ payload) plus the rank order of the modes. Each
+// action carries the mode it requires, so "would this need a switch?" is a rank comparison.
+var USER_MODE = "simple";
+var MODE_RANK = { simple: 0, advanced: 1, expert: 2, develop: 3 };
+
 // ---- windowed list render ----------------------------------------------------
 // The command list is rendered in windows (append-on-scroll) so a huge settings pool doesn't build
 // the whole DOM per keystroke. Rows are exactly ROW_H tall (matches .row min-height 44px; see --row-h,
@@ -105,11 +110,15 @@ function searchActions(actions, query) {
     matchIndex = {};
     if (!q) { searchNeedle = ""; return list.slice(0); }
     searchNeedle = NormText(q, false);
+    // Mode keywords ("advanced"/"expert"/"developer") are a union, not a filter: the normal text
+    // search still runs on the full query, and every setting requiring a named mode is appended.
+    var modes = modeFilterFromQuery(q);
     // Compiled once per pass, reused over every field: non-global so no exec()/lastIndex state leaks
     // between fields, and EscapeRegExp keeps regex metachars in the query literal.
     var wwRe = new RegExp("\\b" + EscapeRegExp(searchNeedle) + "\\b");
 
     var scored = [];
+    var seen = {};
     for (var i = 0; i < list.length; i++) {
         var a = list[i];
         var t = fieldMatchScore(titleNorm(a), wwRe);
@@ -126,13 +135,28 @@ function searchActions(actions, query) {
             useEyebrowGroup: !!(a.group)
         };
         scored.push({ a: a, s: score });
+        seen[a.id] = true;
     }
     scored.sort(function (x, y) {
         if (x.s !== y.s) return y.s - x.s;
         if (x.a.title !== y.a.title) return x.a.title < y.a.title ? -1 : 1;
         return x.a.id < y.a.id ? -1 : x.a.id > y.a.id ? 1 : 0;
     });
-    return scored.map(function (e) { return e.a; });
+    var result = scored.map(function (e) { return e.a; });
+    if (modes.length) {
+        // Settings requiring a named mode, after the ranked text matches and without duplicates.
+        var extras = [];
+        for (var j = 0; j < list.length; j++) {
+            if (!seen[list[j].id] && modes.indexOf(list[j].mode) !== -1)
+                extras.push(list[j]);
+        }
+        extras.sort(function (x, y) {
+            if (x.title !== y.title) return x.title < y.title ? -1 : 1;
+            return x.id < y.id ? -1 : x.id > y.id ? 1 : 0;
+        });
+        result = result.concat(extras);
+    }
+    return result;
 }
 
 // Pure: how many rows must be materialized to cover the given starting index plus `size` more.
@@ -264,6 +288,40 @@ function prettySource(source) {
     return String(source || "").toLowerCase().replace(/\b\w/g, function (c) { return c.toUpperCase(); });
 }
 
+// True when the action's required mode is above the user's current mode, i.e. selecting it will
+// prompt a mode switch. Unknown/empty modes are treated as "simple" so commands never flag.
+function needsModeSwitch(item, userMode) {
+    var need = MODE_RANK[(item && item.mode) || "simple"] || 0;
+    var have = MODE_RANK[userMode || "simple"] || 0;
+    return need > have;
+}
+
+// Short mode tag for an action that needs a switch, or "" when it is already available.
+function modeBadge(item, userMode) {
+    if (!needsModeSwitch(item, userMode)) return "";
+    if (item.mode === "develop") return "Developer";
+    if (item.mode === "expert") return "Expert";
+    if (item.mode === "advanced") return "Advanced";
+    return "";
+}
+
+// Search keywords that name a settings mode. "developer" (and the internal "develop") both select
+// Developer; Simple is deliberately absent so it never floods the list with every command.
+var MODE_WORDS = { advanced: "advanced", expert: "expert", developer: "develop", develop: "develop" };
+
+// The mode values named as whole words in `query`, deduped. Case/diacritic-insensitive via Norm. A
+// query with no mode keyword returns [] so the normal text search is completely unaffected.
+function modeFilterFromQuery(query) {
+    var norm = NormText(String(query || "").trim(), false);
+    var found = [];
+    norm.split(/[^a-z0-9]+/).forEach(function (word) {
+        var mode = MODE_WORDS[word];
+        if (mode && found.indexOf(mode) === -1)
+            found.push(mode);
+    });
+    return found;
+}
+
 // Accessible label "Title from Pretty Source", disambiguated with the opaque action id when another
 // action shares the same title+source (case/separator-insensitive) - so two rows never read out identically.
 function actionLabel(action, actions) {
@@ -289,6 +347,7 @@ function stateFromPayload(payload) {
         actions: payload.actions || [],
         favourites: payload.favourites || [],
         recent: payload.recent || [],
+        userMode: payload.user_mode || "simple",
         query: "",
         sel: { zone: "list", i: 0 },
         lastResizeHeight: 0,
@@ -348,6 +407,7 @@ window.HandleStudio = function (payload) {
         ACTIONS = next.actions;
         FAVS = next.favourites;
         RECENTS = next.recent;
+        USER_MODE = next.userMode;
         query = next.query;
         sel = next.sel;
         lastResizeHeight = next.lastResizeHeight;
@@ -470,7 +530,8 @@ function renderFav() {
         tile.className = "fav-tile" + (sel.zone === "fav" && sel.i === i ? " sel" : "");
         tile.style.setProperty("--h", hue(id));
         fillTile(tile, a);
-        tile.title = a.title;
+        var tileBadge = modeBadge(a, USER_MODE);
+        tile.title = a.title + (tileBadge ? " (" + tileBadge + ")" : "");
         tile.setAttribute("aria-label", actionLabel(a, ACTIONS));
         tile.onclick = function () { sel = { zone: "fav", i: i }; activateEntry(a); };
         // Numbered quick-launch badge (Alt/Option+digit), drawn on the corner.
@@ -584,6 +645,13 @@ function renderActionRow(a, i) {
     line.className = "row-line";
     var name = markedText("row-name", a.title, mi ? mi.title : null);
     line.appendChild(name);
+    var badge = modeBadge(a, USER_MODE);
+    if (badge) {
+        var tag = document.createElement("span");
+        tag.className = "row-mode";
+        tag.textContent = badge;
+        line.appendChild(tag);
+    }
     if (a.shortcut) {
         var sc = document.createElement("div");
         sc.className = "row-sc";

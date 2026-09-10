@@ -364,6 +364,18 @@ body {
     gap: 3px;
 }
 
+/* Mode tag on settings above the user's current mode (Advanced/Expert/Developer). */
+.row-mode {
+    flex: 0 0 auto;
+    padding: 1px 6px;
+    font-size: 10px;
+    line-height: 1.4;
+    border-radius: 8px;
+    color: var(--plugin-status-warn);
+    background: var(--plugin-status-warn-bg);
+    white-space: nowrap;
+}
+
 kbd {
     display: inline-flex;
     align-items: center;

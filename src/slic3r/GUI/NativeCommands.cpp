@@ -2,18 +2,23 @@
 
 #include "calib_dlg.hpp"
 #include "Camera.hpp"
+#include "DailyTips.hpp"
 #include "GCodeViewer.hpp"
 #include "GLCanvas3D.hpp"
 #include "GUI.hpp"
 #include "GUI_App.hpp"
+#include "GUI_Factories.hpp"
+#include "GUI_ObjectList.hpp"
 #include "I18N.hpp"
 #include "IMSlider.hpp"
 #include "MainFrame.hpp"
+#include "NetworkTestDialog.hpp"
 #include "Plater.hpp"
 #include "PluginsDialog.hpp"
 #include "PlateSettingsDialog.hpp"
 #include "DeviceCore/DevManager.h"
 
+#include <libslic3r/Model.hpp>
 #include <libslic3r/Utils.hpp>
 
 #include <algorithm>
@@ -23,6 +28,8 @@
 #include <string>
 #include <tuple>
 #include <utility>
+
+#include <wx/utils.h>
 
 namespace Slic3r { namespace GUI {
 
@@ -112,6 +119,19 @@ AppActionRunResult calib_command(CalibKind kind)
     return {AppActionRunResult::Level::Success};
 }
 
+// Palette-only: developer mode overrides the saved mode (get_mode returns comDevelop), so choosing
+// Simple/Advanced/Expert must clear it first. Mirrors Preferences: persist the flag, then update.
+void select_mode(ConfigOptionMode mode)
+{
+    GUI_App& app = wxGetApp();
+    const bool was_developer = app.app_config->get_bool("developer_mode");
+    if (was_developer)
+        app.app_config->set_bool("developer_mode", false);
+    app.save_mode(mode);
+    if (was_developer)
+        app.app_config->save();
+}
+
 std::vector<NativeCommand> build_command_catalog()
 {
     std::vector<NativeCommand> out;
@@ -174,16 +194,25 @@ std::vector<NativeCommand> build_command_catalog()
 
     // ---- Mode ----
     add("mode_simple", _u8L("Mode: Simple"), _u8L("Mode"), [](const std::string&) {
-        wxGetApp().save_mode(comSimple);
+        select_mode(comSimple);
         return AppActionRunResult{AppActionRunResult::Level::Success};
     });
     add("mode_advanced", _u8L("Mode: Advanced"), _u8L("Mode"), [](const std::string&) {
-        wxGetApp().save_mode(comAdvanced);
+        select_mode(comAdvanced);
         return AppActionRunResult{AppActionRunResult::Level::Success};
     });
     add("mode_expert", _u8L("Mode: Expert"), _u8L("Mode"), [](const std::string&) {
-        wxGetApp().save_mode(comExpert);
+        select_mode(comExpert);
         return AppActionRunResult{AppActionRunResult::Level::Success};
+    });
+    // Mirrors Preferences > Developer > Developer mode: flip the flag, persist, refresh the UI.
+    add("toggle_developer_mode", _u8L("Toggle Developer Mode"), _u8L("Mode"), [](const std::string&) {
+        GUI_App& app = wxGetApp();
+        const bool on = !app.app_config->get_bool("developer_mode");
+        app.app_config->set_bool("developer_mode", on);
+        app.app_config->save();
+        app.update_mode();
+        return AppActionRunResult{AppActionRunResult::Level::Success, on ? _L("Developer mode enabled.") : _L("Developer mode disabled.")};
     });
 
     // ---- Export pipeline ----
@@ -320,6 +349,57 @@ std::vector<NativeCommand> build_command_catalog()
         return object_op(wxGetApp().plater(), [](Plater* p) { return p->can_arrange(); }, [](Plater* p) { p->orient(); });
     });
 
+    // ---- Add Primitive ---- (the Add > Add Primitive submenu; creates a new object)
+    auto add_primitive = [&](std::string key, std::string title, const char* type_name) {
+        add(std::move(key), std::move(title), _u8L("Add Primitive"), [type_name](const std::string&) {
+            Plater* plater = wxGetApp().plater();
+            if (plater) {
+                ensure_3d_view(plater);
+                if (ObjectList* list = wxGetApp().obj_list())
+                    list->load_generic_subobject(type_name, ModelVolumeType::INVALID);
+            }
+            return AppActionRunResult{AppActionRunResult::Level::Success};
+        });
+    };
+    add_primitive("add_primitive_cube", _u8L("Cube"), "Cube");
+    add_primitive("add_primitive_cylinder", _u8L("Cylinder"), "Cylinder");
+    add_primitive("add_primitive_sphere", _u8L("Sphere"), "Sphere");
+    add_primitive("add_primitive_cone", _u8L("Cone"), "Cone");
+    add_primitive("add_primitive_disc", _u8L("Disc"), "Disc");
+    add_primitive("add_primitive_torus", _u8L("Torus"), "Torus");
+    add("add_primitive_text", _u8L("Text"), _u8L("Add Primitive"), [](const std::string&) {
+        Plater* plater = wxGetApp().plater();
+        if (plater) {
+            ensure_3d_view(plater);
+            if (GLCanvas3D* canvas = plater->canvas3D())
+                canvas->clear_popup_menu_position();
+            MenuFactory::add_text_volume(ModelVolumeType::INVALID);
+        }
+        return AppActionRunResult{AppActionRunResult::Level::Success};
+    });
+    add("add_primitive_svg", _u8L("SVG"), _u8L("Add Primitive"), [](const std::string&) {
+        Plater* plater = wxGetApp().plater();
+        if (plater) {
+            ensure_3d_view(plater);
+            if (GLCanvas3D* canvas = plater->canvas3D())
+                canvas->clear_popup_menu_position();
+            MenuFactory::add_svg_volume(ModelVolumeType::INVALID);
+        }
+        return AppActionRunResult{AppActionRunResult::Level::Success};
+    });
+
+    // ---- Add Handy models ---- (the Add > Add Handy models submenu)
+    const std::vector<MenuFactory::HandyModel>& handy = MenuFactory::handy_models();
+    for (std::size_t i = 0; i < handy.size(); ++i) {
+        add("add_handy_" + std::string(handy[i].key), Slic3r::GUI::I18N::translate_utf8(handy[i].label), _u8L("Add Handy models"),
+            [i](const std::string&) {
+                if (Plater* plater = wxGetApp().plater())
+                    ensure_3d_view(plater);
+                MenuFactory::load_handy_model(i);
+                return AppActionRunResult{AppActionRunResult::Level::Success};
+            });
+    }
+
     // ---- Plate ----
     add("plate_add", _u8L("Add Plate"), _u8L("Plate"), [](const std::string&) {
         Plater* plater = wxGetApp().plater();
@@ -455,6 +535,53 @@ std::vector<NativeCommand> build_command_catalog()
     add("export_config", _u8L("Export Preset Bundle"), _u8L("Export"), [](const std::string&) {
         if (MainFrame* mf = wxGetApp().mainframe)
             mf->export_config();
+        return AppActionRunResult{AppActionRunResult::Level::Success};
+    });
+
+    // ---- Help ---- (mirrors the top-bar Help menu, plus the wiki/YouTube links)
+    add("help_keyboard_shortcuts", _u8L("Keyboard Shortcuts"), _u8L("Help"), [](const std::string&) {
+        wxGetApp().keyboard_shortcuts();
+        return AppActionRunResult{AppActionRunResult::Level::Success};
+    });
+    add("help_setup_wizard", _u8L("Setup Wizard"), _u8L("Help"), [](const std::string&) {
+        wxGetApp().ShowUserGuide();
+        return AppActionRunResult{AppActionRunResult::Level::Success};
+    });
+    add("help_open_config_folder", _u8L("Show Configuration Folder"), _u8L("Help"), [](const std::string&) {
+        Slic3r::GUI::desktop_open_datadir_folder();
+        return AppActionRunResult{AppActionRunResult::Level::Success};
+    });
+    add("help_troubleshoot", _u8L("Troubleshoot Center"), _u8L("Help"), [](const std::string&) {
+        wxGetApp().troubleshoot();
+        return AppActionRunResult{AppActionRunResult::Level::Success};
+    });
+    add("help_network_test", _u8L("Open Network Test"), _u8L("Help"), [](const std::string&) {
+        NetworkTestDialog dlg(wxGetApp().mainframe);
+        dlg.ShowModal();
+        return AppActionRunResult{AppActionRunResult::Level::Success};
+    });
+    add("help_tip_of_the_day", _u8L("Show Tip of the Day"), _u8L("Help"), [](const std::string&) {
+        if (Plater* plater = wxGetApp().plater()) {
+            plater->get_dailytips()->open();
+            if (GLCanvas3D* canvas = plater->get_current_canvas3D())
+                canvas->set_as_dirty();
+        }
+        return AppActionRunResult{AppActionRunResult::Level::Success};
+    });
+    add("help_check_updates", _u8L("Check for Updates"), _u8L("Help"), [](const std::string&) {
+        wxGetApp().check_new_version_sf(true, 1);
+        return AppActionRunResult{AppActionRunResult::Level::Success};
+    });
+    add("help_about", _u8L("About OrcaSlicer"), _u8L("Help"), [](const std::string&) {
+        Slic3r::GUI::about();
+        return AppActionRunResult{AppActionRunResult::Level::Success};
+    });
+    add("open_wiki", _u8L("Open Wiki"), _u8L("Help"), [](const std::string&) {
+        wxLaunchDefaultBrowser("https://www.orcaslicer.com/wiki/", wxBROWSER_NEW_WINDOW);
+        return AppActionRunResult{AppActionRunResult::Level::Success};
+    });
+    add("open_youtube", _u8L("Open YouTube Channel"), _u8L("Help"), [](const std::string&) {
+        wxLaunchDefaultBrowser("https://www.youtube.com/@OfficialOrcaSlicer/videos", wxBROWSER_NEW_WINDOW);
         return AppActionRunResult{AppActionRunResult::Level::Success};
     });
 

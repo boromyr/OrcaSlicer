@@ -211,4 +211,53 @@ assert.equal(ctx.tileCode(monoPool[2], monoPool), "FR",
 assert.equal(ctx.tileCode({ id: "x", title: "Slice", source: "OrcaSlicer" }, [{ id: "x", title: "Slice", source: "OrcaSlicer" }]),
     "S", "a unique title resolves to the bare title initial");
 
+// needsModeSwitch: a setting is gated only when its required mode outranks the user's current mode.
+assert.equal(ctx.needsModeSwitch({ mode: "advanced" }, "simple"), true, "Advanced is gated in Simple mode");
+assert.equal(ctx.needsModeSwitch({ mode: "expert" }, "simple"), true, "Expert is gated in Simple mode");
+assert.equal(ctx.needsModeSwitch({ mode: "expert" }, "advanced"), true, "Expert is gated in Advanced mode");
+assert.equal(ctx.needsModeSwitch({ mode: "develop" }, "expert"), true, "Developer is gated in Expert mode");
+assert.equal(ctx.needsModeSwitch({ mode: "simple" }, "simple"), false, "a Simple setting is not gated");
+assert.equal(ctx.needsModeSwitch({ mode: "advanced" }, "advanced"), false, "an Advanced setting is not gated in Advanced mode");
+assert.equal(ctx.needsModeSwitch({ mode: "develop" }, "develop"), false, "a Developer setting is not gated in Developer mode");
+assert.equal(ctx.needsModeSwitch({}, "simple"), false, "a command with no mode is never gated");
+
+// modeBadge: the tag text for gated settings, empty once the setting is available.
+assert.equal(ctx.modeBadge({ mode: "advanced" }, "simple"), "Advanced", "Advanced badge text");
+assert.equal(ctx.modeBadge({ mode: "expert" }, "simple"), "Expert", "Expert badge text");
+assert.equal(ctx.modeBadge({ mode: "develop" }, "simple"), "Developer", "Developer badge text");
+assert.equal(ctx.modeBadge({ mode: "advanced" }, "advanced"), "", "no badge when the mode already matches");
+
+// modeFilterFromQuery: whole-word, case-insensitive mode keywords -> internal mode values. "developer"
+// maps to the internal "develop"; "simple" is deliberately not a keyword; a prefix is not a match.
+assert.deepEqual(ctx.modeFilterFromQuery("advanced"), ["advanced"], "Advanced is a mode keyword");
+assert.deepEqual(ctx.modeFilterFromQuery("Expert"), ["expert"], "the keyword is case-insensitive");
+assert.deepEqual(ctx.modeFilterFromQuery("developer"), ["develop"], "Developer maps to the develop value");
+assert.deepEqual(ctx.modeFilterFromQuery("develop"), ["develop"], "the internal develop spelling also works");
+assert.deepEqual(ctx.modeFilterFromQuery("expert retraction"), ["expert"], "a keyword is found among other text");
+assert.deepEqual(ctx.modeFilterFromQuery("advanced expert"), ["advanced", "expert"], "multiple keywords are deduped in order");
+assert.deepEqual(ctx.modeFilterFromQuery("advanced advanced"), ["advanced"], "a repeated keyword is deduped");
+assert.deepEqual(ctx.modeFilterFromQuery("simple"), [], "Simple is not a mode keyword");
+assert.deepEqual(ctx.modeFilterFromQuery("advance"), [], "a mode-word prefix is not a whole-word match");
+assert.deepEqual(ctx.modeFilterFromQuery(""), [], "an empty query names no mode");
+
+// searchActions mode union: a mode keyword keeps the normal text matches AND appends every setting
+// requiring that mode. Not a filter - a Simple setting literally named "Advanced..." still shows, and
+// commands (mode "simple") are never pulled in by a keyword.
+const modePool = [
+    { id: "a1", title: "Top Surface Layers", source: "Quality", group: "Quality : Layers", mode: "advanced" },
+    { id: "a2", title: "Advanced Detection", source: "Quality", group: "Quality", mode: "simple" },
+    { id: "a3", title: "Retraction Length", source: "Process", group: "Process : Quality", mode: "expert" },
+    { id: "a4", title: "Slice", source: "OrcaSlicer", group: "Commands", mode: "simple" }
+];
+var adv = ctx.searchActions(modePool, "advanced");
+assert.deepEqual(adv.map(function (a) { return a.id; }), ["a2", "a1"],
+    "a text match (a2) ranks above the mode-only setting (a1), and no expert/command leaks in");
+var expert = ctx.searchActions(modePool, "expert");
+assert.deepEqual(expert.map(function (a) { return a.id; }), ["a3"], "the expert keyword pulls in the expert setting");
+assert.deepEqual(ctx.searchActions(modePool, "developer"), [], "no developer settings means no mode extras");
+assert.equal(ctx.searchActions(modePool, "retraction")[0].id, "a3",
+    "a query with no mode keyword is unaffected by the mode union");
+assert.equal(ctx.searchActions([{ id: "both", title: "Advanced", source: "Quality", group: "", mode: "advanced" }], "advanced").length,
+    1, "a setting that both matches text and requires the mode appears exactly once");
+
 console.log("ok");

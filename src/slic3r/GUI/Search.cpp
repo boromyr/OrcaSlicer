@@ -85,7 +85,7 @@ static std::string get_key(const std::string &opt_key, Preset::Type type) { retu
 
 void OptionsSearcher::append_options(DynamicPrintConfig *config, Preset::Type type, ConfigOptionMode mode)
 {
-    auto emplace = [this, type](const std::string key, const wxString &label) {
+    auto emplace = [this, type](std::vector<Option> &dst, const std::string &key, const wxString &label, ConfigOptionMode opt_mode) {
         const GroupAndCategory &gc = groups_and_categories[key];
         if (gc.group.IsEmpty() || gc.category.IsEmpty()) return;
 
@@ -99,13 +99,14 @@ void OptionsSearcher::append_options(DynamicPrintConfig *config, Preset::Type ty
         }
 
         if (!label.IsEmpty())
-            options.emplace_back(Option{boost::nowide::widen(key), type, (label + suffix).ToStdWstring(), (_(label) + suffix_local).ToStdWstring(), gc.group.ToStdWstring(),
-                                        _(gc.group).ToStdWstring(), gc.category.ToStdWstring(), GUI::Tab::translate_category(gc.category, type).ToStdWstring()});
+            dst.emplace_back(Option{boost::nowide::widen(key), type, (label + suffix).ToStdWstring(), (_(label) + suffix_local).ToStdWstring(), gc.group.ToStdWstring(),
+                                    _(gc.group).ToStdWstring(), gc.category.ToStdWstring(), GUI::Tab::translate_category(gc.category, type).ToStdWstring(),
+                                    false, opt_mode});
     };
 
     for (std::string opt_key : config->keys()) {
         const ConfigOptionDef &opt = config->def()->options.at(opt_key);
-        if (opt.mode > mode) continue;
+        const bool in_filtered = opt.mode <= mode;
 
         int cnt = 0;
 
@@ -128,12 +129,17 @@ void OptionsSearcher::append_options(DynamicPrintConfig *config, Preset::Type ty
         wxString label = opt.full_label.empty() ? opt.label : opt.full_label;
 
         std::string key = get_key(opt_key, type);
+        auto add = [&](const std::string &k) {
+            if (in_filtered)
+                emplace(options, k, label, opt.mode);
+            emplace(options_all_modes, k, label, opt.mode);
+        };
         if (cnt == 0)
-            emplace(key, label);
+            add(key);
         else
             for (int i = 0; i < cnt; ++i)
                 // ! It's very important to use "#". opt_key#n is a real option key used in GroupAndCategory
-                emplace(key + "#" + std::to_string(i), label);
+                add(key + "#" + std::to_string(i));
     }
 }
 
@@ -307,6 +313,7 @@ OptionsSearcher::~OptionsSearcher() {}
 void OptionsSearcher::init(std::vector<InputInfo> input_values)
 {
     options.clear();
+    options_all_modes.clear();
     for (auto i : input_values) append_options(i.config, i.type, i.mode);
     sort_options();
 
@@ -318,6 +325,8 @@ void OptionsSearcher::apply(DynamicPrintConfig *config, Preset::Type type, Confi
     if (options.empty()) return;
 
     options.erase(std::remove_if(options.begin(), options.end(), [type](Option opt) { return opt.type == type; }), options.end());
+    options_all_modes.erase(std::remove_if(options_all_modes.begin(), options_all_modes.end(), [type](Option opt) { return opt.type == type; }),
+                            options_all_modes.end());
 
     append_options(config, type, mode);
 

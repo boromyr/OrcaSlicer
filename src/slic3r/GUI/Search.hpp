@@ -63,6 +63,7 @@ struct Option
     std::wstring category;
     std::wstring category_local;
     bool multi_category { false };
+    ConfigOptionMode mode{comSimple}; // option's visibility threshold; drives the Speed Dial's mode prompt
 
     std::string opt_key() const;
 };
@@ -97,6 +98,9 @@ class OptionsSearcher
     PrinterTechnology                       printer_technology;
 
     std::vector<Option>      options{};
+    // Every option regardless of the current UI mode (Simple/Advanced/Expert/Developer), for the
+    // Speed Dial. The sidebar search keeps using the mode-filtered `options`.
+    std::vector<Option>      options_all_modes{};
     std::vector<FoundOption> found{};
 
     void append_options(DynamicPrintConfig *config, Preset::Type type, ConfigOptionMode mode);
@@ -152,6 +156,10 @@ public:
     // The full gated option set built by init() (after visibility/mode/printer-tech filtering).
     // Used by the Speed Dial to materialise config settings as first-class actions.
     const std::vector<Option>& all_options() const { return options; }
+
+    // Every option across all UI modes (Developer included), regardless of the current mode.
+    // Used by the Speed Dial so it can list settings the user would have to switch mode to edit.
+    const std::vector<Option>& all_modes_options() const { return options_all_modes; }
 };
 
 //------------------------------------------

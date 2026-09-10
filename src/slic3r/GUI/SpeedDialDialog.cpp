@@ -9,6 +9,8 @@
 #include "Plater.hpp"
 #include "Widgets/WebViewHostDialog.hpp"
 
+#include <libslic3r/AppConfig.hpp>
+
 #include <algorithm>
 
 #include <wx/display.h>
@@ -33,6 +35,17 @@ int json_int_or(const nlohmann::json& j, const char* key, int fallback)
 {
     auto it = j.find(key);
     return it != j.end() && it->is_number() ? it->get<int>() : fallback;
+}
+
+// Display name of a settings mode, for the mode-switch confirmation.
+wxString mode_label(ConfigOptionMode mode)
+{
+    switch (mode) {
+    case comAdvanced: return _L("Advanced");
+    case comExpert: return _L("Expert");
+    case comDevelop: return _L("Developer");
+    default: return _L("Simple");
+    }
 }
 
 wxColour bg_color() { return wxGetApp().get_window_default_clr(); }
@@ -192,6 +205,32 @@ void SpeedDialWebDialog::run_action(const std::string& id, const std::string& ti
     // Only plugin actions get the "Run plugin?" confirm. Built-in commands act immediately.
     const bool ask           = a->kind == AppActionKind::Plugin && reg.should_ask(id);
     const std::string atitle = a->title();
+    const ConfigOptionMode required = a->required_mode;
+
+    // Settings the current mode hides require a switch first. Ask while the dial is still up; a
+    // cancel dismisses both (the dial also auto-hides when the modal takes activation).
+    if (requires_mode_switch(required, wxGetApp().get_mode())) {
+        const wxString setting = title.empty() ? from_u8(atitle) : from_u8(title);
+        if (required == comDevelop) {
+            RichMessageDialog dlg(wxGetApp().mainframe,
+                                  wxString::Format(_L("\"%s\" is a Developer setting. Enable Developer mode to edit it?"),
+                                                   setting),
+                                  _L("Developer setting"), wxOK | wxCANCEL);
+            if (dlg.ShowModal() != wxID_OK)
+                return;
+            wxGetApp().app_config->set_bool("developer_mode", true);
+            wxGetApp().update_mode();
+        } else {
+            RichMessageDialog dlg(wxGetApp().mainframe,
+                                  wxString::Format(_L("\"%s\" is a %s setting. Switch from %s mode to %s mode to edit it?"),
+                                                   setting, mode_label(required), mode_label(wxGetApp().get_mode()), mode_label(required)),
+                                  _L("Switch settings mode"), wxOK | wxCANCEL);
+            if (dlg.ShowModal() != wxID_OK)
+                return;
+            wxGetApp().save_mode(required);
+        }
+    }
+
     if (IsModal())
         EndModal(wxID_CANCEL);
     else
@@ -231,7 +270,8 @@ void SpeedDialWebDialog::send_actions()
     call_web_handler({{"command", "list_actions"},
                       {"actions", std::move(snap["actions"])},
                       {"favourites", std::move(snap["favourites"])},
-                      {"recent", std::move(snap["recent"])}});
+                      {"recent", std::move(snap["recent"])},
+                      {"user_mode", std::move(snap["user_mode"])}});
 }
 
 }} // namespace Slic3r::GUI
