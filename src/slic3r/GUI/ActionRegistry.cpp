@@ -128,11 +128,11 @@ std::unique_ptr<AppAction> make_action(const std::string& plugin_key, const std:
 
 // ---- built-in command actions (the speed dial "commands" section) ------
 
-constexpr const char* kCommandPrefix  = "orca_command";
-constexpr const char* kOrcaSourceKey  = "orca";
-constexpr const char* kOrcaSourceName = "OrcaSlicer";
-constexpr const char* kSettingPrefix  = "orca_setting";
-constexpr const char* kPlateGotoPrefix = "orca_plate_goto";
+constexpr const char* kCommandPrefix       = "orca_command";
+constexpr const char* kOrcaSourceKey       = "orca";
+constexpr const char* kOrcaSourceName      = "OrcaSlicer";
+constexpr const char* kSettingPrefix       = "orca_setting";
+constexpr const char* kPlateGotoPrefix     = "orca_plate_goto";
 constexpr const char* kRecentProjectPrefix = "orca_recent_project";
 
 // Display context for a setting action's eyebrow, e.g. the "Process" in "Process : Quality : Layers".
@@ -142,10 +142,10 @@ std::string setting_type_context(Preset::Type type)
     switch (type) {
     case Preset::TYPE_FILAMENT:
     case Preset::TYPE_SLA_MATERIAL: return _u8L("Filament");
-    case Preset::TYPE_PRINTER:      return _u8L("Printer");
+    case Preset::TYPE_PRINTER: return _u8L("Printer");
     case Preset::TYPE_PRINT:
     case Preset::TYPE_SLA_PRINT:
-    default:                        return _u8L("Process");
+    default: return _u8L("Process");
     }
 }
 
@@ -155,15 +155,19 @@ std::string setting_type_context(Preset::Type type)
 // the generic registry run() bumps stats so a jump shows up in "recents" like any other action.
 struct SettingAction : AppAction
 {
-    std::string  opt_key;
+    std::string opt_key;
     Preset::Type type;
-    std::wstring category;      // localized category, forwarded to jump_to_option
+    std::wstring category; // localized category, forwarded to jump_to_option
 
     static std::string id_for(const std::string& opt_key, Preset::Type type)
     { return std::string(kSettingPrefix) + ":" + opt_key + ":" + std::to_string(int(type)); }
 
-    SettingAction(std::string opt_key_in, Preset::Type type_in, std::string title, std::string group,
-                  std::wstring category_in, std::string source_name)
+    SettingAction(std::string opt_key_in,
+                  Preset::Type type_in,
+                  std::string title,
+                  std::string group,
+                  std::wstring category_in,
+                  std::string source_name)
         : AppAction(AppActionId{id_for(opt_key_in, type_in)}, std::move(title), kOrcaSourceKey, std::move(source_name))
         , opt_key(std::move(opt_key_in))
         , type(type_in)
@@ -182,15 +186,13 @@ struct SettingAction : AppAction
     }
 };
 
-
 // A built-in command action. Thin value: identity + presentation come from the NativeCommands
 // catalog, and run() routes back to it - the catalog is the single source of truth for its
-// behaviour. source_key is the constant "orca" so a renamed title never re-keys the action
-// (matches the plugin source-key contract).
+// behaviour. The id is keyed by the stable catalog key (NOT the display title), so a rename or a
+// UI-language switch never re-keys the action; the title is display-only.
 struct CommandAction : AppAction
 {
-    static std::unique_ptr<CommandAction> make(const NativeCommand& c)
-    { return std::unique_ptr<CommandAction>(new CommandAction(c)); }
+    static std::unique_ptr<CommandAction> make(const NativeCommand& c) { return std::unique_ptr<CommandAction>(new CommandAction(c)); }
 
     std::string command_key;
 
@@ -198,7 +200,8 @@ struct CommandAction : AppAction
 
 private:
     explicit CommandAction(const NativeCommand& c)
-        : AppAction(kCommandPrefix, c.title, kOrcaSourceKey, kOrcaSourceName), command_key(c.key)
+        : AppAction(AppActionId{AppAction::compose_id(kCommandPrefix, c.key, kOrcaSourceKey)}, c.title, kOrcaSourceKey, kOrcaSourceName),
+          command_key(c.key)
     {
         this->kind  = AppActionKind::Command;
         this->group = c.group;
@@ -214,12 +217,10 @@ struct PlateAction : AppAction
 {
     int plate_index;
 
-    static std::string id_for(int index)
-    { return AppAction::compose_id(kPlateGotoPrefix, std::to_string(index), kOrcaSourceKey); }
+    static std::string id_for(int index) { return AppAction::compose_id(kPlateGotoPrefix, std::to_string(index), kOrcaSourceKey); }
 
     PlateAction(int index, std::string title, std::string source_name)
-        : AppAction(AppActionId{id_for(index)}, std::move(title), kOrcaSourceKey, std::move(source_name))
-        , plate_index(index)
+        : AppAction(AppActionId{id_for(index)}, std::move(title), kOrcaSourceKey, std::move(source_name)), plate_index(index)
     {
         this->kind  = AppActionKind::Command;
         this->group = _u8L("Plate");
@@ -239,12 +240,10 @@ struct RecentProjectAction : AppAction
 {
     std::string file_path;
 
-    static std::string id_for(const std::string& path)
-    { return AppAction::compose_id(kRecentProjectPrefix, path, kOrcaSourceKey); }
+    static std::string id_for(const std::string& path) { return AppAction::compose_id(kRecentProjectPrefix, path, kOrcaSourceKey); }
 
     RecentProjectAction(std::string path, std::string title, std::string source)
-        : AppAction(AppActionId{id_for(path)}, std::move(title), kOrcaSourceKey, std::move(source))
-        , file_path(std::move(path))
+        : AppAction(AppActionId{id_for(path)}, std::move(title), kOrcaSourceKey, std::move(source)), file_path(std::move(path))
     {
         this->kind  = AppActionKind::Command;
         this->group = _u8L("Recent Projects");
@@ -538,15 +537,17 @@ void ActionRegistry::materialize_setting_actions()
 
         // title = the option leaf name (last label segment); group stays empty so the source path
         // (above) is the single display/search breadcrumb rather than being duplicated.
-        auto action = std::make_unique<SettingAction>(opt.opt_key(), opt.type, boost::nowide::narrow(label_w),
-                                                      std::string(), opt.category_local, boost::nowide::narrow(path));
+        auto action = std::make_unique<SettingAction>(opt.opt_key(), opt.type, boost::nowide::narrow(label_w), std::string(),
+                                                      opt.category_local, boost::nowide::narrow(path));
 
-        action->favourite                    = std::find(favs.begin(), favs.end(), id) != favs.end();
+        action->favourite = std::find(favs.begin(), favs.end(), id) != favs.end();
         if (auto it = stats.find(id); it != stats.end() && it->is_object()) {
             action->count = it->value("count", 0);
             action->last  = it->value("last", 0LL);
         }
-        m_actions.insert_or_assign(action->id(), std::shared_ptr<AppAction>(std::move(action)));
+        auto const action_id  = action->id();
+        auto const app_action = std::shared_ptr<AppAction>(std::move(action));
+        m_actions.insert_or_assign(action_id, app_action);
     }
 
     // Drop SettingActions whose option no longer exists in the current configs (e.g. the printer
@@ -600,13 +601,15 @@ void ActionRegistry::materialize_plate_actions()
         if (!name.empty())
             title += " (" + name + ")";
 
-        auto action     = std::make_unique<PlateAction>(int(i), title, kOrcaSourceName);
+        auto action       = std::make_unique<PlateAction>(int(i), title, kOrcaSourceName);
         action->favourite = std::find(favs.begin(), favs.end(), id) != favs.end();
         if (auto it = stats.find(id); it != stats.end() && it->is_object()) {
             action->count = it->value("count", 0);
             action->last  = it->value("last", 0LL);
         }
-        m_actions.insert_or_assign(action->id(), std::shared_ptr<AppAction>(std::move(action)));
+        auto const action_id  = action->id();
+        auto const app_action = std::shared_ptr<AppAction>(std::move(action));
+        m_actions.insert_or_assign(action_id, app_action);
     }
 
     // Drop plate actions whose index no longer exists (a plate was deleted / moved to the front).
@@ -649,13 +652,15 @@ void ActionRegistry::materialize_recent_project_actions()
         if (title.empty())
             title = path;
 
-        auto action          = std::make_unique<RecentProjectAction>(path, std::move(title), path);
-        action->favourite    = std::find(favs.begin(), favs.end(), id) != favs.end();
+        auto action       = std::make_unique<RecentProjectAction>(path, std::move(title), path);
+        action->favourite = std::find(favs.begin(), favs.end(), id) != favs.end();
         if (auto it = stats.find(id); it != stats.end() && it->is_object()) {
             action->count = it->value("count", 0);
             action->last  = it->value("last", 0LL);
         }
-        m_actions.insert_or_assign(action->id(), std::shared_ptr<AppAction>(std::move(action)));
+        auto const action_id  = action->id();
+        auto const app_action = std::shared_ptr<AppAction>(std::move(action));
+        m_actions.insert_or_assign(action_id, app_action);
     }
 
     // Drop recent-project actions whose file no longer exists / was removed from the recents list.

@@ -71,3 +71,13 @@ TEST_CASE("Recent-project actions are keyed by path, not title", "[speeddial][ac
     CHECK(AppAction::compose_id("orca_recent_project", "C:/Data/cube.3mf", "orca") ==
           "orca_recent_project:C:/Data/cube.3mf:orca");
 }
+
+// A built-in command is keyed by its stable catalog key (not the localized display title), so a
+// rename or a UI-language switch never re-keys the action and its persisted favourite/stats survive.
+TEST_CASE("Command actions are keyed by catalog key, not display title", "[speeddial][actions]")
+{
+    CHECK(AppAction::compose_id("orca_command", "save_project", "orca") == "orca_command:save_project:orca");
+    // The second field is the stable key, so distinct commands never collide.
+    CHECK(AppAction::compose_id("orca_command", "save_project", "orca") !=
+          AppAction::compose_id("orca_command", "load_project", "orca"));
+}
