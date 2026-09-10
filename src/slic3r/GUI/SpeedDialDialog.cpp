@@ -127,7 +127,7 @@ void SpeedDialWebDialog::handle_web_command(const nlohmann::json& payload)
         send_actions();
     } else if (command == "toggle_favourite") {
         // set_favourite() refuses once the bar hits kFavLimit; tell the page so it can undo the
-        // star and show a "favourites are full" hint instead of silently losing the pin.
+        // pin and show a "favourites are full" hint instead of silently losing the favourite.
         const std::string fav_id = payload.value("id", "");
         const bool ok          = wxGetApp().action_registry().set_favourite(fav_id, payload.value("fav", false));
         if (!ok)

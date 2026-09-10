@@ -255,7 +255,7 @@ kbd {
   border: 1px solid var(--border, var(--orca-border, #ddd));
   border-radius: 4px;
 }
-.star {
+.pin {
   flex: 0 0 auto;
   width: 24px;
   height: 24px;
@@ -269,11 +269,11 @@ kbd {
   justify-content: center;
   opacity: 0;
 }
-.star svg { display: block; }
-.row:hover .star:not(.on),
-.row.sel .star:not(.on) { opacity: .5; }
-.star.on { opacity: 1; color: var(--main-color, var(--orca-accent, #009688)); }
-.star:hover { background: rgba(127,127,127,.18); }
+.pin svg { display: block; }
+.row:hover .pin:not(.on),
+.row.sel .pin:not(.on) { opacity: .5; }
+.pin.on { opacity: 1; color: var(--main-color, var(--orca-accent, #009688)); }
+.pin:hover { background: rgba(127,127,127,.18); }
 .dial-empty {
   min-height: 64px;
   padding: 18px 10px;

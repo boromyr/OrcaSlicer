@@ -728,9 +728,18 @@ nlohmann::json ActionRegistry::snapshot()
 
     // why: favourites is the ORDERED pin list - it must come from favourite_actions
     // as stored, not be re-derived from the frecency-sorted actions (that would
-    // reorder the favourites bar). The page (js) filters out ids with no live action itself.
-    // Cap on read so the bar cannot exceed the quick-launch slots (kFavLimit).
-    nlohmann::json favourites(favourite_ids());
+    // reorder the favourites bar). Drop pins with no live action (an option hidden by the
+    // current mode, an unloaded plugin, a gone plate/project) and persist the pruned list, so
+    // invisible pins can't silently fill the quick-launch cap. Order is preserved.
+    std::vector<std::string> favs = favourite_ids();
+    std::vector<std::string> live_favs;
+    live_favs.reserve(favs.size());
+    for (const auto& id : favs)
+        if (m_actions.count(id))
+            live_favs.push_back(id);
+    if (live_favs.size() != favs.size())
+        write_section("favourite_actions", nlohmann::json(live_favs));
+    nlohmann::json favourites(live_favs);
 
     // Recent = the last-N launched actions by recency (only actions with a run history).
     constexpr size_t kRecentLimit = 5;

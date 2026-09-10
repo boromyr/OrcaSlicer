@@ -375,7 +375,7 @@ window.HandleStudio = function (payload) {
         // Favourites are at the quick-launch cap - undo the optimistic pin and flash a hint.
         var fid = payload.id;
         if (fid && FAVS.indexOf(fid) !== -1) FAVS.splice(FAVS.indexOf(fid), 1);
-        render({ resize: true });
+        render({ resize: true, keepScroll: true });
         flashHint("Favourites are full (" + (payload.limit || K_FAV_LIMIT) + " max)");
     }
 };
@@ -434,10 +434,19 @@ function markedText(className, text, match) {
     return node;
 }
 
-function starSvg(on) {
+// A bookmark glyph: outlined when unpinned, filled when saved to favourites.
+function pinSvg(on) {
     return '<svg width="15" height="15" viewBox="0 0 24 24" fill="' + (on ? "currentColor" : "none") +
         '" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round">' +
-        '<path d="M12 3.5l2.6 5.3 5.9.9-4.3 4.1 1 5.8L12 17.9 6.8 20.6l1-5.8L3.5 9.7l5.9-.9z"/></svg>';
+        '<path d="M6 3.5A1.5 1.5 0 0 1 7.5 2h9A1.5 1.5 0 0 1 18 3.5V21l-6-4.2L6 21z"/></svg>';
+}
+
+// Sync one pin button to its favourite state. Shared by row construction and the in-place
+// updatePins pass so the two can't drift.
+function setPinState(pin, on) {
+    pin.classList.toggle("on", on);
+    pin.innerHTML = pinSvg(on);
+    pin.title = on ? "Unpin from favourites (Ctrl+B)" : "Pin to favourites (Ctrl+B)";
 }
 
 // ---- render ------------------------------------------------------------------
@@ -551,7 +560,7 @@ function updateFavEyebrow(favs) {
 }
 
 // A command/action row - used for search results, recents, and (because settings are actions now)
-// the setting options too. All rows are pinnable, so every row carries a star.
+// the setting options too. All rows are pinnable, so every row carries a bookmark.
 function renderActionRow(a, i) {
     var on = FAVS.indexOf(a.id) !== -1;
     var row = document.createElement("div");
@@ -591,14 +600,13 @@ function renderActionRow(a, i) {
     row.appendChild(tile);
     row.appendChild(left);
 
-    var star = document.createElement("button");
-    star.className = "star" + (on ? " on" : "");
-    star.innerHTML = starSvg(on);
-    star.title = on ? "Unpin from favourites" : "Pin to favourites";
-    star.onclick = function (ev) { ev.stopPropagation(); toggleFav(a.id); };
+    var pin = document.createElement("button");
+    pin.className = "pin";
+    setPinState(pin, on);
+    pin.onclick = function (ev) { ev.stopPropagation(); toggleFav(a.id); };
     // why: two quick fav/unfav clicks must not dblclick-run the row
-    star.ondblclick = function (ev) { ev.stopPropagation(); };
-    row.appendChild(star);
+    pin.ondblclick = function (ev) { ev.stopPropagation(); };
+    row.appendChild(pin);
 
     row.onclick = function () { sel = { zone: "list", i: i }; render({ resize: true }); };
     row.ondblclick = function () { sel = { zone: "list", i: i }; activateEntry(a); };
@@ -663,6 +671,21 @@ function updateSelection() {
     }
 }
 
+// Sync the pin buttons in place when FAVS changes but the row set doesn't (fav toggle), so a
+// bookmark fills/empties without a rebuild that would reset scroll. Rows carry data-idx into the
+// active list.
+function updatePins(list) {
+    var rows = listEl ? listEl.querySelectorAll(".row") : [];
+    for (var i = 0; i < rows.length; i++) {
+        var a = list[parseInt(rows[i].getAttribute("data-idx"), 10)];
+        var pin = rows[i].querySelector(".pin");
+        if (!a || !pin) continue;
+        var on = FAVS.indexOf(a.id) !== -1;
+        if (pin.classList.contains("on") !== on)
+            setPinState(pin, on);
+    }
+}
+
 function renderCommandsList() {
     var list = currentList();
     var total = list.length;
@@ -702,9 +725,10 @@ function renderCommandsList() {
         countEl.textContent = showList ? resultCountText(ACTIONS.length, total, query) : total + " recent";
     }
     updateSelection();
+    updatePins(list);
 }
 
-// A tab row: no star/unpin (tabs aren't pinnable), placeholder tile (tabs have no pictogram). Uses
+// A tab row: no pin/unpin (tabs aren't pinnable), placeholder tile (tabs have no pictogram). Uses
 // tabTitle so pages added with an empty text (e.g. Home) still show a label.
 function renderTabRow(t, i) {
     var label = tabTitle(t);
@@ -781,7 +805,10 @@ function renderList() {
 function render(opts) {
     renderFav();
     renderList();
-    scrollSelectedIntoView();
+    // Pin toggles don't move the selection, so they pass keepScroll to avoid snapping the list
+    // back to a row that is currently off-screen.
+    if (!(opts && opts.keepScroll))
+        scrollSelectedIntoView();
     if (opts && opts.resetScroll)
         resetScrollPositions(listEl, document);
     if (opts && opts.resize)
@@ -835,7 +862,7 @@ function toggleFav(id) {
     var newState = k === -1;
     if (newState) FAVS.push(id); else FAVS.splice(k, 1);
     SendMessage({ command: "toggle_favourite", id: id, fav: newState });
-    render({ resize: true });
+    render({ resize: true, keepScroll: true });
 }
 
 // Fire a command/plugin action; C++ owns the run-confirm (native dialog) + suppression, then
@@ -951,6 +978,14 @@ function OnInit() {
 
     document.addEventListener("keydown", function (e) {
         if (favMenuEl && !favMenuEl.hidden && e.key === "Escape") { e.preventDefault(); hideFavMenu(); return; }
+        // Pin/unpin the highlighted action: Ctrl/Cmd+B. Commands phase only (tabs/percent aren't pinnable).
+        if (phase === "commands" && (e.ctrlKey || e.metaKey) && !e.altKey && !e.shiftKey &&
+            e.key.toLowerCase() === "b") {
+            e.preventDefault();
+            var id = selectedActionId(sel, currentList(), currentVisibleFavs(), query);
+            if (id) toggleFav(id);
+            return;
+        }
         // Quick-launch a numbered favourite: Alt/Option + digit (0 = the 10th). Only in the
         // commands phase, where the pinned bar is shown.
         if (phase === "commands" && e.altKey && !e.ctrlKey && !e.metaKey) {
