@@ -1,5 +1,5 @@
 // Speed Dial launcher page. Static-safe module: no DOM access at load time so a
-// node vm can exercise the pure helpers (filterActions / actionLabel / nextSel / commandList).
+// node vm can exercise the pure helpers (searchActions / filterTabs / actionLabel / nextSel / commandList).
 
 // ---- state (populated by the C++ bridge via window.HandleStudio) ----
 var ACTIONS = [];        // [{id,title,source,group,input,shortcut}], already frecency-sorted by C++
@@ -17,10 +17,10 @@ var matchIndex = {};
 // a bottom spacer fills the rest of the list so the scrollbar reflects the full match count and
 // "scroll past the last rendered row" reveals the next window.
 var K_ROWS = 50;
-var ROW_H  = 44;
+var ROW_H = 44;
 var renderEnd = 0;
-var builtKey  = "";   // phase|query|listLen - when it changes, rows are rebuilt from the first window
-var spacerEl  = null; // the trailing height spacer, always the last child of listEl
+var builtKey = "";   // phase|query|listLen - when it changes, rows are rebuilt from the first window
+var spacerEl = null; // the trailing height spacer, always the last child of listEl
 
 // search-cache: the normalized (folded+lowercased) needle for the current query pass.
 var searchNeedle = "";
@@ -31,8 +31,8 @@ var searchNeedle = "";
 var phase = "commands";
 var tabOptions = [];       // [{id,title}] - notebook pages, fetched on entering the tab phase
 
-// why: fuzzy matcher (FoldChar/Norm/FuzzyRanges) lives in shared ../../js/fuzzy-search.js, loaded before
-//      this script - it is shared with the Plugins dialog. Speed dial search is always case-insensitive.
+// why: the fuzzy matcher (NormText/FuzzyRangesNorm/WholeWordRangesNorm) lives in shared
+//      ../../js/fuzzy-search.js, loaded before this script. Search is always case-insensitive.
 
 // element handles, assigned in OnInit (kept null so load-time touches no DOM)
 var qEl = null, listEl = null, favEl = null, clearEl = null, eyeEl = null, countEl = null, headEl = null;
@@ -71,7 +71,7 @@ function fieldMatchScore(norm, wwRe) {
     if (wwRe) {
         var m = wwRe.exec(norm || "");
         if (m)
-            return {score: 1000 - m.index * 10, ranges: [[m.index, m.index + m[0].length]], contiguous: true};
+            return { score: 1000 - m.index * 10, ranges: [[m.index, m.index + m[0].length]], contiguous: true };
     }
     var r = FuzzyRangesNorm(norm || "", searchNeedle);
     if (!r) return null;
@@ -81,7 +81,7 @@ function fieldMatchScore(norm, wwRe) {
             gaps += r[i][0] - r[i - 1][1];
         len += r[i][1] - r[i][0];
     }
-    return {score: 1000 - r[0][0] * 10 - gaps * 10, ranges: r, contiguous: r.length === 1 && len === searchNeedle.length};
+    return { score: 1000 - r[0][0] * 10 - gaps * 10, ranges: r, contiguous: r.length === 1 && len === searchNeedle.length };
 }
 
 // Combine the per-field match scores into one comparable value. Ranking tiers, strongest first:
@@ -177,9 +177,8 @@ function resultCountText(total, shown, query) {
     return (query || "").trim() ? "Showing " + shown + " of " + total + " actions" : total + " actions";
 }
 
-// Display label for a notebook tab. Notebook's ButtonsListCtrl labels every non-empty page as
-// " <text>" (a leading space), so trim it; pages added with an empty title (Home, MainFrame adds
-// TAB_ID_HOME with "") fall back to the title-cased id ("home" -> "Home").
+// Display label for a notebook tab. Trim any stray whitespace; pages added with an empty title
+// (Home, MainFrame adds TAB_ID_HOME with "") fall back to the title-cased id ("home" -> "Home").
 function tabTitle(t) {
     var title = (t && t.title) ? String(t.title).trim() : "";
     return title || prettySource((t && t.id) || "");
@@ -537,7 +536,7 @@ function showFavMenu(x, y, id) {
 }
 
 // Swap a favourite with its visible neighbour (dir -1/+1) and persist the new order. Swapping
-// by id inside FAVS (not the visible slice) keeps any hidden pins (no live action) in place.
+// by id inside FAVS (not the visible slice) keeps the persisted order stable.
 function moveFav(id, dir) {
     var favs = currentVisibleFavs();
     var vi = favs.indexOf(id);
@@ -990,7 +989,7 @@ function OnInit() {
         // commands phase, where the pinned bar is shown.
         if (phase === "commands" && e.altKey && !e.ctrlKey && !e.metaKey) {
             var slotIdx = favIndexForDigit(e.key);
-            var favIds  = currentVisibleFavs();
+            var favIds = currentVisibleFavs();
             if (slotIdx >= 0 && slotIdx < favIds.length) {
                 e.preventDefault();
                 var fav = byId(favIds[slotIdx]);

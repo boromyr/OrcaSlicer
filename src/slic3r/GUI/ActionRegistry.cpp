@@ -200,8 +200,8 @@ struct CommandAction : AppAction
 
 private:
     explicit CommandAction(const NativeCommand& c)
-        : AppAction(AppActionId{AppAction::compose_id(kCommandPrefix, c.key, kOrcaSourceKey)}, c.title, kOrcaSourceKey, kOrcaSourceName),
-          command_key(c.key)
+        : AppAction(AppActionId{AppAction::compose_id(kCommandPrefix, c.key, kOrcaSourceKey)}, c.title, kOrcaSourceKey, kOrcaSourceName)
+        , command_key(c.key)
     {
         this->kind  = AppActionKind::Command;
         this->group = c.group;

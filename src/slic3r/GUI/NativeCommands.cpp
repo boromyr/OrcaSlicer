@@ -58,9 +58,9 @@ AppActionRunResult object_op(Plater* plater, bool (*ok)(Plater*), void (*op)(Pla
     return {AppActionRunResult::Level::Success};
 }
 
-// Jump the preview to a layer selected by a 0-100 percent of the layer range. Best-effort: switches
-// to the preview tab and requests a slice; if the slicer result is already present the slider is
-// repositioned immediately, otherwise the user can re-run after slicing.
+// Jump the preview to a layer selected by a 0-100 percent of the layer range. The caller has already
+// switched to Preview (which may request a slice); if a slicer result is present the slider is
+// repositioned immediately, otherwise the jump is a no-op until the user re-slices.
 void go_to_layer(Plater* plater, const std::string& param)
 {
     if (!plater)
@@ -100,8 +100,8 @@ AppActionRunResult view_command(Plater* plater, const std::string& dir)
     return {AppActionRunResult::Level::Success};
 }
 
-// Calibration wizards. Reuses MainFrame::run_calibration so the speed dial shows the same cached
-// member dialogs as the Calibration menu (the menu handlers call run_calibration too).
+// Calibration wizards. Routes through MainFrame::run_calibration, the same entry point as the
+// Calibration menu (which caches most of the wizard dialogs).
 AppActionRunResult calib_command(CalibKind kind)
 {
     MainFrame* mf = wxGetApp().mainframe;
@@ -115,8 +115,8 @@ AppActionRunResult calib_command(CalibKind kind)
 std::vector<NativeCommand> build_command_catalog()
 {
     std::vector<NativeCommand> out;
-    auto add = [&](std::string key, std::string title, std::string group,
-                   std::function<AppActionRunResult(const std::string&)> runner, std::string input = {}) {
+    auto add = [&](std::string key, std::string title, std::string group, std::function<AppActionRunResult(const std::string&)> runner,
+                   std::string input = {}) {
         out.push_back({std::move(key), std::move(title), std::move(group), std::move(input), std::move(runner)});
     };
 
@@ -207,12 +207,11 @@ std::vector<NativeCommand> build_command_catalog()
             plater->export_gcode_3mf(false);
         return AppActionRunResult{AppActionRunResult::Level::Success};
     });
-    add("export_all_sliced_file", _u8L("Export All Sliced Files"), _u8L("Slice & Export"),
-        [](const std::string&) {
-            if (Plater* plater = wxGetApp().plater())
-                plater->export_gcode_3mf(true);
-            return AppActionRunResult{AppActionRunResult::Level::Success};
-        });
+    add("export_all_sliced_file", _u8L("Export All Sliced Files"), _u8L("Slice & Export"), [](const std::string&) {
+        if (Plater* plater = wxGetApp().plater())
+            plater->export_gcode_3mf(true);
+        return AppActionRunResult{AppActionRunResult::Level::Success};
+    });
 
     // ---- Calibration ----
     add("calib_temperature", _u8L("Temperature Calibration"), _u8L("Calibration"),
@@ -231,8 +230,7 @@ std::vector<NativeCommand> build_command_catalog()
         [](const std::string&) { return calib_command(CalibKind::InputShapingFreq); });
     add("calib_input_shaping_damp", _u8L("Input Shaping Damping Calibration"), _u8L("Calibration"),
         [](const std::string&) { return calib_command(CalibKind::InputShapingDamp); });
-    add("calib_vfa", _u8L("VFA Calibration"), _u8L("Calibration"),
-        [](const std::string&) { return calib_command(CalibKind::VFA); });
+    add("calib_vfa", _u8L("VFA Calibration"), _u8L("Calibration"), [](const std::string&) { return calib_command(CalibKind::VFA); });
 
     // ---- View ----
     for (auto [key, dir, title] :

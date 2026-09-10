@@ -13,13 +13,13 @@ vm.runInContext(fs.readFileSync(__dirname + "/speeddial.js", "utf8"), ctx);
 assert.equal(typeof ctx.parseId, "undefined", "opaque action ids must never be parsed");
 
 const duplicateActions = [
-  { id: "0123456789abcdef", title: "Repair", source: "Mesh Tools" },
-  { id: "fedcba9876543210", title: "Repair", source: "Mesh Tools" }
+    { id: "0123456789abcdef", title: "Repair", source: "Mesh Tools" },
+    { id: "fedcba9876543210", title: "Repair", source: "Mesh Tools" }
 ];
 assert.equal(
-  ctx.actionLabel(duplicateActions[0], duplicateActions),
-  "Repair from Mesh Tools (0123456789abcdef)",
-  "duplicate labels should use the opaque id without interpreting its contents"
+    ctx.actionLabel(duplicateActions[0], duplicateActions),
+    "Repair from Mesh Tools (0123456789abcdef)",
+    "duplicate labels should use the opaque id without interpreting its contents"
 );
 
 assert.equal(ctx.shouldRenderActionList(""), false, "an empty search keeps recent/empty list");
@@ -28,118 +28,118 @@ assert.equal(ctx.shouldRenderActionList("r"), true, "typing starts rendering mat
 
 // commandList: an empty query shows recents; a typed query filters all actions.
 assert.deepEqual(ctx.commandList(duplicateActions, [], ""), [],
-  "empty query + no recents shows nothing");
+    "empty query + no recents shows nothing");
 assert.deepEqual(ctx.commandList(duplicateActions, [duplicateActions[0]], ""),
-  [duplicateActions[0]],
-  "empty query shows the recent list");
+    [duplicateActions[0]],
+    "empty query shows the recent list");
 assert.deepEqual(ctx.commandList(duplicateActions, [], "rep"), duplicateActions,
-  "a typed query filters actions (both identical titles match) instead of showing recents");
+    "a typed query filters actions (both identical titles match) instead of showing recents");
 
 // filterTabs (tab phase): an empty query keeps the whole list; a typed query filters by title/id.
 const tabOptions = [
-  { id: "home", title: "Home" },
-  { id: "prepare", title: "Prepare" },
-  { id: "monitor", title: "Device" },
-  { id: "project", title: "Project" }
+    { id: "home", title: "Home" },
+    { id: "prepare", title: "Prepare" },
+    { id: "monitor", title: "Device" },
+    { id: "project", title: "Project" }
 ];
 assert.deepEqual(ctx.filterTabs(tabOptions, ""), tabOptions,
-  "empty query keeps the whole tab list");
+    "empty query keeps the whole tab list");
 assert.equal(ctx.filterTabs(tabOptions, "prep").length, 1,
-  "a typed query filters tabs by title");
+    "a typed query filters tabs by title");
 assert.equal(ctx.filterTabs(tabOptions, "Device").length, 1,
-  "a typed query matches a tab title");
+    "a typed query matches a tab title");
 assert.deepEqual(ctx.filterTabs(tabOptions, "zzz"), [],
-  "a typed query with no match returns an empty list");
+    "a typed query with no match returns an empty list");
 
 // tabTitle: pages added with an empty title (e.g. MainFrame's Home tab) fall back to the id.
 assert.equal(ctx.tabTitle({ id: "home", title: "" }), "Home",
-  "an empty title falls back to the title-cased id");
+    "an empty title falls back to the title-cased id");
 assert.equal(ctx.tabTitle({ id: "home" }), "Home",
-  "a missing title falls back to the title-cased id");
+    "a missing title falls back to the title-cased id");
 assert.equal(ctx.tabTitle({ id: "prepare", title: "Prepare" }), "Prepare",
-  "a populated title is kept as-is");
+    "a populated title is kept as-is");
 assert.equal(ctx.tabTitle({ id: "prepare", title: " Prepare" }), "Prepare",
-  "a leading space from the Notebook button label is trimmed so the label shows cleanly");
+    "a stray leading space in a tab title is trimmed so the label shows cleanly");
 assert.equal(ctx.filterTabs([{ id: "home", title: "" }], "home").length, 1,
-  "an untitled tab still matches a typed query via the id/title fallback");
+    "an untitled tab still matches a typed query via the id/title fallback");
 assert.equal(ctx.filterTabs([{ id: "prepare", title: " Prepare" }], "prepare").length, 1,
-  "a leading-space tab title still matches a typed query");
+    "a leading-space tab title still matches a typed query");
 
 // The main phase is ONE pool: commands/plugins/settings are all actions, ranked by relevance
 // (no group headers, no actions-vs-settings discrimination).
 const pool = [
-  { id: "c1", title: "Layer Height", source: "Quality", group: "Quality : Layers", input: "" },
-  { id: "s1", title: "Go to layer (percent)", source: "OrcaSlicer", group: "Commands", input: "percent" },
-  { id: "c2", title: "Top Surface Layers", source: "Quality", group: "Quality : Layers", input: "" }
+    { id: "c1", title: "Layer Height", source: "Quality", group: "Quality : Layers", input: "" },
+    { id: "s1", title: "Go to layer (percent)", source: "OrcaSlicer", group: "Commands", input: "percent" },
+    { id: "c2", title: "Top Surface Layers", source: "Quality", group: "Quality : Layers", input: "" }
 ];
 assert.deepEqual(ctx.searchActions(pool, ""), pool, "an empty query returns the pool unchanged");
 assert.equal(ctx.searchActions(pool, "zzz").length, 0, "a query with no match returns nothing");
 // "layer" matches multiple; the exact-titled action ranks above the loosely-matching command.
 assert.equal(ctx.searchActions(pool, "layer")[0].id, "c1",
-  "a title-exact match ranks above a partial match");
+    "a title-exact match ranks above a partial match");
 assert.equal(ctx.searchActions(pool, "layer").length >= 2, true,
-  "both a setting and a command match the same query in the same list");
+    "both a setting and a command match the same query in the same list");
 assert.equal(ctx.searchActions(pool, "surface")[0].id, "c2",
-  "a later-but-precise match still ranks by relevance, not by pool type");
+    "a later-but-precise match still ranks by relevance, not by pool type");
 
 // A perfect match (the needle as one contiguous run) outranks a fuzzy match of the same field - and a
 // contiguous GROUP/header hit ("Recent Projects") beats a scattered fuzzy TITLE hit ("Retraction Length"),
 // which is what the old flat title-bonus ranking got backwards.
 const perfectPool = [
-  { id: "set", title: "Retraction Length", source: "Process : Quality : Retraction", group: "", input: "" },
-  { id: "recent", title: "myproject.3mf", source: "/home/me/projects/myproject.3mf", group: "Recent Projects", input: "" }
+    { id: "set", title: "Retraction Length", source: "Process : Quality : Retraction", group: "", input: "" },
+    { id: "recent", title: "myproject.3mf", source: "/home/me/projects/myproject.3mf", group: "Recent Projects", input: "" }
 ];
 assert.equal(ctx.searchActions(perfectPool, "recent")[0].id, "recent",
-  "a contiguous header/group match ranks above a scattered fuzzy title match");
+    "a contiguous header/group match ranks above a scattered fuzzy title match");
 // Within a perfect match, the row-name (title) outranks the header (group): the action whose TITLE
 // contains the needle perfectly beats the action whose GROUP does, both being contiguous matches.
 const titleFirstPool = [
-  { id: "grp", title: "Delete Selected", source: "OrcaSlicer", group: "Object", input: "" },
-  { id: "t", title: "Object Preview", source: "OrcaSlicer", group: "View", input: "" }
+    { id: "grp", title: "Delete Selected", source: "OrcaSlicer", group: "Object", input: "" },
+    { id: "t", title: "Object Preview", source: "OrcaSlicer", group: "View", input: "" }
 ];
 assert.equal(ctx.searchActions(titleFirstPool, "object")[0].id, "t",
-  "a perfect title match ranks above an equally-perfect group match");
+    "a perfect title match ranks above an equally-perfect group match");
 
 // Highlighting: the needle is matched as a whole word / most-contiguous run, so "orient" lights up the
 // whole word in "Auto-Orient" instead of the stray "o" of "Auto" plus "rient" (greedy-leftmost).
 const orientPool = [
-  { id: "ao", title: "Auto-Orient", source: "OrcaSlicer", group: "Object", input: "" }
+    { id: "ao", title: "Auto-Orient", source: "OrcaSlicer", group: "Object", input: "" }
 ];
 ctx.searchActions(orientPool, "orient");
 assert.deepEqual(ctx.matchIndex.ao.title, [[5, 11]],
-  "a whole-word match highlights the full word, not a scattered fuzzy pick");
+    "a whole-word match highlights the full word, not a scattered fuzzy pick");
 
 // commandList (the main-phase list) delegates to the ranked search for a typed query and returns
 // the mixed recents (no discrimination) for an empty query.
 const mixed = [
-  { id: "cmd", title: "Slice", source: "OrcaSlicer", group: "Commands", input: "" },
-  { id: "set", title: "Sparse Infill Density", source: "Quality", group: "Quality", input: "" }
+    { id: "cmd", title: "Slice", source: "OrcaSlicer", group: "Commands", input: "" },
+    { id: "set", title: "Sparse Infill Density", source: "Quality", group: "Quality", input: "" }
 ];
 assert.equal(ctx.commandList(mixed, [], "sli")[0].id, "cmd",
-  "a typed query keeps the relevance-ranked action list (best match first)");
+    "a typed query keeps the relevance-ranked action list (best match first)");
 assert.deepEqual(ctx.commandList(mixed, mixed.slice(0, 1), "").map(function (a) { return a.id; }), ["cmd"],
-  "an empty query shows the mixed recents list verbatim");
+    "an empty query shows the mixed recents list verbatim");
 
 // selectedActionId: resolves the active list (recents for an empty query, filtered list otherwise).
 assert.equal(
-  ctx.selectedActionId({ zone: "list", i: 0 }, ctx.commandList(duplicateActions, [], ""), [], ""),
-  null,
-  "Enter with an empty query and no recents must not resolve to an action the list never showed"
+    ctx.selectedActionId({ zone: "list", i: 0 }, ctx.commandList(duplicateActions, [], ""), [], ""),
+    null,
+    "Enter with an empty query and no recents must not resolve to an action the list never showed"
 );
 assert.equal(
-  ctx.selectedActionId({ zone: "list", i: 0 }, ctx.commandList(duplicateActions, [], "rep"), [], "rep"),
-  "0123456789abcdef",
-  "a typed query resolves the list selection"
+    ctx.selectedActionId({ zone: "list", i: 0 }, ctx.commandList(duplicateActions, [], "rep"), [], "rep"),
+    "0123456789abcdef",
+    "a typed query resolves the list selection"
 );
 assert.equal(
-  ctx.selectedActionId({ zone: "list", i: 0 }, ctx.commandList(duplicateActions, [duplicateActions[0]], ""), [], ""),
-  "0123456789abcdef",
-  "Enter with an empty query resolves the recent entry"
+    ctx.selectedActionId({ zone: "list", i: 0 }, ctx.commandList(duplicateActions, [duplicateActions[0]], ""), [], ""),
+    "0123456789abcdef",
+    "Enter with an empty query resolves the recent entry"
 );
 assert.equal(
-  ctx.selectedActionId({ zone: "fav", i: 0 }, duplicateActions, ["fedcba9876543210"], ""),
-  "fedcba9876543210",
-  "favourites stay runnable with an empty query - the fav bar is always visible"
+    ctx.selectedActionId({ zone: "fav", i: 0 }, duplicateActions, ["fedcba9876543210"], ""),
+    "fedcba9876543210",
+    "favourites stay runnable with an empty query - the fav bar is always visible"
 );
 
 // Fav quick-launch slots: digit 1..9 -> index 0..8, digit 0 -> index 9 (the 10th), else -1.
@@ -160,21 +160,21 @@ assert.equal(ctx.K_FAV_LIMIT, 10, "the slot count matches the quick-launch cap")
 // nextSel: arrow-nav wrapping. Down wraps at the list bottom to the first row; Up wraps at the
 // list top to the last row ONLY when there's no fav bar above (else it goes to the fav bar).
 assert.deepEqual(ctx.nextSel({ zone: "list", i: 2 }, "ArrowDown", 3, 0), { zone: "list", i: 0 },
-  "ArrowDown at the last row wraps to the first row");
+    "ArrowDown at the last row wraps to the first row");
 assert.deepEqual(ctx.nextSel({ zone: "list", i: 1 }, "ArrowDown", 3, 0), { zone: "list", i: 2 },
-  "ArrowDown in the middle advances by one");
+    "ArrowDown in the middle advances by one");
 assert.deepEqual(ctx.nextSel({ zone: "list", i: 0 }, "ArrowUp", 3, 0), { zone: "list", i: 2 },
-  "ArrowUp at the first row with no fav bar wraps to the last row");
+    "ArrowUp at the first row with no fav bar wraps to the last row");
 assert.deepEqual(ctx.nextSel({ zone: "list", i: 0 }, "ArrowUp", 3, 2), { zone: "fav", i: 0 },
-  "ArrowUp at the first row with a fav bar goes to the fav bar (unchanged)");
+    "ArrowUp at the first row with a fav bar goes to the fav bar (unchanged)");
 assert.deepEqual(ctx.nextSel({ zone: "list", i: 2 }, "ArrowUp", 3, 0), { zone: "list", i: 1 },
-  "ArrowUp in the middle moves up by one");
+    "ArrowUp in the middle moves up by one");
 assert.deepEqual(ctx.nextSel({ zone: "fav", i: 1 }, "ArrowDown", 3, 2), { zone: "list", i: 0 },
-  "ArrowDown from the fav bar lands on the first list row");
+    "ArrowDown from the fav bar lands on the first list row");
 assert.deepEqual(ctx.nextSel({ zone: "list", i: 0 }, "ArrowDown", 1, 0), { zone: "list", i: 0 },
-  "a single-row list never wraps off the end");
+    "a single-row list never wraps off the end");
 assert.deepEqual(ctx.nextSel({ zone: "list", i: 0 }, "ArrowUp", 1, 0), { zone: "list", i: 0 },
-  "ArrowUp on the only row stays put");
+    "ArrowUp on the only row stays put");
 
 // Windowed list reveal: how many rows must be materialized to cover `fromIndex` plus `size` more,
 // clamped to the total. Drives the "render the next window on scroll / arrow-nav" append.

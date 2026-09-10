@@ -4375,10 +4375,10 @@ void MainFrame::technology_changed()
         m_menubar->SetMenuLabel(id, pt == ptFFF ? _omitL("Material Settings") : _L("Filament settings"));
 }
 
-// Opens the calibration wizard for `calib_kind`, reusing the cached member dialogs the Calibration
-// menu builds. This is the single source of truth for the wizard lifecycle: the Calibration menu
-// handlers and the Speed Dial native commands both call it, so they share the same per-wizard
-// member (fresh on first launch, reused thereafter). Call while the Prepare (3D) panel is shown.
+// Opens the calibration wizard for `calib_kind`. Single source of truth for the wizard lifecycle:
+// the Calibration menu handlers and the Speed Dial native commands both call it. Most wizards are
+// cached members reused across launches; cornering/input-shaping build a fresh transient dialog.
+// Call while the Prepare (3D) panel is shown.
 void MainFrame::run_calibration(CalibKind calib_kind)
 {
     switch (calib_kind) {

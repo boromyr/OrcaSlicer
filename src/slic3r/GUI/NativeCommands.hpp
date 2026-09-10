@@ -16,12 +16,12 @@ struct NativeCommand
     std::string key;
     std::string title;
     std::string group;
-    std::string input; // "settings"/"percent"/"tab" or "" for immediate run
+    std::string input; // "percent"/"tab" or "" for immediate run
     std::function<AppActionRunResult(const std::string& param)> runner;
 };
 
 namespace NativeCommands {
-// The full built-in command catalog, built once (init()). UI thread only.
+// The full built-in command catalog, built once on first use. UI thread only.
 const std::vector<NativeCommand>& catalog();
 
 // Dispatches `key` to its runner (unknown keys return a quiet Info). UI thread only.

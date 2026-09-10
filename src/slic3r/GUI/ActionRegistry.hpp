@@ -19,7 +19,7 @@ namespace Slic3r { namespace GUI {
 // How a source's action set changed. Drives the registry's refresh handlers.
 enum class ActionChange { Added, Removed };
 
-// What kind of runnable thing an action is. Drives the palette section + dispatch.
+// What kind of runnable thing an action is. Drives the run-confirm gate (plugins ask, commands don't).
 enum class AppActionKind { Plugin, Command };
 
 // Result of running an AppAction, in the action layer's own vocabulary. Concrete
@@ -28,8 +28,8 @@ struct AppActionRunResult
 {
     enum class Level { Success, Info, Error, Busy };
 
-    Level    level = Level::Info;
-    wxString message;   // empty = "nothing worth showing"
+    Level level = Level::Info;
+    wxString message; // empty = "nothing worth showing"
 };
 
 // Tag carrying a precomputed action id, used by the explicit-id ctor below. It exists so the
@@ -64,16 +64,16 @@ struct AppAction
     }
 
     // seeded from AppConfig for the snapshot / sort:
-    bool        favourite = false;
-    int         count = 0;
-    long long   last = 0;     // epoch seconds
+    bool favourite = false;
+    int count      = 0;
+    long long last = 0; // epoch seconds
 
     // Speed Dial presentation: Plugin keeps group empty (the UI falls back to the
     // source name); Command sets a section label (e.g. "Commands", "Mode").
     AppActionKind kind = AppActionKind::Plugin;
-    std::string   group;
-    // Second-phase input descriptor for the palette: "settings" (jump to a config option)
-    // or "percent" (jump to layer by a 0-100 value). Empty = run immediately on activation.
+    std::string group;
+    // Second-phase input descriptor for the palette: "percent" (jump to layer by a 0-100
+    // value) or "tab" (pick a notebook tab). Empty = run immediately on activation.
     std::string input;
 
     virtual ~AppAction() = default;
@@ -87,18 +87,17 @@ protected:
     // why: source_key (not the display name) carries identity, so renaming the source's
     // display name leaves the id - and its persisted stats/favourite - intact.
     AppAction(std::string_view prefix, std::string title, std::string source_key, std::string source_name)
-        : m_id(compose_id(prefix, title, source_key)),
-          m_title(std::move(title)),
-          m_source_key(std::move(source_key)),
-          m_source_name(std::move(source_name)) {}
+        : m_id(compose_id(prefix, title, source_key))
+        , m_title(std::move(title))
+        , m_source_key(std::move(source_key))
+        , m_source_name(std::move(source_name))
+    {}
 
     // Explicit-id ctor: for actions whose id must NOT be derived from the display title
     // (e.g. a setting action keyed by opt_key+type, so a rename/localization never re-keys it).
     AppAction(AppActionId id, std::string title, std::string source_key, std::string source_name)
-        : m_id(std::move(id.id)),
-          m_title(std::move(title)),
-          m_source_key(std::move(source_key)),
-          m_source_name(std::move(source_name)) {}
+        : m_id(std::move(id.id)), m_title(std::move(title)), m_source_key(std::move(source_key)), m_source_name(std::move(source_name))
+    {}
 
 private:
     std::string m_id;          // <prefix>:<title>:<source_key> - stable identity + AppConfig key
@@ -137,7 +136,7 @@ public:
     void remove(const std::string& id);
 
     // Always-clean read surface. UI thread only.
-    const AppAction*                               by_id(const std::string& id) const;
+    const AppAction* by_id(const std::string& id) const;
 
     // Hard cap on the favourites bar: the numbered quick-launch slots (Alt/Option+1..9, 0).
     static constexpr size_t kFavLimit = 10;
@@ -146,8 +145,8 @@ public:
     AppActionRunResult run(const std::string& id, const std::string& param = {}); // runs + bumps stats
     // Pin/unpin. Returns false when `on` would exceed kFavLimit (the bar is full) so the
     // caller can surface a "favourites are full" hint instead of silently dropping the pin.
-    bool             set_favourite(const std::string& id, bool on);
-    void             reorder_favourites(const std::vector<std::string>& ids);   // persist a new bar order
+    bool set_favourite(const std::string& id, bool on);
+    void reorder_favourites(const std::vector<std::string>& ids); // persist a new bar order
 
     // Ordered pinned list (the source of truth), capped at kFavLimit and deduped, matching the
     // visible bar the palette renders.
@@ -169,8 +168,8 @@ public:
     nlohmann::json tab_options() const;
 
 private:
-    void         seed_state(AppAction& a) const;               // favourite/stats from config
-    AppAction*      find(const std::string& id);
+    void seed_state(AppAction& a) const; // favourite/stats from config
+    AppAction* find(const std::string& id);
 
     // (Re)materialise the current visible config settings as SettingActions from the live
     // searcher (respecting printer-tech + user-mode + visibility filtering), removing stale ones.
@@ -192,8 +191,8 @@ private:
     void refresh_source(const std::string& plugin_key, ActionChange change);
     void refresh_capability(const std::string& plugin_key, const std::string& capability, ActionChange change);
 
-    bool m_started = false;  // init() runs exactly once; guards double-subscription
-    std::unordered_map<std::string, std::shared_ptr<AppAction>> m_actions;  // UI-thread confined; no lock
+    bool m_started = false;                                                // init() runs exactly once; guards double-subscription
+    std::unordered_map<std::string, std::shared_ptr<AppAction>> m_actions; // UI-thread confined; no lock
 };
 
 }} // namespace Slic3r::GUI
