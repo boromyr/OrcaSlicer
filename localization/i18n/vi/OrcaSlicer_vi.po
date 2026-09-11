@@ -3,7 +3,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: Orca Slicer\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-09-11 12:33+0800\n"
+"POT-Creation-Date: 2026-09-11 17:15+0800\n"
 "PO-Revision-Date: 2025-10-02 17:43+0700\n"
 "Last-Translator: \n"
 "Language-Team: hainguyen.ts13@gmail.com\n"
@@ -5680,20 +5680,16 @@ msgid "System agents"
 msgstr "Tác nhân hệ thống"
 
 # AI Translated
-msgid "No plugin selected"
-msgstr "Chưa chọn plugin"
-
-# AI Translated
 msgid "Add plugin"
 msgstr "Thêm plugin"
 
 # AI Translated
-msgid "Select plugin"
-msgstr "Chọn plugin"
-
-# AI Translated
 msgid "Remove plugin"
 msgstr "Xóa plugin"
+
+# AI Translated
+msgid "No plugin selected"
+msgstr "Chưa chọn plugin"
 
 # AI Translated
 msgid "Configure"
@@ -8035,6 +8031,12 @@ msgctxt "Layers"
 msgid "Bottom"
 msgstr "Dưới"
 
+msgid "This setting does not specify a plugin capability type."
+msgstr ""
+
+msgid "This setting specifies an unrecognized plugin capability type: "
+msgstr ""
+
 # AI Translated
 msgid "Plugin Selection"
 msgstr "Chọn plugin"
@@ -9672,6 +9674,15 @@ msgid "Open the Speed Dial with the Space key"
 msgstr ""
 
 msgid "When enabled, pressing Space (with no other key held) opens the Speed Dial action search from any page."
+msgstr ""
+
+msgid "Recent actions"
+msgstr ""
+
+msgid "actions"
+msgstr ""
+
+msgid "How many recently launched actions to show at the top of the Speed Dial. Set to 0 to hide recent actions."
 msgstr ""
 
 # AI Translated
@@ -23047,6 +23058,10 @@ msgid ""
 msgstr ""
 "Tránh cong vênh\n"
 "Bạn có biết rằng khi in vật liệu dễ cong vênh như ABS, tăng nhiệt độ bàn nóng một cách thích hợp có thể giảm xác suất cong vênh không?"
+
+# AI Translated
+#~ msgid "Select plugin"
+#~ msgstr "Chọn plugin"
 
 #~ msgid "Select the language"
 #~ msgstr "Chọn ngôn ngữ"

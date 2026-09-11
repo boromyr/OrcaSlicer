@@ -8,7 +8,7 @@
 #include "Notebook.hpp"
 #include "OptionsGroup.hpp"
 #include "Plater.hpp"
-#include "Search.hpp"
+#include "SettingsIndex.hpp"
 #include "Tab.hpp"
 #include "slic3r/plugin/PluginManager.hpp"
 
@@ -526,11 +526,11 @@ void ActionRegistry::materialize_setting_actions()
 {
     assert(wxThread::IsMain());
 
-    // Reuse the Sidebar's live searcher: it's the only OptionsSearcher whose groups_and_categories
-    // map is populated (Tab::add_key feeds it at build time), and it already mirrors the current
+    // Reuse the Sidebar's live settings index: it's the only catalog whose group/category map is
+    // populated (Tab::add_key feeds it at build time), and it already mirrors the current
     // configs/printer-technology. Use the all-modes view so the Speed Dial lists every setting,
     // including those above the user's current mode, and can prompt to switch before jumping.
-    const std::vector<Search::Option>& options = wxGetApp().sidebar().get_searcher().all_modes_options();
+    const std::vector<Search::Option>& options = wxGetApp().sidebar().settings_index().all_options();
 
     // Load the persisted per-action state ONCE (not per-option) so a re-materialised setting keeps
     // its recency/favourite; mirroring seed_state but amortised over the whole option set.

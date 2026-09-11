@@ -7,7 +7,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: Orca Slicer\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-09-11 12:33+0800\n"
+"POT-Creation-Date: 2026-09-11 17:15+0800\n"
 "PO-Revision-Date: 2025-06-02 17:12+0900\n"
 "Last-Translator: crwusiz <crwusiz@gmail.com>\n"
 "Language-Team: \n"
@@ -5409,20 +5409,16 @@ msgid "System agents"
 msgstr "시스템 에이전트"
 
 # AI Translated
-msgid "No plugin selected"
-msgstr "선택된 플러그인 없음"
-
-# AI Translated
 msgid "Add plugin"
 msgstr "플러그인 추가"
 
 # AI Translated
-msgid "Select plugin"
-msgstr "플러그인 선택"
-
-# AI Translated
 msgid "Remove plugin"
 msgstr "플러그인 제거"
+
+# AI Translated
+msgid "No plugin selected"
+msgstr "선택된 플러그인 없음"
 
 # AI Translated
 msgid "Configure"
@@ -7640,6 +7636,12 @@ msgctxt "Layers"
 msgid "Bottom"
 msgstr "하부"
 
+msgid "This setting does not specify a plugin capability type."
+msgstr ""
+
+msgid "This setting specifies an unrecognized plugin capability type: "
+msgstr ""
+
 # AI Translated
 msgid "Plugin Selection"
 msgstr "플러그인 선택"
@@ -9218,6 +9220,15 @@ msgid "Open the Speed Dial with the Space key"
 msgstr ""
 
 msgid "When enabled, pressing Space (with no other key held) opens the Speed Dial action search from any page."
+msgstr ""
+
+msgid "Recent actions"
+msgstr ""
+
+msgid "actions"
+msgstr ""
+
+msgid "How many recently launched actions to show at the top of the Speed Dial. Set to 0 to hide recent actions."
 msgstr ""
 
 msgid "Pop up to select filament grouping mode"
@@ -22400,6 +22411,10 @@ msgid ""
 msgstr ""
 "뒤틀림 방지\n"
 "ABS와 같이 뒤틀림이 발생하기 쉬운 소재를 출력할 때, 히트베드 온도를 적절하게 높이면 뒤틀림 가능성을 줄일 수 있다는 사실을 알고 계셨나요?"
+
+# AI Translated
+#~ msgid "Select plugin"
+#~ msgstr "플러그인 선택"
 
 #~ msgid "Select the language"
 #~ msgstr "언어 선택"

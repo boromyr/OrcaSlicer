@@ -282,6 +282,7 @@ public:
                                         std::vector<std::string>& types,
                                         std::vector<size_t>* config_indices = nullptr);
     Search::OptionsSearcher&        get_searcher();
+    Search::SettingsIndex&          settings_index();
     std::string&                    get_search_line();
     void                            update_printer_thumbnail();
 

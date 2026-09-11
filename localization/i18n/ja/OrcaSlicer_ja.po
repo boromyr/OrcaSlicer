@@ -3,7 +3,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: Orca Slicer\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-09-11 12:33+0800\n"
+"POT-Creation-Date: 2026-09-11 17:15+0800\n"
 "PO-Revision-Date: \n"
 "Last-Translator: \n"
 "Language-Team: \n"
@@ -5397,20 +5397,16 @@ msgid "System agents"
 msgstr "システムエージェント"
 
 # AI Translated
-msgid "No plugin selected"
-msgstr "プラグインが選択されていません"
-
-# AI Translated
 msgid "Add plugin"
 msgstr "プラグインを追加"
 
 # AI Translated
-msgid "Select plugin"
-msgstr "プラグインを選択"
-
-# AI Translated
 msgid "Remove plugin"
 msgstr "プラグインを削除"
+
+# AI Translated
+msgid "No plugin selected"
+msgstr "プラグインが選択されていません"
 
 # AI Translated
 msgid "Configure"
@@ -7627,6 +7623,12 @@ msgctxt "Layers"
 msgid "Bottom"
 msgstr "底面"
 
+msgid "This setting does not specify a plugin capability type."
+msgstr ""
+
+msgid "This setting specifies an unrecognized plugin capability type: "
+msgstr ""
+
 # AI Translated
 msgid "Plugin Selection"
 msgstr "プラグインの選択"
@@ -9156,6 +9158,15 @@ msgid "Open the Speed Dial with the Space key"
 msgstr ""
 
 msgid "When enabled, pressing Space (with no other key held) opens the Speed Dial action search from any page."
+msgstr ""
+
+msgid "Recent actions"
+msgstr ""
+
+msgid "actions"
+msgstr ""
+
+msgid "How many recently launched actions to show at the top of the Speed Dial. Set to 0 to hide recent actions."
 msgstr ""
 
 msgid "Pop up to select filament grouping mode"
@@ -22533,6 +22544,10 @@ msgid ""
 msgstr ""
 "反りを避ける\n"
 "ABSのような反りやすい素材を印刷する場合、ヒートベッドの温度を適切に上げることで、反りが発生する確率を下げることができることをご存知ですか？"
+
+# AI Translated
+#~ msgid "Select plugin"
+#~ msgstr "プラグインを選択"
 
 #~ msgid "Select the language"
 #~ msgstr "言語を選択"

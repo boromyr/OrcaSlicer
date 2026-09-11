@@ -6,7 +6,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: Orca Slicer\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-09-11 12:33+0800\n"
+"POT-Creation-Date: 2026-09-11 17:15+0800\n"
 "PO-Revision-Date: \n"
 "Last-Translator: \n"
 "Language-Team: Guislain Cyril, Thomas Lété\n"
@@ -5286,20 +5286,16 @@ msgid "System agents"
 msgstr "Agents système"
 
 # AI Translated
-msgid "No plugin selected"
-msgstr "Aucun plugin sélectionné"
-
-# AI Translated
 msgid "Add plugin"
 msgstr "Ajouter un plugin"
 
 # AI Translated
-msgid "Select plugin"
-msgstr "Sélectionner un plugin"
-
-# AI Translated
 msgid "Remove plugin"
 msgstr "Supprimer le plugin"
+
+# AI Translated
+msgid "No plugin selected"
+msgstr "Aucun plugin sélectionné"
 
 # AI Translated
 msgid "Configure"
@@ -7503,6 +7499,12 @@ msgctxt "Layers"
 msgid "Bottom"
 msgstr "Inférieur"
 
+msgid "This setting does not specify a plugin capability type."
+msgstr ""
+
+msgid "This setting specifies an unrecognized plugin capability type: "
+msgstr ""
+
 # AI Translated
 msgid "Plugin Selection"
 msgstr "Sélection des plugins"
@@ -8998,6 +9000,15 @@ msgid "Open the Speed Dial with the Space key"
 msgstr ""
 
 msgid "When enabled, pressing Space (with no other key held) opens the Speed Dial action search from any page."
+msgstr ""
+
+msgid "Recent actions"
+msgstr ""
+
+msgid "actions"
+msgstr ""
+
+msgid "How many recently launched actions to show at the top of the Speed Dial. Set to 0 to hide recent actions."
 msgstr ""
 
 msgid "Pop up to select filament grouping mode"
@@ -21523,6 +21534,10 @@ msgid ""
 msgstr ""
 "Éviter la déformation\n"
 "Saviez-vous que lors de l’impression de matériaux susceptibles de se déformer, tels que l’ABS, une augmentation appropriée de la température du plateau chauffant peut réduire la probabilité de déformation?"
+
+# AI Translated
+#~ msgid "Select plugin"
+#~ msgstr "Sélectionner un plugin"
 
 #~ msgid "Select the language"
 #~ msgstr "Sélectionner la langue"

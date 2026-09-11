@@ -6419,6 +6419,11 @@ Search::OptionsSearcher& Sidebar::get_searcher()
     return p->searcher;
 }
 
+Search::SettingsIndex& Sidebar::settings_index()
+{
+    return p->searcher.index();
+}
+
 std::string& Sidebar::get_search_line()
 {
     return p->searcher.search_string();

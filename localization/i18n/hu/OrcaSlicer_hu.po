@@ -3,7 +3,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: Orca Slicer\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-09-11 12:33+0800\n"
+"POT-Creation-Date: 2026-09-11 17:15+0800\n"
 "Language: hu\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
@@ -5383,20 +5383,16 @@ msgid "System agents"
 msgstr "Rendszerügynökök"
 
 # AI Translated
-msgid "No plugin selected"
-msgstr "Nincs kiválasztott bővítmény"
-
-# AI Translated
 msgid "Add plugin"
 msgstr "Bővítmény hozzáadása"
 
 # AI Translated
-msgid "Select plugin"
-msgstr "Bővítmény kiválasztása"
-
-# AI Translated
 msgid "Remove plugin"
 msgstr "Bővítmény eltávolítása"
+
+# AI Translated
+msgid "No plugin selected"
+msgstr "Nincs kiválasztott bővítmény"
 
 # AI Translated
 msgid "Configure"
@@ -7617,6 +7613,12 @@ msgctxt "Layers"
 msgid "Bottom"
 msgstr "Alsó"
 
+msgid "This setting does not specify a plugin capability type."
+msgstr ""
+
+msgid "This setting specifies an unrecognized plugin capability type: "
+msgstr ""
+
 # AI Translated
 msgid "Plugin Selection"
 msgstr "Bővítmény kiválasztása"
@@ -9134,6 +9136,15 @@ msgid "Open the Speed Dial with the Space key"
 msgstr ""
 
 msgid "When enabled, pressing Space (with no other key held) opens the Speed Dial action search from any page."
+msgstr ""
+
+msgid "Recent actions"
+msgstr ""
+
+msgid "actions"
+msgstr ""
+
+msgid "How many recently launched actions to show at the top of the Speed Dial. Set to 0 to hide recent actions."
 msgstr ""
 
 msgid "Pop up to select filament grouping mode"
@@ -21954,6 +21965,10 @@ msgid ""
 msgstr ""
 "Kunkorodás elkerülése\n"
 "Tudtad, hogy a kunkorodásra hajlamos anyagok (például ABS) nyomtatásakor az asztal hőmérsékletének növelése csökkentheti a kunkorodás valószínűségét?"
+
+# AI Translated
+#~ msgid "Select plugin"
+#~ msgstr "Bővítmény kiválasztása"
 
 #~ msgid "Select the language"
 #~ msgstr "Válaszd ki a nyelvet"

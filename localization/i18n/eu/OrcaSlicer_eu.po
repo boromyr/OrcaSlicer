@@ -7,7 +7,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: \n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-09-11 12:33+0800\n"
+"POT-Creation-Date: 2026-09-11 17:15+0800\n"
 "PO-Revision-Date: 2026-07-20 13:33+0200\n"
 "Last-Translator: Manu Goiogana <mgoiogana@gmail.com>\n"
 "Language-Team: \n"
@@ -5247,17 +5247,14 @@ msgstr "Formatuak ez du balio. Espero den formatu bektoriala: \"%1%\""
 msgid "System agents"
 msgstr "Sistema-agenteak"
 
-msgid "No plugin selected"
-msgstr "Ez da pluginik hautatu"
-
 msgid "Add plugin"
 msgstr "Gehitu plugina"
 
-msgid "Select plugin"
-msgstr "Hautatu plugina"
-
 msgid "Remove plugin"
 msgstr "Kendu plugina"
+
+msgid "No plugin selected"
+msgstr "Ez da pluginik hautatu"
 
 msgid "Configure"
 msgstr "Konfiguratu"
@@ -7452,6 +7449,12 @@ msgctxt "Layers"
 msgid "Bottom"
 msgstr "Behea"
 
+msgid "This setting does not specify a plugin capability type."
+msgstr ""
+
+msgid "This setting specifies an unrecognized plugin capability type: "
+msgstr ""
+
 msgid "Plugin Selection"
 msgstr "Plugin-hautaketa"
 
@@ -8930,6 +8933,15 @@ msgid "Open the Speed Dial with the Space key"
 msgstr ""
 
 msgid "When enabled, pressing Space (with no other key held) opens the Speed Dial action search from any page."
+msgstr ""
+
+msgid "Recent actions"
+msgstr ""
+
+msgid "actions"
+msgstr ""
+
+msgid "How many recently launched actions to show at the top of the Speed Dial. Set to 0 to hide recent actions."
 msgstr ""
 
 msgid "Pop up to select filament grouping mode"
@@ -21366,6 +21378,9 @@ msgid ""
 msgstr ""
 "Saihestu okertzea\n"
 "Ba al zenekien ABS bezalako okertzeko joera duten materialak inprimatzean ohe beroaren tenperatura egoki igotzeak okertzeko probabilitatea murriztu dezakeela?"
+
+#~ msgid "Select plugin"
+#~ msgstr "Hautatu plugina"
 
 #~ msgid "Select the language"
 #~ msgstr "Hautatu hizkuntza"

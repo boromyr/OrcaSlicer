@@ -248,7 +248,7 @@ void OptionsGroup::append_line(const Line& line)
     // affordance for it. Settings tabs only; the searcher already exists by the time tabs are built.
     if (m_use_custom_ctrl && !line.label_path.empty())
         for (const auto& opt : line.get_options())
-            wxGetApp().sidebar().get_searcher().set_path(opt.opt_id, static_cast<Preset::Type>(config_type()), line.label_path);
+            wxGetApp().sidebar().settings_index().set_path(opt.opt_id, static_cast<Preset::Type>(config_type()), line.label_path);
 
     if (line.full_width && (line.widget != nullptr || !line.get_extra_widgets().empty()))
         return;
@@ -656,7 +656,7 @@ Option ConfigOptionsGroup::get_option(const std::string& opt_key, int opt_index 
     m_opt_map.emplace(opt_id, pair);
 
     if (m_use_custom_ctrl) // fill group and category values just for options from Settings Tab
-        wxGetApp().sidebar().get_searcher().add_key(opt_id, static_cast<Preset::Type>(this->config_type()), title, this->config_category(), this->icon);
+        wxGetApp().sidebar().settings_index().add_key(opt_id, static_cast<Preset::Type>(this->config_type()), title, this->config_category(), this->icon);
 
     return Option(*m_config->def()->get(opt_key), opt_id);
 }

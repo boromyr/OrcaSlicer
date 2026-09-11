@@ -3,7 +3,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: Orca Slicer\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-09-11 12:33+0800\n"
+"POT-Creation-Date: 2026-09-11 17:15+0800\n"
 "PO-Revision-Date: 2026-07-26 11:14-0300\n"
 "Last-Translator: Alexandre Folle de Menezes\n"
 "Language-Team: Portuguese, Brazilian\n"
@@ -5212,17 +5212,14 @@ msgstr "Formato inválido. Formato de vetor esperado: \"%1%\""
 msgid "System agents"
 msgstr "Agentes do sistema"
 
-msgid "No plugin selected"
-msgstr "Nenhum plugin selecionado"
-
 msgid "Add plugin"
 msgstr "Adicionar plugin"
 
-msgid "Select plugin"
-msgstr "Selecionar plugin"
-
 msgid "Remove plugin"
 msgstr "Remover plugin"
+
+msgid "No plugin selected"
+msgstr "Nenhum plugin selecionado"
 
 msgid "Configure"
 msgstr "Configurar"
@@ -7423,6 +7420,12 @@ msgctxt "Layers"
 msgid "Bottom"
 msgstr "Inferior"
 
+msgid "This setting does not specify a plugin capability type."
+msgstr ""
+
+msgid "This setting specifies an unrecognized plugin capability type: "
+msgstr ""
+
 msgid "Plugin Selection"
 msgstr "Seleção de plugins"
 
@@ -8900,6 +8903,15 @@ msgid "Open the Speed Dial with the Space key"
 msgstr ""
 
 msgid "When enabled, pressing Space (with no other key held) opens the Speed Dial action search from any page."
+msgstr ""
+
+msgid "Recent actions"
+msgstr ""
+
+msgid "actions"
+msgstr ""
+
+msgid "How many recently launched actions to show at the top of the Speed Dial. Set to 0 to hide recent actions."
 msgstr ""
 
 msgid "Pop up to select filament grouping mode"
@@ -21291,6 +21303,9 @@ msgid ""
 msgstr ""
 "Evitar empenamento\n"
 "Você sabia que ao imprimir materiais propensos ao empenamento como ABS, aumentar adequadamente a temperatura da mesa aquecida pode reduzir a probabilidade de empenamento?"
+
+#~ msgid "Select plugin"
+#~ msgstr "Selecionar plugin"
 
 #~ msgid "Select the language"
 #~ msgstr "Selecione o idioma"

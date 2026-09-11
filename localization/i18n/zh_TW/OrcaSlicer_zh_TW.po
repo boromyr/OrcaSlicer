@@ -9,7 +9,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: Orca Slicer\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-09-11 12:33+0800\n"
+"POT-Creation-Date: 2026-09-11 17:15+0800\n"
 "PO-Revision-Date: 2025-11-28 13:48-0600\n"
 "Last-Translator: tntchn <15895303+tntchn@users.noreply.github.com>\n"
 "Language-Team: \n"
@@ -5349,20 +5349,16 @@ msgid "System agents"
 msgstr "系統代理程式"
 
 # AI Translated
-msgid "No plugin selected"
-msgstr "未選擇外掛"
-
-# AI Translated
 msgid "Add plugin"
 msgstr "新增外掛"
 
 # AI Translated
-msgid "Select plugin"
-msgstr "選擇外掛"
-
-# AI Translated
 msgid "Remove plugin"
 msgstr "移除外掛"
+
+# AI Translated
+msgid "No plugin selected"
+msgstr "未選擇外掛"
 
 # AI Translated
 msgid "Configure"
@@ -7569,6 +7565,12 @@ msgctxt "Layers"
 msgid "Bottom"
 msgstr "底部"
 
+msgid "This setting does not specify a plugin capability type."
+msgstr ""
+
+msgid "This setting specifies an unrecognized plugin capability type: "
+msgstr ""
+
 # AI Translated
 msgid "Plugin Selection"
 msgstr "外掛選擇"
@@ -9081,6 +9083,15 @@ msgid "Open the Speed Dial with the Space key"
 msgstr ""
 
 msgid "When enabled, pressing Space (with no other key held) opens the Speed Dial action search from any page."
+msgstr ""
+
+msgid "Recent actions"
+msgstr ""
+
+msgid "actions"
+msgstr ""
+
+msgid "How many recently launched actions to show at the top of the Speed Dial. Set to 0 to hide recent actions."
 msgstr ""
 
 msgid "Pop up to select filament grouping mode"
@@ -21670,6 +21681,10 @@ msgid ""
 msgstr ""
 "避免翹曲\n"
 "您知道嗎？當列印容易翹曲的材料（如 ABS）時，適當提高熱床溫度可以降低翹曲的機率。"
+
+# AI Translated
+#~ msgid "Select plugin"
+#~ msgstr "選擇外掛"
 
 #~ msgid "Select the language"
 #~ msgstr "選擇語言"

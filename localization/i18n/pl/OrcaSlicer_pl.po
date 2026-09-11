@@ -3,7 +3,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: OrcaSlicer 2.3.0-rc\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-09-11 12:33+0800\n"
+"POT-Creation-Date: 2026-09-11 17:15+0800\n"
 "PO-Revision-Date: \n"
 "Last-Translator: Krzysztof Morga <<tlumaczeniebs@gmail.com>>\n"
 "Language-Team: \n"
@@ -5499,20 +5499,16 @@ msgid "System agents"
 msgstr "Agenci systemowi"
 
 # AI Translated
-msgid "No plugin selected"
-msgstr "Nie wybrano wtyczki"
-
-# AI Translated
 msgid "Add plugin"
 msgstr "Dodaj wtyczkę"
 
 # AI Translated
-msgid "Select plugin"
-msgstr "Wybierz wtyczkę"
-
-# AI Translated
 msgid "Remove plugin"
 msgstr "Usuń wtyczkę"
+
+# AI Translated
+msgid "No plugin selected"
+msgstr "Nie wybrano wtyczki"
 
 # AI Translated
 msgid "Configure"
@@ -7798,6 +7794,12 @@ msgctxt "Layers"
 msgid "Bottom"
 msgstr "Dół"
 
+msgid "This setting does not specify a plugin capability type."
+msgstr ""
+
+msgid "This setting specifies an unrecognized plugin capability type: "
+msgstr ""
+
 # AI Translated
 msgid "Plugin Selection"
 msgstr "Wybór wtyczek"
@@ -9373,6 +9375,15 @@ msgid "Open the Speed Dial with the Space key"
 msgstr ""
 
 msgid "When enabled, pressing Space (with no other key held) opens the Speed Dial action search from any page."
+msgstr ""
+
+msgid "Recent actions"
+msgstr ""
+
+msgid "actions"
+msgstr ""
+
+msgid "How many recently launched actions to show at the top of the Speed Dial. Set to 0 to hide recent actions."
 msgstr ""
 
 msgid "Pop up to select filament grouping mode"
@@ -22577,6 +22588,10 @@ msgid ""
 msgstr ""
 "Unikaj odkształceń\n"
 "Czy wiesz, że podczas drukowania filamentami podatnymi na odkształcenia, takimi jak ABS, odpowiednie zwiększenie temperatury podgrzewanej płyty może zmniejszyć prawdopodobieństwo odkształceń?"
+
+# AI Translated
+#~ msgid "Select plugin"
+#~ msgstr "Wybierz wtyczkę"
 
 #~ msgid "Select the language"
 #~ msgstr "Wybierz język"
