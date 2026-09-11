@@ -29,14 +29,14 @@ public:
 
 } // namespace
 
-TEST_CASE("AppAction composes a stable id from prefix:title:source_key", "[speeddial][actions]")
+TEST_CASE("AppAction composes a stable id from prefix:title:source_key", "[ActionSource][SpeedDial]")
 {
     CHECK(AppAction::compose_id("test", "Action title", "src-key") == "test:Action title:src-key");
     // source_key (not the display name) carries identity, so it is the third field.
     CHECK(AppAction::compose_id("script", "Do Thing", "pack.py") == "script:Do Thing:pack.py");
 }
 
-TEST_CASE("AppAction definitions are immutable after construction", "[speeddial][actions]")
+TEST_CASE("AppAction definitions are immutable after construction", "[ActionSource][SpeedDial]")
 {
     using StringAccessor = const std::string& (AppAction::*) () const;
 
@@ -52,7 +52,7 @@ TEST_CASE("AppAction definitions are immutable after construction", "[speeddial]
     CHECK(action.source_name() == "Action source");
 }
 
-TEST_CASE("ActionRegistry takes exclusive ownership of published actions", "[speeddial][actions]")
+TEST_CASE("ActionRegistry takes exclusive ownership of published actions", "[ActionSource][SpeedDial]")
 {
     using ExpectedUpsert = void (ActionRegistry::*)(std::unique_ptr<AppAction>);
 
@@ -61,7 +61,7 @@ TEST_CASE("ActionRegistry takes exclusive ownership of published actions", "[spe
 
 // A dynamic "Go to Plate N" action is keyed by plate index (not the display title), so renaming
 // a plate never re-keys it - the same contract as a setting action.
-TEST_CASE("Go-to-plate actions are keyed by index, not title", "[speeddial][actions]")
+TEST_CASE("Go-to-plate actions are keyed by index, not title", "[ActionSource][SpeedDial]")
 {
     CHECK(AppAction::compose_id("orca_plate_goto", "0", "orca") == "orca_plate_goto:0:orca");
     CHECK(AppAction::compose_id("orca_plate_goto", "2", "orca") == "orca_plate_goto:2:orca");
@@ -69,7 +69,7 @@ TEST_CASE("Go-to-plate actions are keyed by index, not title", "[speeddial][acti
 
 // A dynamic "Open recent project" action is keyed by file path (not the display name), so renaming
 // a project or reordering the recents list never re-keys it - the same contract as a setting action.
-TEST_CASE("Recent-project actions are keyed by path, not title", "[speeddial][actions]")
+TEST_CASE("Recent-project actions are keyed by path, not title", "[ActionSource][SpeedDial]")
 {
     CHECK(AppAction::compose_id("orca_recent_project", "/a/b/project.3mf", "orca") ==
           "orca_recent_project:/a/b/project.3mf:orca");
@@ -79,7 +79,7 @@ TEST_CASE("Recent-project actions are keyed by path, not title", "[speeddial][ac
 
 // A built-in command is keyed by its stable catalog key (not the localized display title), so a
 // rename or a UI-language switch never re-keys the action and its persisted favourite/stats survive.
-TEST_CASE("Command actions are keyed by catalog key, not display title", "[speeddial][actions]")
+TEST_CASE("Command actions are keyed by catalog key, not display title", "[ActionSource][SpeedDial]")
 {
     CHECK(AppAction::compose_id("orca_command", "save_project", "orca") == "orca_command:save_project:orca");
     // The second field is the stable key, so distinct commands never collide.
@@ -87,11 +87,42 @@ TEST_CASE("Command actions are keyed by catalog key, not display title", "[speed
           AppAction::compose_id("orca_command", "load_project", "orca"));
 }
 
+// The real catalog -> action mapping keys by the stable catalog key and copies presentation from the
+// catalog, so a rename or a UI-language switch never re-keys the action.
+TEST_CASE("Command action construction keys by catalog key", "[ActionSource][SpeedDial]")
+{
+    const std::vector<Slic3r::GUI::NativeCommand>& commands = Slic3r::GUI::NativeCommands::catalog();
+    REQUIRE_FALSE(commands.empty());
+    const Slic3r::GUI::NativeCommand& c = commands.front();
+
+    std::unique_ptr<AppAction> action = Slic3r::GUI::NativeCommands::make_action(c);
+    REQUIRE(action != nullptr);
+    CHECK(action->id() == AppAction::compose_id("orca_command", c.key, "orca"));
+    CHECK(action->id() != AppAction::compose_id("orca_command", c.title, "orca"));
+    CHECK(action->title() == c.title);
+    CHECK(action->group == c.group);
+    CHECK(action->input == c.input);
+    CHECK(action->icon == c.icon);
+}
+
+// Two-phase commands declare the input the palette must collect before they can run.
+TEST_CASE("Two-phase commands declare their input phase", "[ActionSource][SpeedDial]")
+{
+    auto input_of = [](const std::string& key) -> std::string {
+        for (const auto& c : Slic3r::GUI::NativeCommands::catalog())
+            if (c.key == key)
+                return c.input;
+        return {};
+    };
+    CHECK(input_of("go_to_layer") == "percent");
+    CHECK(input_of("go_to_tab") == "tab");
+}
+
 // The quick-launch cap must stay 10 to match the numbered Alt/Option+1..9,0 keys. The web palette
 // mirrors it as K_FAV_LIMIT (asserted in speeddial.test.js); the C++ side pins it here.
 static_assert(Slic3r::GUI::ActionRegistry::kFavLimit == 10, "kFavLimit must stay 10");
 
-TEST_CASE("Favourite lists are capped and deduped preserving order", "[speeddial][actions]")
+TEST_CASE("Favourite lists are capped and deduped preserving order", "[ActionSource][SpeedDial]")
 {
     using Slic3r::GUI::cap_favourites;
 
@@ -101,7 +132,7 @@ TEST_CASE("Favourite lists are capped and deduped preserving order", "[speeddial
     CHECK(cap_favourites({"a", "b"}, 0) == std::vector<std::string>{});
 }
 
-TEST_CASE("Native command catalog has unique keys and present titles", "[speeddial][actions]")
+TEST_CASE("Native command catalog has unique keys and present titles", "[ActionSource][SpeedDial]")
 {
     const std::vector<Slic3r::GUI::NativeCommand>& commands = Slic3r::GUI::NativeCommands::catalog();
     CHECK_FALSE(commands.empty());
@@ -118,7 +149,7 @@ TEST_CASE("Native command catalog has unique keys and present titles", "[speeddi
 // Every command's tile pictogram is the SVG the matching GUI control already uses; an absent icon
 // means a blank tile (like the tab picker). Guard representative names and that every non-empty
 // value resolves to a shipped file, so a rename/typo cannot leave broken images in the palette.
-TEST_CASE("Native command icons resolve to shipped SVGs", "[speeddial][actions]")
+TEST_CASE("Native command icons resolve to shipped SVGs", "[ActionSource][SpeedDial]")
 {
     const std::vector<Slic3r::GUI::NativeCommand>& commands = Slic3r::GUI::NativeCommands::catalog();
     auto icon_of = [&commands](const std::string& key) -> const std::string* {
@@ -159,7 +190,7 @@ TEST_CASE("Native command icons resolve to shipped SVGs", "[speeddial][actions]"
 // The Help-menu commands, wiki/YouTube links and the developer-mode toggle are part of the palette.
 // Guard their presence and that they stay grouped with their peers, so a catalog edit cannot drop
 // or scatter them. Groups are compared to the peer's own group to stay independent of translation.
-TEST_CASE("Native command catalog includes the Help and developer-mode commands", "[speeddial][actions]")
+TEST_CASE("Native command catalog includes the Help and developer-mode commands", "[ActionSource][SpeedDial]")
 {
     const std::vector<Slic3r::GUI::NativeCommand>& commands = Slic3r::GUI::NativeCommands::catalog();
     auto find = [&commands](const std::string& key) -> const Slic3r::GUI::NativeCommand* {
@@ -187,7 +218,7 @@ TEST_CASE("Native command catalog includes the Help and developer-mode commands"
 
 // Every "Add Primitive" item and shipped handy model has a palette command, grouped as in the Add
 // menu. Groups are compared to a peer's own group to stay independent of translation.
-TEST_CASE("Native command catalog covers the Add menus", "[speeddial][actions]")
+TEST_CASE("Native command catalog covers the Add menus", "[ActionSource][SpeedDial]")
 {
     const std::vector<Slic3r::GUI::NativeCommand>& commands = Slic3r::GUI::NativeCommands::catalog();
     auto group_of = [&commands](const std::string& key) -> const std::string* {
@@ -221,7 +252,7 @@ TEST_CASE("Native command catalog covers the Add menus", "[speeddial][actions]")
 
 // A setting whose mode is above the user's current mode must be prompted before it can be edited.
 // Developer settings (comDevelop) are above every non-developer mode, so they always prompt then.
-TEST_CASE("Settings above the current mode require a switch", "[speeddial][actions]")
+TEST_CASE("Settings above the current mode require a switch", "[ActionSource][SpeedDial]")
 {
     using Slic3r::GUI::requires_mode_switch;
     using Slic3r::comAdvanced;

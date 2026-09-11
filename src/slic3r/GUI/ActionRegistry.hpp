@@ -114,6 +114,12 @@ private:
     std::string m_source_name; // display name of the action's source
 };
 
+// Stable identity/display name of the built-in ("OrcaSlicer") action source. Shared by the native
+// command catalog and the dynamically materialised setting/plate/recent actions so every built-in
+// action re-keys together.
+inline constexpr const char* kOrcaSourceKey  = "orca";
+inline constexpr const char* kOrcaSourceName = "OrcaSlicer";
+
 // True when a setting at `setting_mode` cannot be edited in `current_mode` and the UI must switch
 // first. Developer settings are handled as a separate prompt by the Speed Dial.
 inline bool requires_mode_switch(ConfigOptionMode setting_mode, ConfigOptionMode current_mode)
@@ -128,15 +134,17 @@ std::vector<std::string> cap_favourites(const std::vector<std::string>& ids, siz
 // Self-contained sink and single owner of runnable actions for the app session.
 //
 // Workflow:
-// 1. init() (once, UI thread) subscribes to the plugin loader and enumerates the
-//    current script capabilities into actions.
+// 1. init() (once, UI thread) subscribes to the plugin loader and enumerates the current script
+//    capabilities into actions, then materialises the static built-ins from the NativeCommands catalog.
 // 2. Loader load/unload callbacks route through refresh_source()/refresh_capability(),
 //    which upsert()/remove() actions. The registry keeps the only action list and
 //    restores persisted user state as actions arrive.
-// 3. Consumers use by_id(), snapshot(), and run() without knowing the source.
+// 3. Dynamic built-in families (settings, plates, recent projects) are re-materialised at the top of
+//    snapshot(), because their membership follows live state (the current configs, plate list, recents).
+// 4. Consumers use by_id(), snapshot(), and run() without knowing the source.
 //
-// note: there is exactly one source (script plugins), so it lives inline here rather
-// than behind a polymorphic source interface.
+// note: the static catalog lives in NativeCommands; the registry owns the pool, persistence and
+// dispatch, and materialises the dynamic families inline rather than behind a source interface.
 class ActionRegistry
 {
 public:
@@ -180,15 +188,19 @@ public:
     nlohmann::json snapshot();
 
     // "Go to tab..." Speed Dial helper: enumerate the MainFrame notebook's current pages
-    // as [{id,title},...]. Live by construction - built-in tabs (Home/Prepare/Preview/Device/
-    // Project/Calibration) and plugin tabs (plugin.<key>.<name>) are all Notebook pages, so a
-    // page appears/disappears with the notebook. Plugin tabs hidden in the overflow menu (many
-    // plugins) aren't separate pages and are not listed. Call on the UI thread; null-safe.
+    // as [{id,title,icon},...], using the page's real label (not the compact-blanked button text).
+    // Live by construction - built-in tabs (Home/Prepare/Preview/Device/Project/Calibration) and
+    // plugin tabs (plugin.<key>.<name>) are all Notebook pages, so a page appears/disappears with
+    // the notebook. Plugin tabs hidden in the overflow menu (many plugins) aren't separate pages and
+    // are not listed. Call on the UI thread; null-safe.
     nlohmann::json tab_options() const;
 
 private:
     void seed_state(AppAction& a) const; // favourite/stats from config
     AppAction* find(const std::string& id);
+
+    // Read the persisted stats blob + capped favourite list once for a materialisation pass.
+    void load_persisted(nlohmann::json& stats, std::vector<std::string>& favs) const;
 
     // (Re)materialise the current visible config settings as SettingActions from the live
     // searcher (respecting printer-tech + user-mode + visibility filtering), removing stale ones.

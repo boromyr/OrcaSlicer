@@ -9,8 +9,6 @@
 #include "Plater.hpp"
 #include "Widgets/WebViewHostDialog.hpp"
 
-#include <libslic3r/AppConfig.hpp>
-
 #include <algorithm>
 
 #include <wx/display.h>
@@ -156,15 +154,7 @@ void SpeedDialWebDialog::handle_web_command(const nlohmann::json& payload)
         run_action(payload.value("id", ""), payload.value("title", ""), payload.value("param", ""));
     else if (command == "search_tabs")
         search_tabs();
-    else if (command == "go_to_tab") {
-        // "Go to tab..." second phase: the page hands back the tab id it matched.
-        const std::string tab_id = payload.value("id", "");
-        if (!tab_id.empty()) {
-            Hide();
-            if (wxGetApp().mainframe)
-                wxGetApp().mainframe->select_tab(from_u8(tab_id));
-        }
-    } else if (command == "resize")
+    else if (command == "resize")
         resize_to_content(json_int_or(payload, "height", 0));
 }
 
@@ -218,8 +208,7 @@ void SpeedDialWebDialog::run_action(const std::string& id, const std::string& ti
                                   _L("Developer setting"), wxOK | wxCANCEL);
             if (dlg.ShowModal() != wxID_OK)
                 return;
-            wxGetApp().app_config->set_bool("developer_mode", true);
-            wxGetApp().update_mode();
+            wxGetApp().enable_developer_mode();
         } else {
             RichMessageDialog dlg(wxGetApp().mainframe,
                                   wxString::Format(_L("\"%s\" is a %s setting. Switch from %s mode to %s mode to edit it?"),

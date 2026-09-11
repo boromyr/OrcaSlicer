@@ -49,6 +49,12 @@ jobs:
           cmakeVersion: "~4.3.0"  # use most recent 4.3.x version
           useLocalCache: true
           useCloudCache: true
+      - name: Run web dialog JS tests
+        timeout-minutes: 5
+        shell: bash
+        run: |
+          node resources/web/js/fuzzy-search.test.js
+          node resources/web/dialog/SpeedDial/speeddial.test.js
       - name: Unpackage and Run Unit Tests
         timeout-minutes: 20
         shell: bash

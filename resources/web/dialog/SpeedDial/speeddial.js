@@ -2,9 +2,9 @@
 // node vm can exercise the pure helpers (searchActions / filterTabs / actionLabel / nextSel / commandList).
 
 // ---- state (populated by the C++ bridge via window.HandleStudio) ----
-var ACTIONS = [];        // [{id,title,source,group,input,shortcut}], already frecency-sorted by C++
+var ACTIONS = [];        // [{id,title,source,group,input,icon,mode}], already frecency-sorted by C++
 var FAVS = [];           // [id...]
-var RECENTS = [];        // [{id,title,source,group,input,shortcut}] - last-N launched
+var RECENTS = [];        // [{id,title,source,group,input,icon,mode}] - last-N launched
 var query = "";
 var sel = { zone: "list", i: 0 };   // zone: 'list' | 'fav'
 var lastResizeHeight = 0;
@@ -14,6 +14,26 @@ var matchIndex = {};
 // action carries the mode it requires, so "would this need a switch?" is a rank comparison.
 var USER_MODE = "simple";
 var MODE_RANK = { simple: 0, advanced: 1, expert: 2, develop: 3 };
+
+// Search ranking weights: every contiguous match must outrank every fuzzy one regardless of field,
+// and title must outrank group, which outranks source.
+var SCORE_CONTIGUOUS = 100000;
+var SCORE_TITLE = 2000;
+var SCORE_GROUP = 1000;
+
+// Localized lookup for strings this page builds at runtime. text.js (loaded before this script)
+// defines LangText; a missing entry falls back to the English literal. Extra args replace
+// successive %s placeholders.
+function T(key, fallback) {
+    var table = (typeof LangText !== "undefined" && LangText) || null;
+    var lang = "en";
+    try { lang = localStorage.getItem(LANG_COOKIE_NAME) || "en"; } catch (e) {}
+    var s = table && table[lang] && table[lang][key] !== undefined ? table[lang][key] :
+        table && table.en && table.en[key] !== undefined ? table.en[key] : fallback;
+    for (var i = 2; i < arguments.length; i++)
+        s = s.replace("%s", arguments[i]);
+    return s;
+}
 
 // ---- windowed list render ----------------------------------------------------
 // The command list is rendered in windows (append-on-scroll) so a huge settings pool doesn't build
@@ -36,11 +56,11 @@ var searchNeedle = "";
 var phase = "commands";
 var tabOptions = [];       // [{id,title}] - notebook pages, fetched on entering the tab phase
 
-// why: the fuzzy matcher (NormText/FuzzyRangesNorm/WholeWordRangesNorm) lives in shared
+// why: the fuzzy matcher (NormText/FuzzyRangesNorm) lives in shared
 //      ../../js/fuzzy-search.js, loaded before this script. Search is always case-insensitive.
 
 // element handles, assigned in OnInit (kept null so load-time touches no DOM)
-var qEl = null, listEl = null, favEl = null, clearEl = null, eyeEl = null, countEl = null, headEl = null;
+var qEl = null, listEl = null, favEl = null, clearEl = null, eyeEl = null, countEl = null;
 
 // ---- pure helpers (no DOM; unit-tested) -------------------------------------
 // Pre-normalized haystacks, cached on the action object. The fold is length-preserving (1:1 per
@@ -89,14 +109,20 @@ function fieldMatchScore(norm, wwRe) {
     return { score: 1000 - r[0][0] * 10 - gaps * 10, ranges: r, contiguous: r.length === 1 && len === searchNeedle.length };
 }
 
-// Combine the per-field match scores into one comparable value. Ranking tiers, strongest first:
+// Combine the per-field match scores into one comparable value, or null when no field matched.
+// Ranking tiers, strongest first:
 //   tier (contiguous/perfect vs fuzzy) > field (title > group > source) > start/gaps.
 // The additive weights keep every contiguous match above every fuzzy one regardless of field.
 function scoreFields(t, g, s) {
-    var best = -1;
-    if (t) best = Math.max(best, (t.contiguous ? 100000 : 0) + 2000 + t.score);
-    if (g) best = Math.max(best, (g.contiguous ? 100000 : 0) + 1000 + g.score);
-    if (s) best = Math.max(best, (s.contiguous ? 100000 : 0) + s.score);
+    var best = null;
+    function consider(m, weight) {
+        if (!m) return;
+        var v = (m.contiguous ? SCORE_CONTIGUOUS : 0) + weight + m.score;
+        best = best === null ? v : Math.max(best, v);
+    }
+    consider(t, SCORE_TITLE);
+    consider(g, SCORE_GROUP);
+    consider(s, 0);
     return best;
 }
 
@@ -125,7 +151,7 @@ function searchActions(actions, query) {
         var g = fieldMatchScore(groupNorm(a), wwRe);
         var s = fieldMatchScore(sourceNorm(a), wwRe);
         var score = scoreFields(t, g, s);
-        if (score < 0) continue;
+        if (score === null) continue;
         // Ranges are per-field against the ACTUAL text drawn: title for the row-name, and group (or
         // source when group is empty) for the eyebrow - so highlight offsets stay aligned to the label.
         matchIndex[a.id] = {
@@ -198,7 +224,8 @@ function favIndexForDigit(d) {
 }
 
 function resultCountText(total, shown, query) {
-    return (query || "").trim() ? "Showing " + shown + " of " + total + " actions" : total + " actions";
+    var n = total + " " + T("sd_actions", "actions");
+    return (query || "").trim() ? T("sd_showing", "Showing") + " " + shown + " " + T("sd_of", "of") + " " + n : n;
 }
 
 // Display label for a notebook tab. Trim any stray whitespace; pages added with an empty title
@@ -259,7 +286,7 @@ function commandList(actions, recents, query) {
 // visible favourites, list zone the active commands list. `actions` must be the already-resolved
 // list (recents for an empty query, the filtered list otherwise) - pure so runSelected() shares
 // one lookup and the node-vm test can call it directly.
-function selectedActionId(sel, actions, favIds, query) {
+function selectedActionId(sel, actions, favIds) {
     if (sel.zone === "fav")
         return favIds[sel.i];
     if (!actions || !actions.length)
@@ -286,9 +313,9 @@ function needsModeSwitch(item, userMode) {
 // Short mode tag for an action that needs a switch, or "" when it is already available.
 function modeBadge(item, userMode) {
     if (!needsModeSwitch(item, userMode)) return "";
-    if (item.mode === "develop") return "Developer";
-    if (item.mode === "expert") return "Expert";
-    if (item.mode === "advanced") return "Advanced";
+    if (item.mode === "develop") return T("sd_mode_develop", "Developer");
+    if (item.mode === "expert") return T("sd_mode_expert", "Expert");
+    if (item.mode === "advanced") return T("sd_mode_advanced", "Advanced");
     return "";
 }
 
@@ -334,12 +361,7 @@ function stateFromPayload(payload) {
         actions: payload.actions || [],
         favourites: payload.favourites || [],
         recent: payload.recent || [],
-        userMode: payload.user_mode || "simple",
-        query: "",
-        sel: { zone: "list", i: 0 },
-        lastResizeHeight: 0,
-        phase: "commands",
-        tabOptions: []
+        userMode: payload.user_mode || "simple"
     };
 }
 
@@ -395,19 +417,19 @@ window.HandleStudio = function (payload) {
         FAVS = next.favourites;
         RECENTS = next.recent;
         USER_MODE = next.userMode;
-        query = next.query;
-        sel = next.sel;
-        lastResizeHeight = next.lastResizeHeight;
-        phase = next.phase;
-        tabOptions = next.tabOptions;
+        // A fresh payload re-opens the main phase; C++ never rehydrates the transient phase/query state.
+        phase = "commands";
+        tabOptions = [];
+        query = "";
+        sel = { zone: "list", i: 0 };
+        lastResizeHeight = 0;
         // why: builtKey caches phase|query so renderCommandsList can skip a rebuild on arrow-nav.
         // It survives a re-open (which never goes through exitPhase), so without a reset the cached
         // empty-query key would skip the rebuild and leave stale list content.
         builtKey = "";
-        if (headEl) headEl.hidden = false;
         if (qEl) {
             qEl.value = "";
-            qEl.placeholder = "Search " + ACTIONS.length + " actions";
+            qEl.placeholder = T("sd_search_n", "Search %s actions", ACTIONS.length);
             syncClearButton();
         }
         render({ resize: true, resetScroll: true });
@@ -422,7 +444,7 @@ window.HandleStudio = function (payload) {
         var fid = payload.id;
         if (fid && FAVS.indexOf(fid) !== -1) FAVS.splice(FAVS.indexOf(fid), 1);
         render({ resize: true, keepScroll: true });
-        flashHint("Favourites are full (" + (payload.limit || K_FAV_LIMIT) + " max)");
+        flashHint(T("sd_favs_full", "Favourites are full") + " (" + (payload.limit || K_FAV_LIMIT) + " " + T("sd_max", "max") + ")");
     }
 };
 
@@ -485,7 +507,7 @@ function pinSvg(on) {
 function setPinState(pin, on) {
     pin.classList.toggle("on", on);
     pin.innerHTML = pinSvg(on);
-    pin.title = on ? "Unpin from favourites (Ctrl+B)" : "Pin to favourites (Ctrl+B)";
+    pin.title = on ? T("sd_unpin_fav", "Unpin from favourites (Ctrl+B)") : T("sd_pin_fav", "Pin to favourites (Ctrl+B)");
 }
 
 // ---- render ------------------------------------------------------------------
@@ -519,15 +541,16 @@ function renderFav() {
             var badge = document.createElement("span");
             badge.className = "fav-slot";
             badge.textContent = slot;
-            badge.title = slot === "0" ? "Favourite 10 (Alt+0)" : "Favourite " + slot + " (Alt+" + slot + ")";
+            badge.title = slot === "0" ? T("sd_favourite", "Favourite") + " 10 (Alt+0)" :
+                T("sd_favourite", "Favourite") + " " + slot + " (Alt+" + slot + ")";
             tile.appendChild(badge);
         }
         // Direct removal: a hover-revealed ✕ in the tile's corner. click() stops propagation so it
         // unpins without activating the action.
         var unpin = document.createElement("button");
         unpin.className = "fav-unpin";
-        unpin.title = "Remove from favourites";
-        unpin.setAttribute("aria-label", "Remove from favourites");
+        unpin.title = T("sd_remove_fav", "Remove from favourites");
+        unpin.setAttribute("aria-label", T("sd_remove_fav", "Remove from favourites"));
         unpin.innerHTML = '<svg width="9" height="9" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><line x1="4" y1="4" x2="12" y2="12"/><line x1="12" y1="4" x2="4" y2="12"/></svg>';
         unpin.onclick = function (ev) { ev.stopPropagation(); toggleFav(id); };
         tile.appendChild(unpin);
@@ -567,9 +590,9 @@ function showFavMenu(x, y, id) {
     favMenuEl.innerHTML = "";
     var favs = currentVisibleFavs();
     var vi = favs.indexOf(id);
-    addFavMenuItem("Move left", vi > 0, function () { moveFav(id, -1); });
-    addFavMenuItem("Move right", vi >= 0 && vi < favs.length - 1, function () { moveFav(id, 1); });
-    addFavMenuItem("Unpin", true, function () { toggleFav(id); });
+    addFavMenuItem(T("sd_move_left", "Move left"), vi > 0, function () { moveFav(id, -1); });
+    addFavMenuItem(T("sd_move_right", "Move right"), vi >= 0 && vi < favs.length - 1, function () { moveFav(id, 1); });
+    addFavMenuItem(T("sd_unpin", "Unpin"), true, function () { toggleFav(id); });
     favMenuEl.hidden = false;
     favMenuEl.style.left = Math.max(0, Math.min(x, window.innerWidth - favMenuEl.offsetWidth - 4)) + "px";
     favMenuEl.style.top = Math.max(0, Math.min(y, window.innerHeight - favMenuEl.offsetHeight - 4)) + "px";
@@ -598,52 +621,47 @@ function updateFavEyebrow(favs) {
     eyeEl.hidden = !a;
 }
 
+// Row shell shared by action and tab rows: the row (selection class + aria label), the icon tile and
+// the text column. Returns the pieces the caller fills in (eyebrow/name/badge/pin, handlers).
+function beginRow(item, i, mono, ariaLabel) {
+    var row = document.createElement("div");
+    row.className = "row" + (sel.zone === "list" && sel.i === i ? " sel" : "");
+    row.setAttribute("aria-label", ariaLabel);
+
+    var tile = document.createElement("div");
+    tile.className = "tile";
+    fillTile(tile, item, mono);
+
+    var left = document.createElement("div");
+    left.className = "row-left";
+    var line = document.createElement("div");
+    line.className = "row-line";
+    left.appendChild(line);
+    row.appendChild(tile);
+    row.appendChild(left);
+    return { row: row, left: left, line: line };
+}
+
 // A command/action row - used for search results, recents, and (because settings are actions now)
 // the setting options too. All rows are pinnable, so every row carries a bookmark.
 function renderActionRow(a, i) {
     var on = FAVS.indexOf(a.id) !== -1;
-    var row = document.createElement("div");
-    row.className = "row" + (sel.zone === "list" && sel.i === i ? " sel" : "");
-    row.setAttribute("aria-label", actionLabel(a, ACTIONS));
-
-    var tile = document.createElement("div");
-    tile.className = "tile";
-    fillTile(tile, a);
-
-    var left = document.createElement("div");
-    left.className = "row-left";
+    var shell = beginRow(a, i, false, actionLabel(a, ACTIONS));
     var mi = matchIndex[a.id];
     // The eyebrow shows group when present, else source. Highlight with the ranges of whichever of the
     // two the eyebrow actually renders (so a "Recent Projects"/"Object" header match lights up like a
     // setting path does - the offsets are computed against the same string we are marking).
     var eyebrow = a.group || a.source;
     var eyebrowMatch = mi ? (mi.useEyebrowGroup ? mi.group : mi.source) : null;
-    var sourceEl = markedText("row-eyebrow", eyebrow, eyebrowMatch);
-    var line = document.createElement("div");
-    line.className = "row-line";
-    var name = markedText("row-name", a.title, mi ? mi.title : null);
-    line.appendChild(name);
+    shell.left.insertBefore(markedText("row-eyebrow", eyebrow, eyebrowMatch), shell.line);
+    shell.line.appendChild(markedText("row-name", a.title, mi ? mi.title : null));
     var badge = modeBadge(a, USER_MODE);
     if (badge) {
         var tag = document.createElement("span");
         tag.className = "row-mode";
         tag.textContent = badge;
-        line.appendChild(tag);
+        shell.line.appendChild(tag);
     }
-    if (a.shortcut) {
-        var sc = document.createElement("div");
-        sc.className = "row-sc";
-        a.shortcut.split("+").forEach(function (k) {
-            var key = document.createElement("kbd");
-            key.textContent = k;
-            sc.appendChild(key);
-        });
-        line.appendChild(sc);
-    }
-    left.appendChild(sourceEl);
-    left.appendChild(line);
-    row.appendChild(tile);
-    row.appendChild(left);
 
     var pin = document.createElement("button");
     pin.className = "pin";
@@ -651,11 +669,11 @@ function renderActionRow(a, i) {
     pin.onclick = function (ev) { ev.stopPropagation(); toggleFav(a.id); };
     // why: two quick fav/unfav clicks must not dblclick-run the row
     pin.ondblclick = function (ev) { ev.stopPropagation(); };
-    row.appendChild(pin);
+    shell.row.appendChild(pin);
 
-    row.onclick = function () { sel = { zone: "list", i: i }; render({ resize: true }); };
-    row.ondblclick = function () { sel = { zone: "list", i: i }; activateEntry(a); };
-    return row;
+    shell.row.onclick = function () { sel = { zone: "list", i: i }; render({ resize: true }); };
+    shell.row.ondblclick = function () { sel = { zone: "list", i: i }; activateEntry(a); };
+    return shell.row;
 }
 
 // Append rows [from, to) into listEl, always inserting before the bottom spacer so row order is preserved.
@@ -731,6 +749,18 @@ function updatePins(list) {
     }
 }
 
+// Replace the list with a single placeholder message (no matches / empty state). Shared by all phases.
+function renderEmpty(text) {
+    listEl.innerHTML = "";
+    spacerEl = null;
+    listEl.className = "dial-list empty";
+    if (countEl) countEl.hidden = true;
+    var empty = document.createElement("div");
+    empty.className = "dial-empty";
+    empty.textContent = text;
+    listEl.appendChild(empty);
+}
+
 function renderCommandsList() {
     var list = currentList();
     var total = list.length;
@@ -742,14 +772,8 @@ function renderCommandsList() {
         matchIndex = {};
 
     if (!total) {
-        listEl.innerHTML = "";
-        spacerEl = null;
-        listEl.className = "dial-list empty";
-        if (countEl) countEl.hidden = true;
-        var empty = document.createElement("div");
-        empty.className = "dial-empty";
-        empty.textContent = showList ? ("No actions match (Total: " + ACTIONS.length + ")") : "No actions yet";
-        listEl.appendChild(empty);
+        renderEmpty(showList ? (T("sd_no_match", "No actions match") + " (" + T("sd_total", "Total") + ": " + ACTIONS.length + ")")
+                             : T("sd_no_actions", "No actions yet"));
         renderEnd = 0;
         builtKey = buildKey() + "|0";
         return;
@@ -767,7 +791,7 @@ function renderCommandsList() {
     listEl.className = "dial-list";
     if (countEl) {
         countEl.hidden = false;
-        countEl.textContent = showList ? resultCountText(ACTIONS.length, total, query) : total + " recent";
+        countEl.textContent = showList ? resultCountText(ACTIONS.length, total, query) : total + " " + T("sd_recent", "recent");
     }
     updateSelection();
     updatePins(list);
@@ -777,29 +801,14 @@ function renderCommandsList() {
 // tabTitle so pages added with an empty text (e.g. Home) still show a label.
 function renderTabRow(t, i) {
     var label = tabTitle(t);
-    var row = document.createElement("div");
-    row.className = "row" + (sel.zone === "list" && sel.i === i ? " sel" : "");
-    row.setAttribute("aria-label", label);
-
-    var tile = document.createElement("div");
-    tile.className = "tile";
-    fillTile(tile, t, true);
-
-    var left = document.createElement("div");
-    left.className = "row-left";
-    var line = document.createElement("div");
-    line.className = "row-line";
+    var shell = beginRow(t, i, true, label);
     var name = document.createElement("div");
     name.className = "row-name";
     name.textContent = label;
-    line.appendChild(name);
-    left.appendChild(line);
-
-    row.appendChild(tile);
-    row.appendChild(left);
-    row.onclick = function () { sel = { zone: "list", i: i }; render({ resize: true }); };
-    row.ondblclick = function () { sel = { zone: "list", i: i }; jumpToTab(t); };
-    return row;
+    shell.line.appendChild(name);
+    shell.row.onclick = function () { sel = { zone: "list", i: i }; render({ resize: true }); };
+    shell.row.ondblclick = function () { sel = { zone: "list", i: i }; jumpToTab(t); };
+    return shell.row;
 }
 
 function renderTabList() {
@@ -808,12 +817,7 @@ function renderTabList() {
     listEl.innerHTML = "";
 
     if (!list.length) {
-        listEl.className = "dial-list empty";
-        if (countEl) countEl.hidden = true;
-        var empty = document.createElement("div");
-        empty.className = "dial-empty";
-        empty.textContent = q ? "No tabs match" : "No tabs";
-        listEl.appendChild(empty);
+        renderEmpty(q ? T("sd_no_tabs_match", "No tabs match") : T("sd_no_tabs", "No tabs"));
         return;
     }
     if (sel.zone === "list")
@@ -821,20 +825,14 @@ function renderTabList() {
     listEl.className = "dial-list";
     if (countEl) {
         countEl.hidden = false;
-        countEl.textContent = q ? list.length + " matches" : list.length + " tabs";
+        countEl.textContent = q ? list.length + " " + T("sd_matches", "matches") : list.length + " " + T("sd_tabs", "tabs");
     }
     list.forEach(function (t, i) { listEl.appendChild(renderTabRow(t, i)); });
 }
 
 function renderPercentList() {
     var q = (query || "").trim();
-    listEl.innerHTML = "";
-    listEl.className = "dial-list empty";
-    if (countEl) countEl.hidden = true;
-    var ph = document.createElement("div");
-    ph.className = "dial-empty";
-    ph.textContent = q ? ("Go to " + q + "% of the layer range") : "Enter a layer percentage (0-100)";
-    listEl.appendChild(ph);
+    renderEmpty(q ? T("sd_go_to_pct", "Go to %s% of the layer range", q) : T("sd_enter_pct", "Enter a layer percentage (0-100)"));
 }
 
 function renderList() {
@@ -936,7 +934,7 @@ function runSelected() {
         return;
     }
     var list = currentList();
-    var id = selectedActionId(sel, list, currentVisibleFavs(), query);
+    var id = selectedActionId(sel, list, currentVisibleFavs());
     if (id) activateEntry(byId(id));
 }
 
@@ -950,38 +948,43 @@ function runJumpToLayer(pct) {
 }
 
 function jumpToTab(t) {
-    SendMessage({ command: "go_to_tab", id: t.id, title: tabTitle(t) });
+    var a = findActionByInput("tab");
+    if (!a || !t) return;
+    SendMessage({ command: "run_action", id: a.id, title: a.title, param: t.id });
+}
+
+// Clear the shared query/cursor state when entering or leaving a phase. Callers set the
+// phase-specific placeholder, then render.
+function resetPhaseInput() {
+    query = ""; qEl.value = ""; sel = { zone: "list", i: 0 };
+    syncClearButton();
 }
 
 function enterPercentPhase() {
-    phase = "percent"; query = ""; qEl.value = "";
-    sel = { zone: "list", i: 0 };
-    qEl.placeholder = "Go to layer % (0-100)";
-    syncClearButton();
+    phase = "percent";
+    resetPhaseInput();
+    qEl.placeholder = T("sd_go_layer_ph", "Go to layer % (0-100)");
     render({ resize: true, resetScroll: true });
     qEl.focus();
 }
 
 function enterTabsPhase() {
-    phase = "tab"; tabOptions = []; query = ""; qEl.value = "";
-    sel = { zone: "list", i: 0 };
-    qEl.placeholder = "Go to tab";
-    syncClearButton();
+    phase = "tab"; tabOptions = [];
+    resetPhaseInput();
+    qEl.placeholder = T("sd_go_tab_ph", "Go to tab");
     render({ resize: true, resetScroll: true });
     qEl.focus();
     SendMessage({ command: "search_tabs" });
 }
 
 function exitPhase() {
-    phase = "commands"; tabOptions = []; query = ""; qEl.value = "";
-    if (headEl) headEl.hidden = false;
-    sel = { zone: "list", i: 0 };
+    phase = "commands"; tabOptions = [];
+    resetPhaseInput();
     // why: builtKey caches phase|query so renderCommandsList can skip a rebuild on arrow-nav/click.
     // It survives a second-phase exit (which never goes through exitPhase from the commands view),
     // so without a reset the cached empty-query key would skip the rebuild and leave stale content.
     builtKey = "";
-    qEl.placeholder = "Search " + ACTIONS.length + " actions";
-    syncClearButton();
+    qEl.placeholder = T("sd_search_n", "Search %s actions", ACTIONS.length);
     render({ resize: true, resetScroll: true });
     qEl.focus();
 }
@@ -991,13 +994,20 @@ function focusInput() { setTimeout(function () { if (qEl) qEl.focus(); }, 0); }
 // ---- init --------------------------------------------------------------------
 function OnInit() {
     qEl = $("q"); listEl = $("list"); favEl = $("favBar"); clearEl = $("clear"); eyeEl = $("favEyebrow"); countEl = $("count");
-    headEl = document.querySelector(".dial-head");
+    // text.js's TranslatePage() targets jQuery `.trans` nodes; this page has none and defines its own
+    // `$`, so don't call it. Runtime strings go through T() instead.
+    qEl.placeholder = T("sd_search", "Search actions");
+    qEl.setAttribute("aria-label", T("sd_search", "Search actions"));
+    if (clearEl) {
+        clearEl.title = T("sd_clear", "Clear");
+        clearEl.setAttribute("aria-label", T("sd_clear", "Clear"));
+    }
     syncClearButton();
 
     $("clear").onclick = function () {
-        query = ""; qEl.value = ""; sel = { zone: "list", i: 0 };
-        render({ resize: true, resetScroll: true }); qEl.focus();
-        syncClearButton();
+        resetPhaseInput();
+        render({ resize: true, resetScroll: true });
+        qEl.focus();
     };
     qEl.addEventListener("input", function () {
         query = qEl.value; sel = { zone: "list", i: 0 }; syncClearButton();
@@ -1026,7 +1036,7 @@ function OnInit() {
         if (phase === "commands" && (e.ctrlKey || e.metaKey) && !e.altKey && !e.shiftKey &&
             e.key.toLowerCase() === "b") {
             e.preventDefault();
-            var id = selectedActionId(sel, currentList(), currentVisibleFavs(), query);
+            var id = selectedActionId(sel, currentList(), currentVisibleFavs());
             if (id) toggleFav(id);
             return;
         }

@@ -322,7 +322,9 @@ void OptionsSearcher::init(std::vector<InputInfo> input_values)
 
 void OptionsSearcher::apply(DynamicPrintConfig *config, Preset::Type type, ConfigOptionMode mode)
 {
-    if (options.empty()) return;
+    // options_all_modes is a separate consumer (the Speed Dial), so "nothing initialised yet" means
+    // both views are empty - the mode-filtered options can be empty while the all-modes view is not.
+    if (options.empty() && options_all_modes.empty()) return;
 
     options.erase(std::remove_if(options.begin(), options.end(), [type](Option opt) { return opt.type == type; }), options.end());
     options_all_modes.erase(std::remove_if(options_all_modes.begin(), options_all_modes.end(), [type](Option opt) { return opt.type == type; }),

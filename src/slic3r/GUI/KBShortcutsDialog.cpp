@@ -199,8 +199,8 @@ void KBShortcutsDialog::fill_shortcuts()
             // Switch table page
             { ctrl + L("Tab"), L("Switch table page")},
             // Open speed dial
-            { "Space", L("Open speed dial") },
-            { alt + "1..9,0", L("Run a Speed Dial favourite") },
+            { L_CONTEXT("Space", "Keyboard Shortcut"), L("Open speed dial") },
+            { alt + "1..9,0", L("Run a Speed Dial favourite (while the Speed Dial is open)") },
             //DEL
             #ifdef __APPLE__
                 {"fn+⌫", L("Delete Selected")},

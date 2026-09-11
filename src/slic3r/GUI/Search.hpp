@@ -156,10 +156,6 @@ public:
     void dlg_sys_color_changed();
     void dlg_msw_rescale();
 
-    // The full gated option set built by init() (after visibility/mode/printer-tech filtering).
-    // Used by the Speed Dial to materialise config settings as first-class actions.
-    const std::vector<Option>& all_options() const { return options; }
-
     // Every option across all UI modes (Developer included), regardless of the current mode.
     // Used by the Speed Dial so it can list settings the user would have to switch mode to edit.
     const std::vector<Option>& all_modes_options() const { return options_all_modes; }

@@ -19,16 +19,29 @@ function Norm(ch, caseSensitive) {
   return caseSensitive ? folded : folded.toLowerCase(); // case-sensitivity is the only toggle
 }
 
-// Pre-normalize a whole haystack with the SAME per-char fold FuzzyRanges uses, so a caller can match
-// it repeatedly against one cached string. The fold is 1:1 in length, so indices stay aligned to the
-// ORIGINAL text - the highlight ranges that FuzzyRangesNorm returns slice the original correctly.
-// Iterate by UTF-16 code unit (not Array.from code point) to mirror FuzzyRanges' own indexing exactly.
+// Pre-normalize a whole haystack with a length-preserving fold, so a caller can match it repeatedly
+// against one cached string. One input UTF-16 code unit always maps to one output code unit, so
+// indices stay aligned to the ORIGINAL text - the highlight ranges that FuzzyRangesNorm returns slice
+// the original correctly. Iterate by UTF-16 code unit (not Array.from code point) to mirror
+// FuzzyRanges' own indexing exactly.
 function NormText(text, caseSensitive) {
   const src = text || "";
   let out = "";
   for (let i = 0; i < src.length; i++)
-    out += Norm(src[i], caseSensitive);
+    out += NormStable(src[i], caseSensitive);
   return out;
+}
+
+// Length-preserving variant of Norm: NFD can expand a code unit (Hangul syllables become Jamo) or
+// drop it (combining diacritics), and toLowerCase can expand one too (U+0130). Any of those would
+// desync highlight offsets, so fall back to the original unit whenever the fold is not 1:1.
+function NormStable(ch, caseSensitive) {
+  const folded = FoldChar(ch);
+  const stable = folded.length === 1 ? folded : ch;
+  if (caseSensitive)
+    return stable;
+  const lower = stable.toLowerCase();
+  return lower.length === 1 ? lower : stable;
 }
 
 // Match a PRE-normalized haystack against a PRE-normalized needle (both produced by NormText with the
@@ -114,19 +127,4 @@ function WholeWordRanges(text, query, caseSensitive) {
   while ((match = re.exec(haystack)) !== null)
     ranges.push([match.index, match.index + match[0].length]);
   return ranges.length > 0 ? ranges : null;
-}
-
-// Same whole-word (\b-bounded) match as WholeWordRanges, but against PRE-normalized haystack/needle
-// (NormText output, so offsets stay length-aligned to the original text). Returns the first match as
-// [[i, i+len]] in original coordinates, or null. Non-global so the caller can reuse one compiled regex
-// across many fields without re-setting lastIndex. Skipping the per-char fold keeps the Speed Dial's
-// per-keystroke scan over thousands of cached settings cheap.
-function WholeWordRangesNorm(haystackNorm, needleNorm) {
-  const t = haystackNorm || "";
-  const needle = needleNorm || "";
-  if (!needle)
-    return null;
-  const re = new RegExp(`\\b${EscapeRegExp(needle)}\\b`);
-  const match = re.exec(t);
-  return match ? [[match.index, match.index + match[0].length]] : null;
 }

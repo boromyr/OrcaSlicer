@@ -3,7 +3,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: Orca Slicer\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-09-03 10:27+0800\n"
+"POT-Creation-Date: 2026-09-11 12:33+0800\n"
 "PO-Revision-Date: 2025-10-02 17:43+0700\n"
 "Last-Translator: \n"
 "Language-Team: hainguyen.ts13@gmail.com\n"
@@ -2568,13 +2568,6 @@ msgstr "Có bản cập nhật khả dụng. Hãy mở hộp thoại gói cài �
 msgid "%s has been removed."
 msgstr "%s đã bị xóa."
 
-
-msgid "Select the language"
-msgstr "Chọn ngôn ngữ"
-
-msgid "Language"
-msgstr "Ngôn ngữ"
-
 # AI Translated
 #, c-format, boost-format
 msgid "Switching Orca Slicer to language %s failed."
@@ -2611,6 +2604,19 @@ msgstr ""
 # AI Translated
 msgid "Failed to open the Plugins dialog (unknown error)."
 msgstr "Không thể mở hộp thoại Plugin (lỗi không xác định)."
+
+msgid "Plugins refreshed."
+msgstr ""
+
+#, c-format, boost-format
+msgid "Failed to refresh plugins: %s"
+msgstr ""
+
+msgid "Select plugin package"
+msgstr ""
+
+msgid "Plugin files (*.py;*.whl)|*.py;*.whl"
+msgstr ""
 
 # AI Translated
 msgid "Plugin Terminal"
@@ -4835,6 +4841,12 @@ msgstr ""
 "Thông báo lỗi: %1%"
 
 #, boost-format
+msgid ""
+"Copying of the temporary G-code to the output G-code failed.\n"
+"Error message: %1%"
+msgstr ""
+
+#, boost-format
 msgid "Copying of the temporary G-code to the output G-code failed. There might be problem with target device, please try exporting again or using different device. The corrupted output G-code is at %1%.tmp."
 msgstr "Sao chép G-code tạm thời sang G-code đầu ra thất bại. Có thể có vấn đề với thiết bị đích, vui lòng thử xuất lại hoặc dùng thiết bị khác. G-code đầu ra bị hỏng ở %1%.tmp."
 
@@ -6870,6 +6882,9 @@ msgstr "Hiện đường viền xung quanh vật thể đã chọn trong cảnh 
 
 msgid "Preferences"
 msgstr "Tùy chọn"
+
+msgid "Open speed dial..."
+msgstr ""
 
 # AI Translated
 msgctxt "Menu"
@@ -9307,7 +9322,6 @@ msgstr "Bạn có muốn tiếp tục?"
 msgid "Language selection"
 msgstr "Chọn ngôn ngữ"
 
-
 msgid "Asia-Pacific"
 msgstr "Châu Á-Thái Bình Dương"
 
@@ -9422,6 +9436,9 @@ msgstr "Đường dẫn phiên bản hiện tại: "
 
 msgid "General"
 msgstr "Chung"
+
+msgid "Language"
+msgstr "Ngôn ngữ"
 
 msgid "Metric"
 msgstr "Hệ mét"
@@ -9650,6 +9667,12 @@ msgstr "Quản lý nhiều thiết bị"
 
 msgid "With this option enabled, you can send a task to multiple devices at the same time and manage multiple devices."
 msgstr "Với tùy chọn này được bật, bạn có thể gửi tác vụ đến nhiều thiết bị cùng lúc và quản lý nhiều thiết bị."
+
+msgid "Open the Speed Dial with the Space key"
+msgstr ""
+
+msgid "When enabled, pressing Space (with no other key held) opens the Speed Dial action search from any page."
+msgstr ""
 
 # AI Translated
 msgid "Pop up to select filament grouping mode"
@@ -10436,6 +10459,9 @@ msgstr "Sao chép tất cả các giá trị kế thừa từ preset cha vào pr
 # AI Translated
 msgid "Detach from parent"
 msgstr "Tách khỏi vật thể cha"
+
+msgid "Save without parent"
+msgstr ""
 
 # AI Translated
 msgid "Unique preset"
@@ -12465,6 +12491,17 @@ msgstr "Hiển thị/Ẩn hộp thoại cài đặt thiết bị 3Dconnexion"
 msgid "Switch table page"
 msgstr "Chuyển trang bảng"
 
+# AI Translated
+msgctxt "Keyboard Shortcut"
+msgid "Space"
+msgstr "Space"
+
+msgid "Open speed dial"
+msgstr ""
+
+msgid "Run a Speed Dial favourite (while the Speed Dial is open)"
+msgstr ""
+
 msgid "Show keyboard shortcuts list"
 msgstr "Hiển thị danh sách phím tắt"
 
@@ -12630,15 +12667,6 @@ msgstr "Tab"
 
 msgid "Switch between Prepare/Preview"
 msgstr "Chuyển đổi giữa Chuẩn bị/Xem trước"
-
-# AI Translated
-msgctxt "Keyboard Shortcut"
-msgid "Space"
-msgstr "Space"
-
-# AI Translated
-msgid "Open actions speed dial"
-msgstr "Mở vòng quay thao tác nhanh"
 
 msgid "Plater"
 msgstr "Bàn in"
@@ -12925,14 +12953,20 @@ msgstr "Sửa chữa đã hủy"
 msgid "Copying of file %1% to %2% failed: %3%"
 msgstr "Sao chép file %1% sang %2% thất bại: %3%"
 
-msgid "Please check any unsaved changes before updating the configuration."
-msgstr "Cần kiểm tra các thay đổi chưa lưu trước khi cập nhật cấu hình."
+msgid "Downloading new vendor profile(s): "
+msgstr ""
 
 msgid "Configuration package: "
 msgstr "Gói cấu hình: "
 
 msgid " updated to "
 msgstr " đã cập nhật lên "
+
+msgid "Failed to download vendor profile(s): "
+msgstr ""
+
+msgid "Please check any unsaved changes before updating the configuration."
+msgstr "Cần kiểm tra các thay đổi chưa lưu trước khi cập nhật cấu hình."
 
 msgid "Open G-code file:"
 msgstr "Mở file G-code:"
@@ -14585,6 +14619,9 @@ msgstr "Thẳng hàng căn chỉnh"
 msgid "Concentric"
 msgstr "Đồng tâm"
 
+msgid "Spiral Inset"
+msgstr ""
+
 msgid "Hilbert Curve"
 msgstr "Đường cong Hilbert"
 
@@ -14674,29 +14711,21 @@ msgstr ""
 msgid "Top surface fill order"
 msgstr "Thứ tự lấp bề mặt trên"
 
-# AI Translated
 msgid ""
-"Direction in which top surfaces are filled when using a center-based pattern (Concentric, Archimedean Chords, Octagram Spiral).\n"
+"Direction in which top surfaces are filled when using a center-based pattern (Concentric, Spiral Inset, Archimedean Chords, Octagram Spiral).\n"
 "Outward starts at the center of the surface, so any excess material is pushed towards the edge where it is least visible. Inward starts at the edge and ends with the tight curves at the center.\n"
 "Default uses shortest-path ordering, which may run in either direction."
 msgstr ""
-"Hướng lấp các bề mặt trên khi dùng mẫu dựa trên tâm (Đồng tâm, Dây cung Archimedes, Xoắn ốc bát giác).\n"
-"Ra ngoài bắt đầu từ tâm bề mặt, nhờ đó vật liệu dư bị đẩy về phía mép nơi ít nhìn thấy nhất. Vào trong bắt đầu từ mép và kết thúc bằng các đường cong hẹp ở tâm.\n"
-"Mặc định dùng thứ tự đường đi ngắn nhất, có thể chạy theo hướng bất kỳ."
 
 # AI Translated
 msgid "Bottom surface fill order"
 msgstr "Thứ tự lấp bề mặt dưới"
 
-# AI Translated
 msgid ""
-"Direction in which bottom surfaces are filled when using a center-based pattern (Concentric, Archimedean Chords, Octagram Spiral).\n"
+"Direction in which bottom surfaces are filled when using a center-based pattern (Concentric, Spiral Inset, Archimedean Chords, Octagram Spiral).\n"
 "Inward starts each surface with the wider outer curves, which improves first layer adhesion on build plates where the tight curves at the center may not stick. Outward starts at the center, pushing any excess material towards the edge.\n"
 "Default uses shortest-path ordering, which may run in either direction."
 msgstr ""
-"Hướng lấp các bề mặt dưới khi dùng mẫu dựa trên tâm (Đồng tâm, Dây cung Archimedes, Xoắn ốc bát giác).\n"
-"Vào trong bắt đầu mỗi bề mặt bằng các đường cong ngoài rộng hơn, giúp cải thiện độ bám lớp đầu tiên trên những bàn in mà các đường cong hẹp ở tâm có thể không dính. Ra ngoài bắt đầu từ tâm, đẩy vật liệu dư về phía mép.\n"
-"Mặc định dùng thứ tự đường đi ngắn nhất, có thể chạy theo hướng bất kỳ."
 
 msgid "Internal solid infill pattern"
 msgstr "Mẫu infill đặc bên trong"
@@ -23018,6 +23047,33 @@ msgid ""
 msgstr ""
 "Tránh cong vênh\n"
 "Bạn có biết rằng khi in vật liệu dễ cong vênh như ABS, tăng nhiệt độ bàn nóng một cách thích hợp có thể giảm xác suất cong vênh không?"
+
+#~ msgid "Select the language"
+#~ msgstr "Chọn ngôn ngữ"
+
+# AI Translated
+#~ msgid "Open actions speed dial"
+#~ msgstr "Mở vòng quay thao tác nhanh"
+
+# AI Translated
+#~ msgid ""
+#~ "Direction in which top surfaces are filled when using a center-based pattern (Concentric, Archimedean Chords, Octagram Spiral).\n"
+#~ "Outward starts at the center of the surface, so any excess material is pushed towards the edge where it is least visible. Inward starts at the edge and ends with the tight curves at the center.\n"
+#~ "Default uses shortest-path ordering, which may run in either direction."
+#~ msgstr ""
+#~ "Hướng lấp các bề mặt trên khi dùng mẫu dựa trên tâm (Đồng tâm, Dây cung Archimedes, Xoắn ốc bát giác).\n"
+#~ "Ra ngoài bắt đầu từ tâm bề mặt, nhờ đó vật liệu dư bị đẩy về phía mép nơi ít nhìn thấy nhất. Vào trong bắt đầu từ mép và kết thúc bằng các đường cong hẹp ở tâm.\n"
+#~ "Mặc định dùng thứ tự đường đi ngắn nhất, có thể chạy theo hướng bất kỳ."
+
+# AI Translated
+#~ msgid ""
+#~ "Direction in which bottom surfaces are filled when using a center-based pattern (Concentric, Archimedean Chords, Octagram Spiral).\n"
+#~ "Inward starts each surface with the wider outer curves, which improves first layer adhesion on build plates where the tight curves at the center may not stick. Outward starts at the center, pushing any excess material towards the edge.\n"
+#~ "Default uses shortest-path ordering, which may run in either direction."
+#~ msgstr ""
+#~ "Hướng lấp các bề mặt dưới khi dùng mẫu dựa trên tâm (Đồng tâm, Dây cung Archimedes, Xoắn ốc bát giác).\n"
+#~ "Vào trong bắt đầu mỗi bề mặt bằng các đường cong ngoài rộng hơn, giúp cải thiện độ bám lớp đầu tiên trên những bàn in mà các đường cong hẹp ở tâm có thể không dính. Ra ngoài bắt đầu từ tâm, đẩy vật liệu dư về phía mép.\n"
+#~ "Mặc định dùng thứ tự đường đi ngắn nhất, có thể chạy theo hướng bất kỳ."
 
 # AI Translated
 #~ msgid "Native Wayland liveview requires the GStreamer GTK video sink. Please install the gtksink plugin for GStreamer, then restart OrcaSlicer."

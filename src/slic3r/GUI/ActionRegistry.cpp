@@ -141,9 +141,6 @@ std::unique_ptr<AppAction> make_action(const std::string& plugin_key, const std:
 
 // ---- built-in command actions (the speed dial "commands" section) ------
 
-constexpr const char* kCommandPrefix       = "orca_command";
-constexpr const char* kOrcaSourceKey       = "orca";
-constexpr const char* kOrcaSourceName      = "OrcaSlicer";
 constexpr const char* kSettingPrefix       = "orca_setting";
 constexpr const char* kPlateGotoPrefix     = "orca_plate_goto";
 constexpr const char* kRecentProjectPrefix = "orca_recent_project";
@@ -212,29 +209,28 @@ struct SettingAction : AppAction
     }
 };
 
-// A built-in command action. Thin value: identity + presentation come from the NativeCommands
-// catalog, and run() routes back to it - the catalog is the single source of truth for its
-// behaviour. The id is keyed by the stable catalog key (NOT the display title), so a rename or a
-// UI-language switch never re-keys the action; the title is display-only.
-struct CommandAction : AppAction
+// Seed one action's persisted state (favourite flag + frecency counters) from an already-parsed
+// stats blob and capped favourite list. Shared by the dynamic materialisers.
+void seed_from(const nlohmann::json& stats, const std::vector<std::string>& favs, const std::string& id, AppAction& a)
 {
-    static std::unique_ptr<CommandAction> make(const NativeCommand& c) { return std::unique_ptr<CommandAction>(new CommandAction(c)); }
-
-    std::string command_key;
-
-    AppActionRunResult run(const std::string& param) const override { return NativeCommands::run(command_key, param); }
-
-private:
-    explicit CommandAction(const NativeCommand& c)
-        : AppAction(AppActionId{AppAction::compose_id(kCommandPrefix, c.key, kOrcaSourceKey)}, c.title, kOrcaSourceKey, kOrcaSourceName)
-        , command_key(c.key)
-    {
-        this->kind  = AppActionKind::Command;
-        this->group = c.group;
-        this->input = c.input;
-        this->icon  = c.icon;
+    a.favourite = std::find(favs.begin(), favs.end(), id) != favs.end();
+    if (auto it = stats.find(id); it != stats.end() && it->is_object()) {
+        a.count = it->value("count", 0);
+        a.last  = it->value("last", 0LL);
     }
-};
+}
+
+// Drop actions whose id starts with `prefix` but that were not seen in this pass (a stale materialisation).
+void drop_stale(std::unordered_map<std::string, std::shared_ptr<AppAction>>& actions, const char* prefix,
+                const std::unordered_set<std::string>& seen)
+{
+    for (auto it = actions.begin(); it != actions.end();) {
+        if (it->first.rfind(prefix, 0) == 0 && !seen.count(it->first))
+            it = actions.erase(it);
+        else
+            ++it;
+    }
+}
 
 // A dynamic "Go to Plate N" action, one per live plate, rebuilt on every snapshot() (so a
 // rename/move immediately shows up). id is keyed by plate index, NOT the display title, so
@@ -343,10 +339,10 @@ void ActionRegistry::init()
 
     // Built-in palette commands (Save/Load, Preferences, Mode switch, Slice/Preview, Go to layer).
     // Register after plugins so the plugin ids win on any (unlikely) id collision - ids are distinct
-    // by prefix, so this is order-independent. The catalog lives in NativeCommands - the registry
-    // only materialises thin CommandAction values from it.
+    // by prefix, so this is order-independent. The catalog (and its thin AppAction adapter) lives in
+    // NativeCommands; the registry only stores and dispatches the result.
     for (const NativeCommand& c : NativeCommands::catalog())
-        upsert(CommandAction::make(c));
+        upsert(NativeCommands::make_action(c));
 }
 
 void ActionRegistry::refresh_source(const std::string& plugin_key, ActionChange change)
@@ -427,6 +423,14 @@ void ActionRegistry::seed_state(AppAction& a) const
         a.count = 0;
         a.last  = 0;
     }
+}
+
+void ActionRegistry::load_persisted(nlohmann::json& stats, std::vector<std::string>& favs) const
+{
+    stats = read_section("stats", nlohmann::json::object());
+    if (!stats.is_object())
+        stats = nlohmann::json::object();
+    favs = favourite_ids();
 }
 
 // ---- read surface -----------------------------------------------------------
@@ -529,10 +533,9 @@ void ActionRegistry::materialize_setting_actions()
 
     // Load the persisted per-action state ONCE (not per-option) so a re-materialised setting keeps
     // its recency/favourite; mirroring seed_state but amortised over the whole option set.
-    nlohmann::json stats = read_section("stats", nlohmann::json::object());
-    if (!stats.is_object())
-        stats = nlohmann::json::object();
-    const std::vector<std::string> favs = favourite_ids();
+    nlohmann::json           stats;
+    std::vector<std::string> favs;
+    load_persisted(stats, favs);
 
     std::unordered_set<std::string> seen;
     for (const Search::Option& opt : options) {
@@ -568,11 +571,7 @@ void ActionRegistry::materialize_setting_actions()
             }
         }
 
-        action->favourite = std::find(favs.begin(), favs.end(), id) != favs.end();
-        if (auto it = stats.find(id); it != stats.end() && it->is_object()) {
-            action->count = it->value("count", 0);
-            action->last  = it->value("last", 0LL);
-        }
+        seed_from(stats, favs, id, *action);
         auto const action_id  = action->id();
         auto const app_action = std::shared_ptr<AppAction>(std::move(action));
         m_actions.insert_or_assign(action_id, app_action);
@@ -580,12 +579,7 @@ void ActionRegistry::materialize_setting_actions()
 
     // Drop SettingActions whose option no longer exists in the current configs (e.g. the printer
     // technology / UI mode changed). Non-setting actions are untouched.
-    for (auto it = m_actions.begin(); it != m_actions.end();) {
-        if (it->first.rfind(kSettingPrefix, 0) == 0 && !seen.count(it->first))
-            it = m_actions.erase(it);
-        else
-            ++it;
-    }
+    drop_stale(m_actions, kSettingPrefix, seen);
 }
 
 void ActionRegistry::materialize_plate_actions()
@@ -597,21 +591,15 @@ void ActionRegistry::materialize_plate_actions()
     Plater* plater = wxTheApp ? wxGetApp().plater() : nullptr;
     if (!plater || plater->printer_technology() != ptFFF || plater->only_gcode_mode()) {
         // Drop any stale plate actions (e.g. the printer technology switched to SLA).
-        for (auto it = m_actions.begin(); it != m_actions.end();) {
-            if (it->first.rfind(kPlateGotoPrefix, 0) == 0)
-                it = m_actions.erase(it);
-            else
-                ++it;
-        }
+        drop_stale(m_actions, kPlateGotoPrefix, {});
         return;
     }
 
     // Persisted per-action state, read ONCE (mirrors materialize_setting_actions) so a relisted
     // "Go to Plate N" keeps its recency/favourite when the plate is renamed - the id is index-keyed.
-    nlohmann::json stats = read_section("stats", nlohmann::json::object());
-    if (!stats.is_object())
-        stats = nlohmann::json::object();
-    const std::vector<std::string> favs = favourite_ids();
+    nlohmann::json           stats;
+    std::vector<std::string> favs;
+    load_persisted(stats, favs);
 
     const std::vector<PartPlate*>& list = plater->get_partplate_list().get_plate_list();
     std::unordered_set<std::string> seen;
@@ -629,24 +617,15 @@ void ActionRegistry::materialize_plate_actions()
         if (!name.empty())
             title += " (" + name + ")";
 
-        auto action       = std::make_unique<PlateAction>(int(i), title, kOrcaSourceName);
-        action->favourite = std::find(favs.begin(), favs.end(), id) != favs.end();
-        if (auto it = stats.find(id); it != stats.end() && it->is_object()) {
-            action->count = it->value("count", 0);
-            action->last  = it->value("last", 0LL);
-        }
+        auto action = std::make_unique<PlateAction>(int(i), title, kOrcaSourceName);
+        seed_from(stats, favs, id, *action);
         auto const action_id  = action->id();
         auto const app_action = std::shared_ptr<AppAction>(std::move(action));
         m_actions.insert_or_assign(action_id, app_action);
     }
 
     // Drop plate actions whose index no longer exists (a plate was deleted / moved to the front).
-    for (auto it = m_actions.begin(); it != m_actions.end();) {
-        if (it->first.rfind(kPlateGotoPrefix, 0) == 0 && !seen.count(it->first))
-            it = m_actions.erase(it);
-        else
-            ++it;
-    }
+    drop_stale(m_actions, kPlateGotoPrefix, seen);
 }
 
 void ActionRegistry::materialize_recent_project_actions()
@@ -655,10 +634,9 @@ void ActionRegistry::materialize_recent_project_actions()
 
     // Persisted per-action state, read ONCE (mirrors materialize_plate_actions) so a relisted recent
     // project keeps its recency/favourite when the recents list reorders - the id is path-keyed.
-    nlohmann::json stats = read_section("stats", nlohmann::json::object());
-    if (!stats.is_object())
-        stats = nlohmann::json::object();
-    const std::vector<std::string> favs = favourite_ids();
+    nlohmann::json           stats;
+    std::vector<std::string> favs;
+    load_persisted(stats, favs);
 
     // app_config stores recents oldest-first; the palette shows newest-first.
     std::vector<std::string> recents = wxGetApp().app_config->get_recent_projects();
@@ -680,24 +658,15 @@ void ActionRegistry::materialize_recent_project_actions()
         if (title.empty())
             title = path;
 
-        auto action       = std::make_unique<RecentProjectAction>(path, std::move(title), path);
-        action->favourite = std::find(favs.begin(), favs.end(), id) != favs.end();
-        if (auto it = stats.find(id); it != stats.end() && it->is_object()) {
-            action->count = it->value("count", 0);
-            action->last  = it->value("last", 0LL);
-        }
+        auto action = std::make_unique<RecentProjectAction>(path, std::move(title), path);
+        seed_from(stats, favs, id, *action);
         auto const action_id  = action->id();
         auto const app_action = std::shared_ptr<AppAction>(std::move(action));
         m_actions.insert_or_assign(action_id, app_action);
     }
 
     // Drop recent-project actions whose file no longer exists / was removed from the recents list.
-    for (auto it = m_actions.begin(); it != m_actions.end();) {
-        if (it->first.rfind(kRecentProjectPrefix, 0) == 0 && !seen.count(it->first))
-            it = m_actions.erase(it);
-        else
-            ++it;
-    }
+    drop_stale(m_actions, kRecentProjectPrefix, seen);
 }
 
 bool ActionRegistry::should_ask(const std::string& id) const
@@ -753,7 +722,6 @@ nlohmann::json ActionRegistry::snapshot()
                                {"group", a->group},
                                {"input", a->input},
                                {"icon", a->icon},
-                               {"shortcut", ""},
                                {"mode", mode_key(a->required_mode)}});
     };
 
@@ -816,7 +784,7 @@ nlohmann::json ActionRegistry::tab_options() const
         if (id.empty())
             continue;
         out.push_back({{"id", id.ToStdString()},
-                       {"title", notebook->GetPageText(i).ToStdString()},
+                       {"title", notebook->GetPageLabel(i).ToStdString()},
                        {"icon", notebook->GetPageIcon(i)}});
     }
     return out;

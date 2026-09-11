@@ -543,15 +543,16 @@ bool install_local_plugin_package(const boost::filesystem::path& package_file, w
         });
         timer->Start(100);
 
-        bool       finished = false;
-        wxEventLoop loop;
-        auto on_finish = [&finished, &loop]() {
-            finished = true;
-            if (loop.IsRunning())
-                loop.Exit();
+        // finished/loop live on the heap: the worker's completion callback is posted to the UI loop
+        // and can still fire after this stack frame is gone, so it must not reference locals.
+        struct WaitState
+        {
+            bool        finished = false;
+            wxEventLoop loop;
         };
+        auto wait = std::make_shared<WaitState>();
 
-        std::thread([state, package_file, on_finish]() mutable {
+        std::thread([state, package_file, wait]() mutable {
             std::string error;
             bool        ok = false;
             try {
@@ -570,11 +571,17 @@ bool install_local_plugin_package(const boost::filesystem::path& package_file, w
                 state->ok    = ok;
                 state->error = std::move(error);
             }
-            wxTheApp->CallAfter(on_finish);
+            if (!wxTheApp)
+                return;
+            wxTheApp->CallAfter([wait]() {
+                wait->finished = true;
+                if (wait->loop.IsRunning())
+                    wait->loop.Exit();
+            });
         }).detach();
 
-        if (!finished)
-            loop.Run();
+        if (!wait->finished)
+            wait->loop.Run();
 
         timer->Stop();
         delete timer;

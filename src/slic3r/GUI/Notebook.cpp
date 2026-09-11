@@ -268,6 +268,12 @@ wxString ButtonsListCtrl::GetPageText(size_t n) const
 }
 
 // ORCA
+wxString ButtonsListCtrl::GetPageLabel(size_t n) const
+{
+    return n < m_pageLabels.size() ? m_pageLabels[n] : wxString();
+}
+
+// ORCA
 void ButtonsListCtrl::SetOverflowButton(wxWindow* button)
 {
     if (m_overflow_button == button)

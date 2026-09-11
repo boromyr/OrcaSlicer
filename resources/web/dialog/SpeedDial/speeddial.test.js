@@ -109,6 +109,14 @@ ctx.searchActions(orientPool, "orient");
 assert.deepEqual(ctx.matchIndex.ao.title, [[5, 11]],
     "a whole-word match highlights the full word, not a scattered fuzzy pick");
 
+// A fuzzy source-only match with a very late start still counts, even though its score is negative;
+// the old `score < 0` sentinel mistook it for "no field matched" and dropped the action.
+const negativePool = [
+    { id: "n", title: "Unrelated", source: "o" + "x".repeat(200) + "rnt", group: "", input: "" }
+];
+assert.equal(ctx.searchActions(negativePool, "ornt").length, 1,
+    "a low-score fuzzy match is not mistaken for no match");
+
 // commandList (the main-phase list) delegates to the ranked search for a typed query and returns
 // the mixed recents (no discrimination) for an empty query.
 const mixed = [
@@ -122,22 +130,22 @@ assert.deepEqual(ctx.commandList(mixed, mixed.slice(0, 1), "").map(function (a) 
 
 // selectedActionId: resolves the active list (recents for an empty query, filtered list otherwise).
 assert.equal(
-    ctx.selectedActionId({ zone: "list", i: 0 }, ctx.commandList(duplicateActions, [], ""), [], ""),
+    ctx.selectedActionId({ zone: "list", i: 0 }, ctx.commandList(duplicateActions, [], ""), []),
     null,
     "Enter with an empty query and no recents must not resolve to an action the list never showed"
 );
 assert.equal(
-    ctx.selectedActionId({ zone: "list", i: 0 }, ctx.commandList(duplicateActions, [], "rep"), [], "rep"),
+    ctx.selectedActionId({ zone: "list", i: 0 }, ctx.commandList(duplicateActions, [], "rep"), []),
     "0123456789abcdef",
     "a typed query resolves the list selection"
 );
 assert.equal(
-    ctx.selectedActionId({ zone: "list", i: 0 }, ctx.commandList(duplicateActions, [duplicateActions[0]], ""), [], ""),
+    ctx.selectedActionId({ zone: "list", i: 0 }, ctx.commandList(duplicateActions, [duplicateActions[0]], ""), []),
     "0123456789abcdef",
     "Enter with an empty query resolves the recent entry"
 );
 assert.equal(
-    ctx.selectedActionId({ zone: "fav", i: 0 }, duplicateActions, ["fedcba9876543210"], ""),
+    ctx.selectedActionId({ zone: "fav", i: 0 }, duplicateActions, ["fedcba9876543210"]),
     "fedcba9876543210",
     "favourites stay runnable with an empty query - the fav bar is always visible"
 );

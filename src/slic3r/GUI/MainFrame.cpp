@@ -45,6 +45,7 @@
 #include "Preferences.hpp"
 #include "Widgets/Button.hpp"
 #include "Widgets/ProgressDialog.hpp"
+#include "Widgets/StaticBox.hpp"
 #include "BindDialog.hpp"
 #include "../Utils/MacDarkMode.hpp"
 #include "../Utils/NetworkAgentFactory.hpp"
@@ -109,17 +110,21 @@ namespace {
 
 // Space opens the speed dial, but it is the activation key for buttons, checkboxes and other
 // controls. CHAR_HOOK runs before the focused child, so only take Space when the focused window has
-// no keyboard-activation meaning of its own. Canvases (GLCanvas3D) and panels are not wxControls and
-// fall through to "open"; Notebook and wxWebView are wxControls that don't use Space, so allow them.
+// no keyboard-activation meaning of its own. Canvases (GLCanvas3D) and panels are not controls and
+// fall through to "open"; the Notebook itself does too, so Space still opens the dial on any page.
 bool focus_keeps_space(wxWindow* focus)
 {
     if (!focus)
         return false;
     if (dynamic_cast<wxTextEntryBase*>(focus))
         return true; // typing a space into a text field
+    if (dynamic_cast<wxWebView*>(focus))
+        return true; // web content scrolls and hosts its own text fields
     if (dynamic_cast<::Button*>(focus))
         return true; // custom button: Space clicks it (it is a wxWindow, not a wxControl)
-    if (dynamic_cast<wxControl*>(focus) && !dynamic_cast<Notebook*>(focus) && !dynamic_cast<wxWebView*>(focus))
+    if (dynamic_cast<StaticBox*>(focus))
+        return true; // custom composites (ComboBox, SpinInput, ...) activate with Space and are wxWindow
+    if (dynamic_cast<wxControl*>(focus) && !dynamic_cast<Notebook*>(focus))
         return true; // stock button/checkbox/choice/list/etc. keep Space
     return false;
 }
@@ -724,8 +729,10 @@ DPIFrame(NULL, wxID_ANY, "", wxDefaultPosition, wxDefaultSize, BORDERLESS_FRAME_
         // Orca: open the speed dial from any page with a bare Space. Only when no modifier is held (so
         // editing shortcuts like Ctrl+Shift+Space in the canvas still reach it) and the focused window
         // doesn't use Space to activate itself (buttons, checkboxes, list/choice controls, text fields),
-        // so a bare Space there still clicks/toggles instead of being hijacked.
-        if (!evt.CmdDown() && !evt.ShiftDown() && !evt.AltDown() && evt.GetKeyCode() == WXK_SPACE) {
+        // so a bare Space there still clicks/toggles instead of being hijacked. Gated by a preference
+        // (default on) so users can hand Space back to the focused control entirely.
+        if (wxGetApp().app_config->get_bool("enable_speed_dial") && !evt.CmdDown() && !evt.ShiftDown() &&
+            !evt.AltDown() && evt.GetKeyCode() == WXK_SPACE) {
             if (focus_keeps_space(wxWindow::FindFocus())) {
                 evt.Skip(); // let the focused control keep Space
                 return;
@@ -4325,7 +4332,7 @@ void MainFrame::technology_changed()
     // update menu titles
     PrinterTechnology pt = plater()->printer_technology();
     if (int id = m_menubar->FindMenu(pt == ptFFF ? _omitL("Material Settings") : _L("Filament settings")); id != wxNOT_FOUND)
-        m_menubar->SetMenuLabel(id, pt == ptFFF ? _omitL("Material Settings") : _L("Filament settings"));
+        m_menubar->SetMenuLabel(id, pt == ptSLA ? _omitL("Material Settings") : _L("Filament settings"));
 }
 
 // Opens the calibration wizard for `calib_kind`. Single source of truth for the wizard lifecycle:
