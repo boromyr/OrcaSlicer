@@ -279,6 +279,21 @@ body {
     overflow-y: hidden;
 }
 
+/* Section header in the empty-query list ("Recent" then one per category). Its 30px height MUST match
+   SECTION_H in speeddial.js, which reserves header space in the windowed-list bottom spacer. */
+.dial-section {
+    height: 30px;
+    display: flex;
+    align-items: center;
+    padding: 0 8px;
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: .04em;
+    text-transform: uppercase;
+    color: var(--muted, var(--orca-muted, #6b7280));
+    opacity: .85;
+}
+
 /* Bottom spacer for the windowed command list: fills the un-rendered tail so the scrollbar reflects
    the full match count, while only a near-viewport window of rows exists in the DOM. */
 .dial-spacer-bottom {

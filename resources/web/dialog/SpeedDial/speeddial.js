@@ -1,10 +1,11 @@
 // Speed Dial launcher page. Static-safe module: no DOM access at load time so a
-// node vm can exercise the pure helpers (searchActions / filterTabs / actionLabel / nextSel / commandList).
+// node vm can exercise the pure helpers (searchActions / filterTabs / actionLabel / nextSel /
+// commandList / commandSections / actionCategory / groupActions).
 
 // ---- state (populated by the C++ bridge via window.HandleStudio) ----
-var ACTIONS = [];        // [{id,title,source,group,input,icon,mode}], already frecency-sorted by C++
+var ACTIONS = [];        // [{id,title,source,group,kind,input,icon,mode}], already frecency-sorted by C++
 var FAVS = [];           // [id...]
-var RECENTS = [];        // [{id,title,source,group,input,icon,mode}] - last-N launched
+var RECENTS = [];        // [{id,title,source,group,kind,input,icon,mode}] - last-N launched
 var query = "";
 var sel = { zone: "list", i: 0 };   // zone: 'list' | 'fav'
 var lastResizeHeight = 0;
@@ -46,6 +47,14 @@ var ROW_H = 44;
 var renderEnd = 0;
 var builtKey = "";   // phase|query|listLen - when it changes, rows are rebuilt from the first window
 var spacerEl = null; // the trailing height spacer, always the last child of listEl
+
+// Section headers in the empty-query list ("Recent" then one per category). sectionStarts maps a flat
+// action index to the header label that sits above it. sectionTotal/Rendered count headers so the
+// bottom spacer reserves the same vertical space the not-yet-rendered headers will occupy.
+var SECTION_H = 30; // MUST match .dial-section height (30px)
+var sectionStarts = null;
+var sectionTotal = 0;
+var sectionRendered = 0;
 
 // search-cache: the normalized (folded+lowercased) needle for the current query pass.
 var searchNeedle = "";
@@ -274,12 +283,75 @@ function fillTile(tile, a, mono) {
     tile.appendChild(img);
 }
 
+// Category a row is grouped under in the empty-query list. Native commands and dynamic plate/recent
+// actions carry a group; settings derive their top-level preset type from the source breadcrumb
+// ("Process : Quality : Layers" -> "Process"); plugins all share one header.
+function actionCategory(a) {
+    if (!a) return T("sd_other", "Other");
+    if (a.kind === "plugin") return T("sd_plugins", "Plugins");
+    if (a.group) return a.group;
+    var src = a.source || "";
+    var sep = src.indexOf(" : ");
+    var cat = sep === -1 ? src : src.slice(0, sep);
+    return cat || T("sd_other", "Other");
+}
+
+// Stable-bucket actions by category, then order the groups alphabetically. Within a group the incoming
+// (frecency) order is kept. Pure so the node-vm test can exercise grouping.
+function groupActions(list) {
+    var buckets = Object.create(null);
+    var order = [];
+    (list || []).forEach(function (a) {
+        var c = actionCategory(a);
+        if (!buckets[c]) { buckets[c] = []; order.push(c); }
+        buckets[c].push(a);
+    });
+    order.sort(function (x, y) {
+        var a = x.toLowerCase(), b = y.toLowerCase();
+        return a < b ? -1 : a > b ? 1 : 0;
+    });
+    var out = [];
+    order.forEach(function (c) { out = out.concat(buckets[c]); });
+    return out;
+}
+
 // The active list for the main phase. A typed query ranks every action (commands/plugins/settings)
-// by relevance; an empty query shows the recent list (recents are a mixed bag - no discrimination).
+// by relevance; an empty query shows the recents first, then the rest grouped under category headers.
+// The empty-query result is cached on the action/recents array identities so scrolling doesn't regroup.
+var commandListCache = null;
 function commandList(actions, recents, query) {
+    var all = actions || [];
     if (shouldRenderActionList(query))
-        return searchActions(actions || [], query);
-    return (recents || []).slice(0);
+        return searchActions(all, query);
+    var rec = recents || [];
+    if (commandListCache && commandListCache.actions === all && commandListCache.recents === rec)
+        return commandListCache.list;
+    var recentIds = {};
+    for (var i = 0; i < rec.length; i++)
+        recentIds[rec[i].id] = true;
+    var rest = all.filter(function (a) { return !recentIds[a.id]; });
+    var list = rec.concat(groupActions(rest));
+    commandListCache = { actions: all, recents: rec, list: list };
+    return list;
+}
+
+// Section headers for the main list: "Recent" (when recents exist) then one per category. The list is
+// already grouped, so a header is emitted whenever the category changes. A typed query has no headers.
+// Returns {startIndex: label}, where startIndex is the flat list index the header sits above.
+function commandSections(list, recentsLen, query) {
+    if (shouldRenderActionList(query) || !list || !list.length)
+        return null;
+    var sections = {};
+    if (recentsLen > 0)
+        sections[0] = T("sd_recent", "Recent");
+    var prev = null;
+    for (var i = recentsLen; i < list.length; i++) {
+        var c = actionCategory(list[i]);
+        if (i === recentsLen || c !== prev)
+            sections[i] = c;
+        prev = c;
+    }
+    return sections;
 }
 
 // Resolve the selection cursor {zone,i} to the action id it points at: fav zone indexes the
@@ -676,14 +748,29 @@ function renderActionRow(a, i) {
     return shell.row;
 }
 
-// Append rows [from, to) into listEl, always inserting before the bottom spacer so row order is preserved.
+// Append rows [from, to) into listEl, always inserting before the bottom spacer so row order is
+// preserved. A section header is inserted just before the first row of its section.
 function appendActionRows(list, from, to) {
     var spacer = spacerEl || ensureSpacer();
     for (var i = from; i < to; i++) {
+        if (sectionStarts && sectionStarts[i] !== undefined) {
+            var header = document.createElement("div");
+            header.className = "dial-section";
+            header.textContent = sectionStarts[i];
+            listEl.insertBefore(header, spacer);
+            sectionRendered++;
+        }
         var row = renderActionRow(list[i], i);
         row.setAttribute("data-idx", i);
         listEl.insertBefore(row, spacer);
     }
+}
+
+// Set the section map for the current list and reset the rendered-header counters (a fresh build).
+function setSections(sections) {
+    sectionStarts = sections || null;
+    sectionTotal = sectionStarts ? Object.keys(sectionStarts).length : 0;
+    sectionRendered = 0;
 }
 
 // Ensure the bottom spacer exists as the last child of listEl. It is (re)created on rebuild because
@@ -697,10 +784,13 @@ function ensureSpacer() {
     return spacerEl;
 }
 
-// Size the spacer to the un-rendered tail so the scrollbar reflects the full match count.
+// Size the spacer to the un-rendered tail so the scrollbar reflects the full match count. Pending
+// section headers reserve their own height too, so the last rows stay reachable.
 function setBottomSpacer(total) {
     ensureSpacer();
-    spacerEl.style.height = Math.max(0, total - renderEnd) * ROW_H + "px";
+    var remainingRows = Math.max(0, total - renderEnd);
+    var remainingHeaders = Math.max(0, sectionTotal - sectionRendered);
+    spacerEl.style.height = (remainingRows * ROW_H + remainingHeaders * SECTION_H) + "px";
 }
 
 // Reveal rows up to `upto` (an exclusive index), appending without rebuilding the whole list. Used by
@@ -720,6 +810,7 @@ function rebuildCommandsList(list) {
     listEl.className = "dial-list";
     ensureSpacer();
     renderEnd = 0;
+    sectionRendered = 0;
     appendActionRows(list, 0, Math.min(list.length, K_ROWS));
     renderEnd = Math.min(list.length, K_ROWS);
     setBottomSpacer(list.length);
@@ -754,6 +845,7 @@ function renderEmpty(text) {
     listEl.innerHTML = "";
     spacerEl = null;
     listEl.className = "dial-list empty";
+    setSections(null);
     if (countEl) countEl.hidden = true;
     var empty = document.createElement("div");
     empty.className = "dial-empty";
@@ -782,6 +874,8 @@ function renderCommandsList() {
     var key = buildKey() + "|" + total;
     if (key !== builtKey) {
         builtKey = key;
+        // Headers split the empty-query list into recents + category groups; typed queries have none.
+        setSections(showList ? null : commandSections(list, (RECENTS || []).length, query));
         rebuildCommandsList(list);
     } else if (sel.i >= renderEnd) {
         // Arrow-nav walked past the rendered window - reveal enough to keep the selection visible.
@@ -789,9 +883,11 @@ function renderCommandsList() {
     }
 
     listEl.className = "dial-list";
+    // The empty-query list is labelled by its section headers instead.
     if (countEl) {
-        countEl.hidden = false;
-        countEl.textContent = showList ? resultCountText(ACTIONS.length, total, query) : total + " " + T("sd_recent", "recent");
+        countEl.hidden = !showList;
+        if (showList)
+            countEl.textContent = resultCountText(ACTIONS.length, total, query);
     }
     updateSelection();
     updatePins(list);

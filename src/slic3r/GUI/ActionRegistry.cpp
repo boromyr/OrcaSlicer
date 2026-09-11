@@ -720,6 +720,7 @@ nlohmann::json ActionRegistry::snapshot()
                                {"title", a->title()},
                                {"source", a->source_name()},
                                {"group", a->group},
+                               {"kind", a->kind == AppActionKind::Plugin ? "plugin" : "command"},
                                {"input", a->input},
                                {"icon", a->icon},
                                {"mode", mode_key(a->required_mode)}});
@@ -744,8 +745,9 @@ nlohmann::json ActionRegistry::snapshot()
         write_section("favourite_actions", nlohmann::json(live_favs));
     nlohmann::json favourites(live_favs);
 
-    // Recent = the last-N launched actions by recency (only actions with a run history).
-    constexpr size_t kRecentLimit = 5;
+    // Recent = the last-N launched actions by recency (only actions with a run history). N is a
+    // user preference; 0 hides recents without affecting the frecency order below.
+    const size_t recent_limit = size_t(wxGetApp().app_config->get_speed_dial_recent_count());
     std::vector<const AppAction*> recent;
     for (const auto& entry : m_actions)
         if (entry.second->last > 0)
@@ -755,8 +757,8 @@ nlohmann::json ActionRegistry::snapshot()
             return a->last > b->last;
         return a->id() < b->id();
     });
-    if (recent.size() > kRecentLimit)
-        recent.resize(kRecentLimit);
+    if (recent.size() > recent_limit)
+        recent.resize(recent_limit);
     nlohmann::json recent_json = nlohmann::json::array();
     for (const AppAction* a : recent)
         recent_json.push_back(action_to_json(a));

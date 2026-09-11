@@ -22,16 +22,16 @@ assert.equal(
     "duplicate labels should use the opaque id without interpreting its contents"
 );
 
-assert.equal(ctx.shouldRenderActionList(""), false, "an empty search keeps recent/empty list");
-assert.equal(ctx.shouldRenderActionList("  "), false, "whitespace-only search keeps recent/empty list");
+assert.equal(ctx.shouldRenderActionList(""), false, "an empty search shows the recents+pool list");
+assert.equal(ctx.shouldRenderActionList("  "), false, "whitespace-only search shows the recents+pool list");
 assert.equal(ctx.shouldRenderActionList("r"), true, "typing starts rendering matching actions");
 
-// commandList: an empty query shows recents; a typed query filters all actions.
-assert.deepEqual(ctx.commandList(duplicateActions, [], ""), [],
-    "empty query + no recents shows nothing");
+// commandList: an empty query shows recents first, then every other action; a typed query filters all.
+assert.deepEqual(ctx.commandList(duplicateActions, [], ""), duplicateActions,
+    "empty query + no recents shows the whole action pool");
 assert.deepEqual(ctx.commandList(duplicateActions, [duplicateActions[0]], ""),
-    [duplicateActions[0]],
-    "empty query shows the recent list");
+    [duplicateActions[0], duplicateActions[1]],
+    "empty query shows the recent first, then the remaining actions");
 assert.deepEqual(ctx.commandList(duplicateActions, [], "rep"), duplicateActions,
     "a typed query filters actions (both identical titles match) instead of showing recents");
 
@@ -117,22 +117,73 @@ const negativePool = [
 assert.equal(ctx.searchActions(negativePool, "ornt").length, 1,
     "a low-score fuzzy match is not mistaken for no match");
 
+// actionCategory: a command/dynamic action's group is its category; a setting uses the top-level
+// source segment; every plugin shares one header; a category-less action falls back to "Other".
+assert.equal(ctx.actionCategory({ id: "c", group: "Help", source: "OrcaSlicer", kind: "command" }), "Help",
+    "a command's group is its category");
+assert.equal(ctx.actionCategory({ id: "s", group: "", source: "Process : Quality : Layers", kind: "command" }), "Process",
+    "a setting's category is the top-level source segment");
+assert.equal(ctx.actionCategory({ id: "s", group: "", source: "Filament : Cooling", kind: "command" }), "Filament",
+    "a Filament setting groups under Filament");
+assert.equal(ctx.actionCategory({ id: "plugin_script_action:Foo:bar.py", group: "", source: "Gcode Optimizer", kind: "plugin" }), "Plugins",
+    "every plugin shares one Plugins header");
+assert.equal(ctx.actionCategory({ id: "x", group: "", source: "", kind: "command" }), "Other",
+    "a category-less action falls back to Other");
+
+// groupActions: bucket by category, order the groups alphabetically, keep the incoming order within
+// each group (the pool arrives frecency-sorted).
+const groupPool = [
+    { id: "q1", title: "Q1", source: "Quality", group: "Quality", kind: "command" },
+    { id: "h1", title: "H1", source: "OrcaSlicer", group: "Help", kind: "command" },
+    { id: "p1", title: "P1", source: "Process : A", group: "", kind: "command" },
+    { id: "h2", title: "H2", source: "OrcaSlicer", group: "Help", kind: "command" }
+];
+assert.deepEqual(ctx.groupActions(groupPool).map(function (a) { return a.id; }), ["h1", "h2", "p1", "q1"],
+    "groups are alphabetical and each group keeps its incoming order");
+
 // commandList (the main-phase list) delegates to the ranked search for a typed query and returns
-// the mixed recents (no discrimination) for an empty query.
+// recents + the category-grouped pool for an empty query.
 const mixed = [
-    { id: "cmd", title: "Slice", source: "OrcaSlicer", group: "Commands", input: "" },
-    { id: "set", title: "Sparse Infill Density", source: "Quality", group: "Quality", input: "" }
+    { id: "cmd", title: "Slice", source: "OrcaSlicer", group: "Commands", kind: "command", input: "" },
+    { id: "set", title: "Sparse Infill Density", source: "Quality", group: "Quality", kind: "command", input: "" }
 ];
 assert.equal(ctx.commandList(mixed, [], "sli")[0].id, "cmd",
     "a typed query keeps the relevance-ranked action list (best match first)");
-assert.deepEqual(ctx.commandList(mixed, mixed.slice(0, 1), "").map(function (a) { return a.id; }), ["cmd"],
-    "an empty query shows the mixed recents list verbatim");
+assert.deepEqual(ctx.commandList(mixed, mixed.slice(0, 1), "").map(function (a) { return a.id; }), ["cmd", "set"],
+    "an empty query shows the recents first and de-dupes them out of the tail");
+assert.deepEqual(ctx.commandList(mixed, [], "").map(function (a) { return a.id; }), ["cmd", "set"],
+    "empty query + no recents shows the whole action pool");
+assert.deepEqual(ctx.commandList(mixed, [mixed[1]], "").map(function (a) { return a.id; }), ["set", "cmd"],
+    "the recent is hoisted above the alphabetically-ordered groups");
 
-// selectedActionId: resolves the active list (recents for an empty query, filtered list otherwise).
+// commandSections: "Recent" (when recents exist) plus one header per category in the grouped list;
+// a typed query or an empty list yields no headers. Uses a computed grouped list so the recents
+// hoist and the category ordering are exercised together.
+const sectionPool = [
+    { id: "cmd", title: "Slice", source: "OrcaSlicer", group: "Commands", kind: "command" },
+    { id: "help", title: "Shortcuts", source: "OrcaSlicer", group: "Help", kind: "command" },
+    { id: "set", title: "Infill", source: "Quality", group: "Quality", kind: "command" }
+];
+const sectionList = ctx.commandList(sectionPool, [sectionPool[0]], "");
+assert.deepEqual(sectionList.map(function (a) { return a.id; }), ["cmd", "help", "set"],
+    "recents are hoisted, then the rest is grouped alphabetically (Commands, Help, Quality)");
+assert.deepEqual(ctx.commandSections(sectionList, 1, ""), { 0: "Recent", 1: "Help", 2: "Quality" },
+    "recents + grouped actions get one header per category");
+assert.deepEqual(ctx.commandSections([sectionPool[0]], 1, ""), { 0: "Recent" },
+    "a list that is all recents gets only the Recent header");
+assert.deepEqual(ctx.commandSections(ctx.commandList(sectionPool, [], ""), 0, ""),
+    { 0: "Commands", 1: "Help", 2: "Quality" },
+    "with no recents the grouped list still gets category headers");
+assert.equal(ctx.commandSections(sectionList, 1, "sli"), null,
+    "a typed query has no section headers");
+assert.equal(ctx.commandSections([], 0, ""), null,
+    "an empty list has no section headers");
+
+// selectedActionId: resolves the active list (recents+pool for an empty query, filtered list otherwise).
 assert.equal(
     ctx.selectedActionId({ zone: "list", i: 0 }, ctx.commandList(duplicateActions, [], ""), []),
-    null,
-    "Enter with an empty query and no recents must not resolve to an action the list never showed"
+    "0123456789abcdef",
+    "Enter with an empty query resolves the first action in the recents+pool list"
 );
 assert.equal(
     ctx.selectedActionId({ zone: "list", i: 0 }, ctx.commandList(duplicateActions, [], "rep"), []),

@@ -1728,6 +1728,16 @@ void PreferencesDialog::create_items()
         "enable_speed_dial");
     g_sizer->Add(item_speed_dial);
 
+    auto item_speed_dial_recents = create_item_spinctrl(
+        _L("Recent actions"),
+        "",
+        _L("actions"),
+        _L("How many recently launched actions to show at the top of the Speed Dial. Set to 0 to hide recent actions."),
+        SETTING_SPEED_DIAL_RECENT_COUNT,
+        SPEED_DIAL_RECENT_COUNT_MIN,
+        SPEED_DIAL_RECENT_COUNT_MAX);
+    g_sizer->Add(item_speed_dial_recents);
+
 #if 0
     g_sizer->Add(create_item_title(_L("Filament Grouping")), 1, wxEXPAND);
     //temporarily disable it
