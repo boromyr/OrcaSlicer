@@ -216,6 +216,15 @@ assert.equal(ctx.favSlotForIndex(10), null, "index 10 is beyond the cap");
 assert.equal(ctx.favSlotForIndex(-1), null, "negative index is not a slot");
 assert.equal(ctx.K_FAV_LIMIT, 10, "the slot count matches the quick-launch cap");
 
+// favDigitFromEvent: prefer the physical code (so macOS Option+digit still maps even though e.key
+// is the composed symbol), and fall back to e.key for keyboards/synthetic events without a code.
+assert.equal(ctx.favDigitFromEvent({ code: "Digit1", key: "¡" }), "1", "Digit1 wins over a composed key");
+assert.equal(ctx.favDigitFromEvent({ code: "Digit0", key: "0" }), "0", "Digit0 is a physical digit");
+assert.equal(ctx.favDigitFromEvent({ code: "Numpad7", key: "7" }), "7", "numpad digits count");
+assert.equal(ctx.favDigitFromEvent({ code: "", key: "3" }), "3", "a missing code falls back to key");
+assert.equal(ctx.favDigitFromEvent({ key: "a" }), "a", "non-digit input is passed through (maps to -1)");
+assert.equal(ctx.favDigitFromEvent(null), "", "a null event yields no digit");
+
 // nextSel: arrow-nav wrapping. Down wraps at the list bottom to the first row; Up wraps at the
 // list top to the last row ONLY when there's no fav bar above (else it goes to the fav bar).
 assert.deepEqual(ctx.nextSel({ zone: "list", i: 2 }, "ArrowDown", 3, 0), { zone: "list", i: 0 },
@@ -245,6 +254,14 @@ assert.equal(ctx.revealTarget(100, -5, 50), 50, "negative start is clamped to th
 assert.equal(ctx.revealTarget(200, 50, 100), 150, "a scroll viewpoint reveals a window past the current rows");
 assert.equal(ctx.revealTarget(10, 0, 50), 10, "a list shorter than one window stays fully materialized");
 
+// spacerHeight: un-rendered rows (44px) plus un-rendered section headers (30px), never negative.
+assert.equal(ctx.spacerHeight(100, 50, 0, 0), 50 * 44, "the tail rows reserve their full height");
+assert.equal(ctx.spacerHeight(100, 100, 0, 0), 0, "a fully-rendered list needs no spacer");
+assert.equal(ctx.spacerHeight(100, 50, 3, 1), 50 * 44 + 2 * 30, "pending section headers reserve their height too");
+assert.equal(ctx.spacerHeight(10, 0, 2, 0), 10 * 44 + 2 * 30, "a short list still reserves its headers");
+assert.equal(ctx.spacerHeight(0, 0, 0, 0), 0, "an empty list has no spacer");
+assert.equal(ctx.spacerHeight(10, 20, 0, 5), 0, "over-rendered counters clamp to zero");
+
 // visibleFavourites: the quick-bar drops pins whose action no longer exists (plugin unloaded,
 // command removed) and collapses duplicate ids, keeping the persisted pin order.
 assert.deepEqual(ctx.visibleFavourites(["a", "b", "c"], [{ id: "a" }, { id: "b" }]),
@@ -273,6 +290,10 @@ assert.equal(ctx.needsModeSwitch({ mode: "simple" }, "simple"), false, "a Simple
 assert.equal(ctx.needsModeSwitch({ mode: "advanced" }, "advanced"), false, "an Advanced setting is not gated in Advanced mode");
 assert.equal(ctx.needsModeSwitch({ mode: "develop" }, "develop"), false, "a Developer setting is not gated in Developer mode");
 assert.equal(ctx.needsModeSwitch({}, "simple"), false, "a command with no mode is never gated");
+
+// MODE_RANK must match the C++ ConfigOptionMode order (comSimple < comAdvanced < comExpert < comDevelop).
+assert.deepEqual(ctx.MODE_RANK, { simple: 0, advanced: 1, expert: 2, develop: 3 },
+    "mode rank matches the C++ ConfigOptionMode order");
 
 // modeBadge: the tag text for gated settings, empty once the setting is available.
 assert.equal(ctx.modeBadge({ mode: "advanced" }, "simple"), "Advanced", "Advanced badge text");

@@ -178,7 +178,7 @@ struct SettingAction : AppAction
 {
     std::string opt_key;
     Preset::Type type;
-    std::wstring category; // localized category, forwarded to jump_to_option
+    std::wstring category; // English category, forwarded to jump_to_option (it localizes)
 
     static std::string id_for(const std::string& opt_key, Preset::Type type)
     { return std::string(kSettingPrefix) + ":" + opt_key + ":" + std::to_string(int(type)); }
@@ -556,7 +556,7 @@ void ActionRegistry::materialize_setting_actions()
         // title = the option leaf name (last label segment); group stays empty so the source path
         // (above) is the single display/search breadcrumb rather than being duplicated.
         auto action = std::make_unique<SettingAction>(opt.opt_key(), opt.type, boost::nowide::narrow(label_w), std::string(),
-                                                      opt.category_local, boost::nowide::narrow(path), opt.mode);
+                                                      opt.category, boost::nowide::narrow(path), opt.mode);
 
         // Tile pictogram = the icon of the setting's own group header (e.g. Advanced -> param_advanced),
         // the one shown next to it in the page. Fall back to the page/category icon for groups

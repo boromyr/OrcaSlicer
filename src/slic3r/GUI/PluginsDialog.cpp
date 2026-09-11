@@ -528,68 +528,37 @@ bool install_local_plugin_package(const boost::filesystem::path& package_file, w
     {
         struct Result
         {
-            std::mutex mutex;
-            bool       ok    = false;
+            std::mutex  mutex;
+            bool        ok = false;
             std::string error;
         };
         auto state = std::make_shared<Result>();
 
-        wxProgressDialog* progress = new wxProgressDialog(_L("Installing plugin"), _L("Installing plugin") + ": " + package_name,
-                                                          100, parent, wxPD_APP_MODAL | wxPD_AUTO_HIDE | wxPD_ELAPSED_TIME);
-        wxTimer* timer = new wxTimer();
-        timer->Bind(wxEVT_TIMER, [progress](wxTimerEvent&) {
-            if (progress)
-                progress->Pulse();
-        });
-        timer->Start(100);
-
-        // finished/loop live on the heap: the worker's completion callback is posted to the UI loop
-        // and can still fire after this stack frame is gone, so it must not reference locals.
-        struct WaitState
-        {
-            bool        finished = false;
-            wxEventLoop loop;
-        };
-        auto wait = std::make_shared<WaitState>();
-
-        std::thread([state, package_file, wait]() mutable {
-            std::string error;
-            bool        ok = false;
-            try {
-                ok = PluginManager::instance().install_plugin(package_file, error);
-            } catch (const std::exception& ex) {
-                error = ex.what();
-            } catch (...) {
-                error = "Unknown error";
-            }
-            if (ok) {
-                // Reflect the new package in discovery/cloud metadata without blocking the caller.
-                try { refresh_plugin_metadata_blocking(kUseCurrentCloudMeta); } catch (...) {}
-            }
-            {
+        detail::run_wait_with_progress(
+            [state, package_file]() {
+                std::string error;
+                bool        ok = false;
+                try {
+                    ok = PluginManager::instance().install_plugin(package_file, error);
+                } catch (const std::exception& ex) {
+                    error = ex.what();
+                } catch (...) {
+                    error = "Unknown error";
+                }
+                if (ok) {
+                    // Reflect the new package in discovery/cloud metadata without blocking the caller.
+                    try { refresh_plugin_metadata_blocking(kUseCurrentCloudMeta); } catch (...) {}
+                }
                 std::lock_guard<std::mutex> lock(state->mutex);
                 state->ok    = ok;
                 state->error = std::move(error);
-            }
-            if (!wxTheApp)
-                return;
-            wxTheApp->CallAfter([wait]() {
-                wait->finished = true;
-                if (wait->loop.IsRunning())
-                    wait->loop.Exit();
-            });
-        }).detach();
-
-        if (!wait->finished)
-            wait->loop.Run();
-
-        timer->Stop();
-        delete timer;
-        progress->Destroy();
+            },
+            parent, _L("Installing plugin"), _L("Installing plugin") + ": " + package_name, 100,
+            wxPD_APP_MODAL | wxPD_AUTO_HIDE | wxPD_ELAPSED_TIME, /*alive=*/nullptr, /*restore=*/{});
 
         std::lock_guard<std::mutex> lock(state->mutex);
-        installed       = state->ok;
-        error           = std::move(state->error);
+        installed = state->ok;
+        error     = std::move(state->error);
     }
 
     if (!installed) {
@@ -980,6 +949,9 @@ bool PluginsDialog::install_plugin_package(const std::string& package_path)
     const boost::filesystem::path package_file(package_path);
     wxString message;
     const bool installed = install_local_plugin_package(package_file, this, message);
+    // The helper's overwrite prompt and progress dialog can push this webview behind; re-raise it
+    // once, after both have closed (the speed-dial path parents to the mainframe instead).
+    restore_z_order();
 
     // The shared helper reports a user-cancelled overwrite with an empty message: stay silent.
     if (message.IsEmpty()) {

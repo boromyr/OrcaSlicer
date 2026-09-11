@@ -1,6 +1,14 @@
 // Speed Dial launcher page. Static-safe module: no DOM access at load time so a
 // node vm can exercise the pure helpers (searchActions / filterTabs / actionLabel / nextSel /
-// commandList / commandSections / actionCategory / groupActions).
+// commandList / commandSections / actionCategory / groupActions / favDigitFromEvent / spacerHeight).
+//
+// Cross-boundary contracts (keep in sync; the C++ side pins its half in tests):
+//   - favourite cap 10            -> ActionRegistry::kFavLimit (K_FAV_LIMIT here)
+//   - mode rank simple<advanced<expert<develop -> ConfigOptionMode order (MODE_RANK here)
+//   - action.mode token           -> ActionRegistry::mode_key / SpeedDialDialog::mode_label
+//   - action.input "percent"/"tab" -> NativeCommands catalog (phases handled in activateEntry)
+//   - action.icon SVG base name   -> AppAction::icon / resources/images/<name>.svg
+//   - action list is frecency-sorted -> ActionRegistry::snapshot()
 
 // ---- state (populated by the C++ bridge via window.HandleStudio) ----
 var ACTIONS = [];        // [{id,title,source,group,kind,input,icon,mode}], already frecency-sorted by C++
@@ -45,7 +53,7 @@ function T(key, fallback) {
 var K_ROWS = 50;
 var ROW_H = 44;
 var renderEnd = 0;
-var builtKey = "";   // phase|query|listLen - when it changes, rows are rebuilt from the first window
+var builtKey = "";   // phase|query|total - when it changes, rows are rebuilt from the first window [0, K_ROWS)
 var spacerEl = null; // the trailing height spacer, always the last child of listEl
 
 // Section headers in the empty-query list ("Recent" then one per category). sectionStarts maps a flat
@@ -200,6 +208,12 @@ function revealTarget(total, fromIndex, size) {
     return Math.min(total, Math.max(0, fromIndex) + size);
 }
 
+// Pure: the bottom spacer's height - the un-rendered row tail plus any not-yet-rendered section
+// headers, so the scrollbar reflects the full list and the last rows stay reachable.
+function spacerHeight(total, rendered, totalSections, renderedSections) {
+    return Math.max(0, total - rendered) * ROW_H + Math.max(0, totalSections - renderedSections) * SECTION_H;
+}
+
 // buildKey: the command-list signature that decides whether rows must be rebuilt (new search / phase)
 // or just have their selection refreshed in place (arrow-nav / click). Cheap to compute.
 function buildKey() { return phase + "|" + (query || "").trim(); }
@@ -230,6 +244,13 @@ function favIndexForDigit(d) {
     if (c >= 49 && c <= 57) return c - 49;
     if (c === 48) return 9;
     return -1;
+}
+
+// Physical digit for a keydown event. Use e.code so macOS Option+digit (which composes to a symbol
+// in e.key, e.g. Alt+1 -> "¡") still maps to the intended slot; fall back to e.key elsewhere.
+function favDigitFromEvent(e) {
+    var m = /^(?:Digit|Numpad)([0-9])$/.exec((e && e.code) || "");
+    return m ? m[1] : ((e && e.key) || "");
 }
 
 function resultCountText(total, shown, query) {
@@ -319,10 +340,22 @@ function groupActions(list) {
 // by relevance; an empty query shows the recents first, then the rest grouped under category headers.
 // The empty-query result is cached on the action/recents array identities so scrolling doesn't regroup.
 var commandListCache = null;
+// Typed-query result cache, keyed on the pool identity + query. searchActions populates the
+// module-level matchIndex/searchNeedle; a hit restores both so a repeated call (keydown + input,
+// or a scroll tick) skips the whole scan instead of recomputing it.
+var searchCache = null;
 function commandList(actions, recents, query) {
     var all = actions || [];
-    if (shouldRenderActionList(query))
-        return searchActions(all, query);
+    if (shouldRenderActionList(query)) {
+        if (searchCache && searchCache.actions === all && searchCache.query === query) {
+            matchIndex   = searchCache.matchIndex;
+            searchNeedle = searchCache.needle;
+            return searchCache.list;
+        }
+        var found = searchActions(all, query);
+        searchCache = { actions: all, query: query, list: found, matchIndex: matchIndex, needle: searchNeedle };
+        return found;
+    }
     var rec = recents || [];
     if (commandListCache && commandListCache.actions === all && commandListCache.recents === rec)
         return commandListCache.list;
@@ -408,15 +441,35 @@ function modeFilterFromQuery(query) {
     return found;
 }
 
+// Precomputed label parts for one action pool, keyed on the pool's array identity. The fold pass is
+// O(N); doing it here instead of inside every actionLabel() call keeps row rendering O(rows), not O(rows*N).
+var labelCache = null;
+function labelParts(actions) {
+    if (labelCache && labelCache.actions === actions)
+        return labelCache;
+    var sig = {}, count = {};
+    (actions || []).forEach(function (o) {
+        var s = foldLabel(o.title) + "|" + foldLabel(o.source || o.group || "");
+        sig[o.id] = s;
+        count[s] = (count[s] || 0) + 1;
+    });
+    labelCache = { actions: actions, sig: sig, count: count };
+    return labelCache;
+}
+
 // Accessible label "Title from Pretty Source", disambiguated with the opaque action id when another
 // action shares the same title+source (case/separator-insensitive) - so two rows never read out identically.
 function actionLabel(action, actions) {
     var label = action.title + " from " + prettySource(action.source || action.group || "");
     if (actions && actions.length) {
-        var mine = foldLabel(action.title) + "|" + foldLabel(action.source || action.group || "");
-        var clash = actions.some(function (o) {
-            return o.id !== action.id && foldLabel(o.title) + "|" + foldLabel(o.source || o.group || "") === mine;
-        });
+        var cache = labelParts(actions);
+        var mine  = cache.sig[action.id];
+        // mine is undefined only for an action outside the cached pool (e.g. a transient row); scan then.
+        var clash = mine !== undefined ? cache.count[mine] > 1 :
+            actions.some(function (o) {
+                return o.id !== action.id && foldLabel(o.title) + "|" + foldLabel(o.source || o.group || "") ===
+                    foldLabel(action.title) + "|" + foldLabel(action.source || action.group || "");
+            });
         if (clash)
             label += " (" + action.id + ")";
     }
@@ -788,13 +841,14 @@ function ensureSpacer() {
 // section headers reserve their own height too, so the last rows stay reachable.
 function setBottomSpacer(total) {
     ensureSpacer();
-    var remainingRows = Math.max(0, total - renderEnd);
-    var remainingHeaders = Math.max(0, sectionTotal - sectionRendered);
-    spacerEl.style.height = (remainingRows * ROW_H + remainingHeaders * SECTION_H) + "px";
+    spacerEl.style.height = spacerHeight(total, renderEnd, sectionTotal, sectionRendered) + "px";
 }
 
 // Reveal rows up to `upto` (an exclusive index), appending without rebuilding the whole list. Used by
 // the scroll handler (viewport + overscan) and by arrow-nav that runs off the end of the current window.
+// The window is append-only and row indices are absolute, so jumping the selection to the very last row
+// (ArrowUp wrap with no fav bar) necessarily materializes the whole list; the label/search caches above
+// keep that one-off cost linear rather than quadratic.
 function revealTo(list, upto) {
     var need = Math.min(list.length, upto);
     if (need <= renderEnd)
@@ -893,8 +947,9 @@ function renderCommandsList() {
     updatePins(list);
 }
 
-// A tab row: no pin/unpin (tabs aren't pinnable), placeholder tile (tabs have no pictogram). Uses
-// tabTitle so pages added with an empty text (e.g. Home) still show a label.
+// A tab row: no pin/unpin (tabs aren't pinnable), and a tile that shows the page icon when the
+// notebook has one (plugin pages often don't). Uses tabTitle so pages added with an empty text
+// (e.g. Home) still show a label.
 function renderTabRow(t, i) {
     var label = tabTitle(t);
     var shell = beginRow(t, i, true, label);
@@ -911,6 +966,7 @@ function renderTabList() {
     var q = (query || "").trim();
     var list = currentList();
     listEl.innerHTML = "";
+    spacerEl = null; // the tab list has no windowed spacer; rebuildCommandsList recreates it
 
     if (!list.length) {
         renderEmpty(q ? T("sd_no_tabs_match", "No tabs match") : T("sd_no_tabs", "No tabs"));
@@ -990,7 +1046,10 @@ function flashHint(text) {
     hint.textContent = text;
     launcher.insertBefore(hint, launcher.firstChild);
     setTimeout(function () {
-        if (hint && hint.parentNode) hint.parentNode.removeChild(hint);
+        if (hint && hint.parentNode) {
+            hint.parentNode.removeChild(hint);
+            requestResize(); // reclaim the hint's height so the popup doesn't stay tall
+        }
     }, 2500);
 }
 
@@ -1139,7 +1198,7 @@ function OnInit() {
         // Quick-launch a numbered favourite: Alt/Option + digit (0 = the 10th). Only in the
         // commands phase, where the pinned bar is shown.
         if (phase === "commands" && e.altKey && !e.ctrlKey && !e.metaKey) {
-            var slotIdx = favIndexForDigit(e.key);
+            var slotIdx = favIndexForDigit(favDigitFromEvent(e));
             var favIds = currentVisibleFavs();
             if (slotIdx >= 0 && slotIdx < favIds.length) {
                 e.preventDefault();

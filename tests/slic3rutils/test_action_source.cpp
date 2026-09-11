@@ -118,6 +118,16 @@ TEST_CASE("Two-phase commands declare their input phase", "[ActionSource][SpeedD
     CHECK(input_of("go_to_tab") == "tab");
 }
 
+// The input token vocabulary is a JS<->C++ contract (speeddial.js dispatches "percent"/"tab").
+// A typo here would leave a command that never enters its second phase, so pin the allowed set.
+TEST_CASE("Command input tokens stay in the known vocabulary", "[ActionSource][SpeedDial]")
+{
+    for (const auto& c : Slic3r::GUI::NativeCommands::catalog()) {
+        INFO(c.key << " input=" << c.input);
+        CHECK((c.input.empty() || c.input == "percent" || c.input == "tab"));
+    }
+}
+
 // The quick-launch cap must stay 10 to match the numbered Alt/Option+1..9,0 keys. The web palette
 // mirrors it as K_FAV_LIMIT (asserted in speeddial.test.js); the C++ side pins it here.
 static_assert(Slic3r::GUI::ActionRegistry::kFavLimit == 10, "kFavLimit must stay 10");

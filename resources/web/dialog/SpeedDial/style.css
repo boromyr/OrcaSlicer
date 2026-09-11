@@ -382,12 +382,6 @@ body {
     border-radius: 2px;
 }
 
-.row-sc {
-    flex: 0 0 auto;
-    display: inline-flex;
-    gap: 3px;
-}
-
 /* Mode tag on settings above the user's current mode (Advanced/Expert/Developer). */
 .row-mode {
     flex: 0 0 auto;
@@ -398,21 +392,6 @@ body {
     color: var(--plugin-status-warn);
     background: var(--plugin-status-warn-bg);
     white-space: nowrap;
-}
-
-kbd {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    min-width: 18px;
-    height: 18px;
-    padding: 0 5px;
-    font-family: ui-monospace, "Cascadia Mono", Consolas, monospace;
-    font-size: 11px;
-    color: var(--muted, var(--orca-muted, #6b7280));
-    background: rgba(127, 127, 127, .12);
-    border: 1px solid var(--border, var(--orca-border, #ddd));
-    border-radius: 4px;
 }
 
 .pin {

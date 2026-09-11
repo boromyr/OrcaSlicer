@@ -143,17 +143,24 @@ void OptionsSearcher::append_options(DynamicPrintConfig *config, Preset::Type ty
     }
 }
 
-inline void OptionsSearcher::sort_options()
+void OptionsSearcher::sort_options()
 {
-    std::sort(options.begin(), options.end(), [](const Option &o1, const Option &o2) { return o1.label < o2.label; });
-    Option * last = nullptr;
-    for (auto& opt : options) {
-        if (last && last->label == opt.label && last->group == opt.group && last->type == opt.type && last->category != opt.category) {
-            last->multi_category = true;
-            opt.multi_category = true;
+    // Both views are label-sorted and multi_category-marked. They are separate consumers (the sidebar
+    // search and the Speed Dial); keeping them in sync here prevents the all-modes view from silently
+    // diverging in order or flags.
+    auto sort_and_mark = [](std::vector<Option> &v) {
+        std::sort(v.begin(), v.end(), [](const Option &o1, const Option &o2) { return o1.label < o2.label; });
+        Option *last = nullptr;
+        for (auto &opt : v) {
+            if (last && last->label == opt.label && last->group == opt.group && last->type == opt.type && last->category != opt.category) {
+                last->multi_category = true;
+                opt.multi_category = true;
+            }
+            last = &opt;
         }
-        last = &opt;
-    }
+    };
+    sort_and_mark(options);
+    sort_and_mark(options_all_modes);
 }
 
 // Mark a string using ColorMarkerStart and ColorMarkerEnd symbols
