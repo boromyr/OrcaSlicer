@@ -2,6 +2,7 @@
 #define slic3r_PluginsDialog_hpp_
 
 #include "Widgets/WebViewHostDialog.hpp"
+#include "Widgets/ProgressDialog.hpp"
 #include "PluginSource.hpp"
 #include "PluginStatus.hpp"
 #include "PluginSort.hpp"
@@ -287,7 +288,7 @@ private:
                          const wxString& title,
                          const wxString& message,
                          int maximum = 100,
-                         int style   = wxPD_APP_MODAL | wxPD_AUTO_HIDE,
+                         int style   = wxPD_APP_MODAL | wxPD_AUTO_HIDE, // | wxPD_CAN_ABORT for cancel button
                          bool finish_after_dialog_destroyed = false)
     {
         detail::run_off_thread_with_progress(std::forward<Run>(run), std::forward<OnFinish>(on_finish), this, title, message, maximum, style,
