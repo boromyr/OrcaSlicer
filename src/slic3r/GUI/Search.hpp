@@ -45,6 +45,7 @@ struct GroupAndCategory
 {
     wxString group;
     wxString category;
+    wxString icon; // icon of the group's own header, or empty
 };
 
 struct Option
@@ -60,6 +61,7 @@ struct Option
     std::wstring label_local;
     std::wstring group;
     std::wstring group_local;
+    std::string  group_icon; // SVG base name of the group's own header icon, or empty
     std::wstring category;
     std::wstring category_local;
     bool multi_category { false };
@@ -128,7 +130,8 @@ public:
     bool search();
     bool search(const std::string &search, bool force = false, Preset::Type type = Preset::TYPE_INVALID);
 
-    void add_key(const std::string &opt_key, Preset::Type type, const wxString &group, const wxString &category);
+    void add_key(const std::string &opt_key, Preset::Type type, const wxString &group, const wxString &category,
+                 const wxString &icon = wxEmptyString);
 
     size_t size() const { return found_size(); }
 

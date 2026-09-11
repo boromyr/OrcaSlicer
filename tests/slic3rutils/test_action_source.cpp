@@ -3,6 +3,8 @@
 #include "slic3r/GUI/ActionRegistry.hpp"
 #include "slic3r/GUI/NativeCommands.hpp"
 
+#include <boost/filesystem.hpp>
+
 #include <memory>
 #include <set>
 #include <string>
@@ -110,6 +112,47 @@ TEST_CASE("Native command catalog has unique keys and present titles", "[speeddi
         CHECK_FALSE(c.title.empty());
         // A duplicated key would silently shadow the earlier command in the palette.
         CHECK(seen.insert(c.key).second);
+    }
+}
+
+// Every command's tile pictogram is the SVG the matching GUI control already uses; an absent icon
+// means a blank tile (like the tab picker). Guard representative names and that every non-empty
+// value resolves to a shipped file, so a rename/typo cannot leave broken images in the palette.
+TEST_CASE("Native command icons resolve to shipped SVGs", "[speeddial][actions]")
+{
+    const std::vector<Slic3r::GUI::NativeCommand>& commands = Slic3r::GUI::NativeCommands::catalog();
+    auto icon_of = [&commands](const std::string& key) -> const std::string* {
+        for (const auto& c : commands)
+            if (c.key == key)
+                return &c.icon;
+        return nullptr;
+    };
+
+    struct Expected
+    {
+        const char* key;
+        const char* icon;
+    };
+    for (const Expected& e : {Expected{"load_project", "menu_open"},
+                              Expected{"save_project", "menu_save"},
+                              Expected{"sync_ams", "ams_fila_sync"},
+                              Expected{"mode_simple", "advanced"},
+                              Expected{"calib_temperature", "calib_sf"},
+                              Expected{"plate_add", "toolbar_add_plate"},
+                              Expected{"add_primitive_cube", "menu_obj_cube"},
+                              Expected{"go_to_tab", ""}}) {
+        const std::string* icon = icon_of(e.key);
+        INFO(e.key);
+        REQUIRE(icon != nullptr);
+        CHECK(*icon == e.icon);
+    }
+
+    const boost::filesystem::path images = boost::filesystem::path(PROFILES_DIR).parent_path() / "images";
+    for (const auto& c : commands) {
+        if (c.icon.empty())
+            continue;
+        INFO(c.key << " -> " << c.icon);
+        CHECK(boost::filesystem::exists(images / (c.icon + ".svg")));
     }
 }
 

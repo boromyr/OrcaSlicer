@@ -222,42 +222,29 @@ function shouldRenderActionList(query) {
     return !!((query || "").trim());
 }
 
-// Monogram code for a tile: title initial, escalated on collision by PREPENDING the source
-// initial (pi+ti, e.g. "GC"), then a 1-based ordinal - so same-titled items stay distinct.
-// why: ordinal is assigned by id, not by list order - list order is frecency-sorted and
-// reshuffles as usage changes, which would otherwise flip who's "1" and who's "2" across runs.
-function monogramFor(item, list, titleOf, sourceOf, idOf) {
-    var items = list || [];
-    var title = titleOf(item) || " ";
-    var ti = title.charAt(0).toUpperCase();
-    var sameTitle = items.filter(function (o) { return (titleOf(o) || " ").charAt(0).toUpperCase() === ti; });
-    if (sameTitle.length <= 1)
-        return ti;
-    var source = sourceOf(item) || " ";
-    var pi = source.charAt(0).toUpperCase();
-    var sameSource = sameTitle.filter(function (o) { return (sourceOf(o) || " ").charAt(0).toUpperCase() === pi; });
-    if (sameSource.length <= 1)
-        return pi + ti;
-    sameSource.sort(function (a, b) { return idOf(a) < idOf(b) ? -1 : idOf(a) > idOf(b) ? 1 : 0; });
-    for (var i = 0; i < sameSource.length; i++)
-        if (sameSource[i] === item || idOf(sameSource[i]) === idOf(item))
-            return pi + ti + (i + 1);
-    return pi + ti;
+// Tile pictogram base path. The page lives at resources/web/dialog/SpeedDial/, so this climbs to
+// resources/images/ where the same SVG icons the native GUI controls use are shipped.
+var ICON_BASE = "../../../images/";
+
+// SVG base name for an action's tile pictogram, or "" when it has none (commands without a GUI
+// icon, plugins). Pure so the node-vm test can exercise it.
+function actionIcon(a) {
+    return (a && a.icon) ? a.icon : "";
 }
 
-// Action tile code - see monogramFor for the escalation ladder. Settings are actions now, so
-// they share this ladder (title initial, then source, then a stable ordinal).
-function tileCode(action, actions) {
-    return monogramFor(action, actions,
-        function (o) { return o.title; },
-        function (o) { return o.source; },
-        function (o) { return o.id; });
-}
-
-// Put an action's monogram into a tile (search row or favourites tile). A null action (a tab row
-// with no backing action) renders an empty tile.
-function fillTile(tile, a) {
-    tile.textContent = a ? tileCode(a, ACTIONS) : "";
+// Put a pictogram into a tile (search row, favourites tile, or tab row). No icon leaves the tile
+// blank. `mono` marks the white tab-strip glyphs, which the CSS recolors to the shared gray.
+function fillTile(tile, a, mono) {
+    tile.textContent = "";
+    var icon = actionIcon(a);
+    if (!icon)
+        return;
+    var img = document.createElement("img");
+    img.className = mono ? "tile-icon tab-mono" : "tile-icon";
+    img.src = ICON_BASE + icon + ".svg";
+    img.alt = "";
+    img.setAttribute("aria-hidden", "true");
+    tile.appendChild(img);
 }
 
 // The active list for the main phase. A typed query ranks every action (commands/plugins/settings)
@@ -461,13 +448,6 @@ function currentList() {
     return []; // percent - the input itself is the only field
 }
 
-function hue(id) {
-    var h = 0;
-    for (var i = 0; i < id.length; i++)
-        h = (h * 31 + id.charCodeAt(i)) >>> 0;
-    return h % 360;
-}
-
 // Build a <div class=className> with the search-match ranges wrapped in <mark>. Used for both the
 // title and the source eyebrow. Pure (only touches the document factory), so the node-vm test never
 // calls it and load-time stays DOM-free.
@@ -528,7 +508,6 @@ function renderFav() {
         var a = byId(id);
         var tile = document.createElement("button");
         tile.className = "fav-tile" + (sel.zone === "fav" && sel.i === i ? " sel" : "");
-        tile.style.setProperty("--h", hue(id));
         fillTile(tile, a);
         var tileBadge = modeBadge(a, USER_MODE);
         tile.title = a.title + (tileBadge ? " (" + tileBadge + ")" : "");
@@ -629,7 +608,6 @@ function renderActionRow(a, i) {
 
     var tile = document.createElement("div");
     tile.className = "tile";
-    tile.style.setProperty("--h", hue(a.id));
     fillTile(tile, a);
 
     var left = document.createElement("div");
@@ -805,8 +783,7 @@ function renderTabRow(t, i) {
 
     var tile = document.createElement("div");
     tile.className = "tile";
-    tile.style.setProperty("--h", hue(t.id));
-    fillTile(tile, null);
+    fillTile(tile, t, true);
 
     var left = document.createElement("div");
     left.className = "row-left";

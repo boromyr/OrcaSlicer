@@ -25,6 +25,7 @@
 #include <cmath>
 #include <cstdlib>
 #include <exception>
+#include <map>
 #include <string>
 #include <tuple>
 #include <utility>
@@ -132,12 +133,103 @@ void select_mode(ConfigOptionMode mode)
         app.app_config->save();
 }
 
+// Tile pictogram per command: the SVG base name of the icon the matching GUI control already uses
+// (menu/toolbar/sidebar). Absent key => blank tile. Keeping this as one table makes the curation
+// reviewable and lets a test check every value resolves to a real file.
+const std::map<std::string, std::string>& command_icons()
+{
+    static const std::map<std::string, std::string> icons = {
+        // Slice & Export
+        {"slice_and_preview", "media_play"},
+        {"export_gcode", "menu_export_gcode"},
+        {"export_stl", "menu_export_stl"},
+        {"export_stl_multi", "menu_export_stl"},
+        {"export_sliced_file", "menu_export_sliced_file"},
+        {"export_all_sliced_file", "menu_export_sliced_file"},
+        {"export_toolpaths_obj", "menu_export_toolpaths"},
+        {"export_config", "menu_export_config"},
+        {"export_3mf", "menu_save"},
+        {"export_drc_single", "menu_export_stl"},
+        {"export_drc_multi", "menu_export_stl"},
+        // Commands
+        {"load_project", "menu_open"},
+        {"save_project", "menu_save"},
+        {"save_project_as", "menu_save"},
+        {"open_preferences", "cog"},
+        {"go_to_layer", "height_range_layer"},
+        // Mode: the sidebar mode toggle's own icon (ParamsPanel).
+        {"mode_simple", "advanced"},
+        {"mode_advanced", "advanced"},
+        {"mode_expert", "advanced"},
+        {"toggle_developer_mode", "advanced"},
+        // Calibration
+        {"calib_temperature", "calib_sf"},
+        {"calib_max_volumetric", "calib_sf"},
+        {"calib_pressure_advance", "calib_sf"},
+        {"calib_flow_ratio", "calib_sf"},
+        {"calib_retraction", "calib_sf"},
+        {"calib_cornering", "calib_sf"},
+        {"calib_input_shaping_freq", "calib_sf"},
+        {"calib_input_shaping_damp", "calib_sf"},
+        {"calib_vfa", "calib_sf"},
+        // View
+        {"reset_window_layout", "toolbar_reset"},
+        // Object
+        {"obj_delete", "menu_delete"},
+        {"obj_delete_all", "menu_remove"},
+        {"obj_mirror_x", "menu_mirror_x"},
+        {"obj_mirror_y", "menu_mirror_y"},
+        {"obj_mirror_z", "menu_mirror_z"},
+        {"obj_split_objects", "menu_split_objects"},
+        {"obj_split_parts", "menu_split_parts"},
+        {"obj_drop", "toolbar_flatten"},
+        {"obj_instances_up", "instance_add"},
+        {"obj_instances_down", "instance_remove"},
+        {"obj_arrange", "toolbar_arrange"},
+        {"obj_orient", "toolbar_orient"},
+        // Add Primitive
+        {"add_primitive_cube", "menu_obj_cube"},
+        {"add_primitive_cylinder", "menu_obj_cylinder"},
+        {"add_primitive_sphere", "menu_obj_sphere"},
+        {"add_primitive_cone", "menu_obj_cone"},
+        {"add_primitive_disc", "menu_obj_disc"},
+        {"add_primitive_torus", "menu_obj_torus"},
+        {"add_primitive_text", "menu_obj_text"},
+        {"add_primitive_svg", "menu_obj_svg"},
+        // Plate
+        {"plate_add", "toolbar_add_plate"},
+        {"plate_duplicate", "menu_copy"},
+        {"plate_delete", "menu_delete"},
+        {"plate_rename", "plate_name_edit"},
+        {"plate_toggle_lock", "lock_normal"},
+        {"plate_goto", "go_next_plate"},
+        // Printer / Presets
+        {"sync_ams", "ams_fila_sync"},
+        {"sync_presets", "printer_sync_ok"},
+        {"preset_bundle", "menu_edit_preset"},
+        // Import
+        {"import_file", "menu_import"},
+        {"import_zip_archive", "menu_import"},
+        {"import_configs", "menu_import"},
+        // Help
+        {"help_open_config_folder", "folder-closed"},
+        {"help_tip_of_the_day", "info"},
+        {"help_check_updates", "ams_refresh_normal"},
+        {"help_about", "OrcaSlicer_about"},
+        {"open_wiki", "link_wiki_img"},
+    };
+    return icons;
+}
+
 std::vector<NativeCommand> build_command_catalog()
 {
     std::vector<NativeCommand> out;
     auto add = [&](std::string key, std::string title, std::string group, std::function<AppActionRunResult(const std::string&)> runner,
                    std::string input = {}) {
-        out.push_back({std::move(key), std::move(title), std::move(group), std::move(input), std::move(runner)});
+        std::string icon;
+        if (auto it = command_icons().find(key); it != command_icons().end())
+            icon = it->second;
+        out.push_back({std::move(key), std::move(title), std::move(group), std::move(input), std::move(icon), std::move(runner)});
     };
 
     // ---- Slice & Export ----

@@ -60,9 +60,7 @@ body {
     border: 0;
     border-radius: 8px;
     cursor: pointer;
-    color: hsl(var(--h) var(--speed-tile-text-s, 72%) var(--speed-tile-text-l, 38%));
-    font-weight: 700;
-    /* why: mirror .tile centering - icons/placeholder are 18px glyphs, and a bare <button> inherits
+    /* why: mirror .tile centering - icons/placeholder are 16px, and a bare <button> inherits
      13px + UA padding, which would clip them. inline-flex + pad:0 + overflow:hidden fits them. */
     font-size: 12px;
     padding: 0;
@@ -310,14 +308,25 @@ body {
     width: 26px;
     height: 26px;
     border-radius: 6px;
-    color: hsl(var(--h) var(--speed-tile-text-s, 72%) var(--speed-tile-text-l, 38%));
-    font-weight: 700;
-    font-size: 12px;
     display: inline-flex;
     align-items: center;
     justify-content: center;
     background: var(--speed-tile-bg, #f0f0f0);
     border: 1px solid var(--speed-tile-border, #d8d8d8);
+}
+
+/* Native SVG pictogram in a tile; blank tiles (no icon) have no child. */
+.tile-icon {
+    width: 16px;
+    height: 16px;
+    display: block;
+    pointer-events: none;
+}
+
+/* Tab-strip glyphs are drawn white for the dark tab bar; recolor to the shared #949494 gray so
+   they read on both the light and dark tile backgrounds. */
+.tile-icon.tab-mono {
+    filter: brightness(0) invert(.58);
 }
 
 .row-left {

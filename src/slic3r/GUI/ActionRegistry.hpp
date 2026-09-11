@@ -77,6 +77,9 @@ struct AppAction
     // Second-phase input descriptor for the palette: "percent" (jump to layer by a 0-100
     // value) or "tab" (pick a notebook tab). Empty = run immediately on activation.
     std::string input;
+    // Tile pictogram: SVG base name under resources/images; empty renders a blank tile (commands
+    // without a GUI icon, plugins). Set from NativeCommands / the setting's category icon.
+    std::string icon;
     // Settings mode required to edit this action (SettingActions only). The palette prompts before
     // running an action whose mode is above the user's current mode. comSimple for everything else.
     ConfigOptionMode required_mode = comSimple;

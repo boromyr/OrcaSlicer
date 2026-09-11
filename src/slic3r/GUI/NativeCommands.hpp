@@ -10,13 +10,15 @@ namespace Slic3r { namespace GUI {
 
 // A built-in speed-dial command: identity + how to run it. The registry keeps commands as thin
 // values (CommandAction) and routes run() here, so this catalog is the single source of truth for
-// the behaviour (runner => an owner method) and the presentation (title/group/input).
+// the behaviour (runner => an owner method), the presentation (title/group/input), and the tile
+// pictogram (icon = an SVG base name under resources/images, "" for no icon).
 struct NativeCommand
 {
     std::string key;
     std::string title;
     std::string group;
     std::string input; // "percent"/"tab" or "" for immediate run
+    std::string icon;  // SVG base name, or "" to render a blank tile
     std::function<AppActionRunResult(const std::string& param)> runner;
 };
 

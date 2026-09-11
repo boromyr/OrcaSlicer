@@ -100,7 +100,7 @@ void OptionsSearcher::append_options(DynamicPrintConfig *config, Preset::Type ty
 
         if (!label.IsEmpty())
             dst.emplace_back(Option{boost::nowide::widen(key), type, (label + suffix).ToStdWstring(), (_(label) + suffix_local).ToStdWstring(), gc.group.ToStdWstring(),
-                                    _(gc.group).ToStdWstring(), gc.category.ToStdWstring(), GUI::Tab::translate_category(gc.category, type).ToStdWstring(),
+                                    _(gc.group).ToStdWstring(), into_u8(gc.icon), gc.category.ToStdWstring(), GUI::Tab::translate_category(gc.category, type).ToStdWstring(),
                                     false, opt_mode});
     };
 
@@ -394,6 +394,7 @@ static Option create_option(const std::string &opt_key, const wxString &label, P
                   (_(label) + suffix_local).ToStdWstring(),
                   gc.group.ToStdWstring(),
                   _(gc.group).ToStdWstring(),
+                  into_u8(gc.icon),
                   gc.category.ToStdWstring(),
                   GUI::Tab::translate_category(category, type).ToStdWstring()};
 }
@@ -447,9 +448,9 @@ void OptionsSearcher::dlg_msw_rescale()
     if (search_dialog) search_dialog->msw_rescale();
 }
 
-void OptionsSearcher::add_key(const std::string &opt_key, Preset::Type type, const wxString &group, const wxString &category)
+void OptionsSearcher::add_key(const std::string &opt_key, Preset::Type type, const wxString &group, const wxString &category, const wxString &icon)
 {
-    groups_and_categories[get_key(opt_key, type)] = GroupAndCategory{group, category};
+    groups_and_categories[get_key(opt_key, type)] = GroupAndCategory{group, category, icon};
 }
 //------------------------------------------
 //          SearchItem

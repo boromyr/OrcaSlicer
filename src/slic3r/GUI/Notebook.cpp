@@ -201,6 +201,7 @@ bool ButtonsListCtrl::InsertPage(size_t n, const wxString &text, bool bSelect /*
     Slic3r::GUI::wxGetApp().UpdateDarkUI(btn);
     m_pageButtons.insert(m_pageButtons.begin() + n, btn);
     m_pageLabels.insert(m_pageLabels.begin() + n, text); // ORCA
+    m_pageIcons.insert(m_pageIcons.begin() + n, bmp_name);
     m_buttons_sizer->Insert(n, new wxSizerItem(btn));
     m_buttons_sizer->SetCols(m_buttons_sizer->GetCols() + 1);
     m_sizer->Layout();
@@ -220,6 +221,7 @@ void ButtonsListCtrl::RemovePage(size_t n)
     Button* btn = m_pageButtons[n];
     m_pageButtons.erase(m_pageButtons.begin() + n);
     m_pageLabels.erase(m_pageLabels.begin() + n); // ORCA
+    m_pageIcons.erase(m_pageIcons.begin() + n);
     m_buttons_sizer->Remove(n);
 #if __WXOSX__
     RemoveChild(btn);

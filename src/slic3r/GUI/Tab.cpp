@@ -5050,7 +5050,7 @@ void TabPrinter::build_fff()
 
                 // Register by hand so the UnsavedChanges dialog can render a row for it.
                 wxGetApp().sidebar().get_searcher().add_key("printer_agent", m_type, optgroup->title,
-                                                            optgroup->config_category());
+                                                            optgroup->config_category(), optgroup->icon);
             }
         }
 
@@ -5765,7 +5765,7 @@ if (is_marlin_flavor)
     for (auto &group : m_pages[n_before_extruders]->m_optgroups) {
         group->set_config_category_and_type(first_extruder_title, m_type);
         for (auto &opt : group->opt_map())
-            searcher.add_key(opt.first + "#0", m_type, group->title, first_extruder_title);
+            searcher.add_key(opt.first + "#0", m_type, group->title, first_extruder_title, group->icon);
     }
 
     Thaw();
@@ -7869,8 +7869,8 @@ wxSizer* TabPrinter::create_bed_shape_widget(wxWindow* parent)
     {
         Search::OptionsSearcher& searcher = wxGetApp().sidebar().get_searcher();
         const Search::GroupAndCategory& gc = searcher.get_group_and_category("printable_area");
-        searcher.add_key("bed_custom_texture", m_type, gc.group, gc.category);
-        searcher.add_key("bed_custom_model", m_type, gc.group, gc.category);
+        searcher.add_key("bed_custom_texture", m_type, gc.group, gc.category, gc.icon);
+        searcher.add_key("bed_custom_model", m_type, gc.group, gc.category, gc.icon);
     }
 
     return sizer;

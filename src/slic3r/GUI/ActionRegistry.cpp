@@ -232,6 +232,7 @@ private:
         this->kind  = AppActionKind::Command;
         this->group = c.group;
         this->input = c.input;
+        this->icon  = c.icon;
     }
 };
 
@@ -554,6 +555,19 @@ void ActionRegistry::materialize_setting_actions()
         auto action = std::make_unique<SettingAction>(opt.opt_key(), opt.type, boost::nowide::narrow(label_w), std::string(),
                                                       opt.category_local, boost::nowide::narrow(path), opt.mode);
 
+        // Tile pictogram = the icon of the setting's own group header (e.g. Advanced -> param_advanced),
+        // the one shown next to it in the page. Fall back to the page/category icon for groups
+        // without one. Keys are the English titles the GUI registers.
+        action->icon = opt.group_icon;
+        if (action->icon.empty() && !opt.category.empty()) {
+            if (Tab* tab = wxGetApp().get_tab(opt.type); tab) {
+                const auto& icons = tab->get_category_icon_map();
+                auto        it    = icons.find(wxString(opt.category));
+                if (it != icons.end())
+                    action->icon = it->second;
+            }
+        }
+
         action->favourite = std::find(favs.begin(), favs.end(), id) != favs.end();
         if (auto it = stats.find(id); it != stats.end() && it->is_object()) {
             action->count = it->value("count", 0);
@@ -738,6 +752,7 @@ nlohmann::json ActionRegistry::snapshot()
                                {"source", a->source_name()},
                                {"group", a->group},
                                {"input", a->input},
+                               {"icon", a->icon},
                                {"shortcut", ""},
                                {"mode", mode_key(a->required_mode)}});
     };
@@ -800,7 +815,9 @@ nlohmann::json ActionRegistry::tab_options() const
         const wxString id = notebook->GetPageName(i);
         if (id.empty())
             continue;
-        out.push_back({{"id", id.ToStdString()}, {"title", notebook->GetPageText(i).ToStdString()}});
+        out.push_back({{"id", id.ToStdString()},
+                       {"title", notebook->GetPageText(i).ToStdString()},
+                       {"icon", notebook->GetPageIcon(i)}});
     }
     return out;
 }

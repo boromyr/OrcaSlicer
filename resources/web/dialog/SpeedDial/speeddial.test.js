@@ -195,21 +195,15 @@ assert.deepEqual(ctx.visibleFavourites(["b", "a", "b"], [{ id: "a" }, { id: "b" 
 assert.deepEqual(ctx.visibleFavourites([], [{ id: "a" }]), [], "no pins renders an empty quick-bar");
 assert.deepEqual(ctx.visibleFavourites(["a"], []), [], "a stale config with no actions renders nothing");
 
-// tileCode: monogram ladder - title initial, then title+source initials, then a stable ordinal
-// by id. The ordinal is keyed by id, not by list order, so frecency reshuffles never renumber tiles.
-const monoPool = [
-    { id: "z", title: "Repair", source: "Mesh Tools" },
-    { id: "a", title: "Repair", source: "Mesh Tools" },
-    { id: "b", title: "Repair", source: "Filament" }
-];
-assert.equal(ctx.tileCode(monoPool[0], monoPool), "MR2",
-    "same title+source resolves to source+title initials with an id-keyed ordinal (id z sorts after id a)");
-assert.equal(ctx.tileCode(monoPool[1], monoPool), "MR1",
-    "the earlier id is numbered first among same-title+source tiles");
-assert.equal(ctx.tileCode(monoPool[2], monoPool), "FR",
-    "same title but different source resolves to source+title initials");
-assert.equal(ctx.tileCode({ id: "x", title: "Slice", source: "OrcaSlicer" }, [{ id: "x", title: "Slice", source: "OrcaSlicer" }]),
-    "S", "a unique title resolves to the bare title initial");
+// actionIcon: the SVG base name for a tile's pictogram, or "" when the action has none (blank tile).
+assert.equal(ctx.actionIcon({ id: "x", title: "Slice", icon: "media_play" }), "media_play",
+    "an action's icon base name is returned verbatim");
+assert.equal(ctx.actionIcon({ id: "x", title: "Go to tab...", icon: "" }), "",
+    "an empty icon renders a blank tile");
+assert.equal(ctx.actionIcon({ id: "x", title: "Plugin action" }), "",
+    "a missing icon field renders a blank tile");
+assert.equal(ctx.actionIcon(null), "",
+    "a null action (tab row) renders a blank tile");
 
 // needsModeSwitch: a setting is gated only when its required mode outranks the user's current mode.
 assert.equal(ctx.needsModeSwitch({ mode: "advanced" }, "simple"), true, "Advanced is gated in Simple mode");
