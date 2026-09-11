@@ -334,4 +334,20 @@ assert.equal(ctx.searchActions(modePool, "retraction")[0].id, "a3",
 assert.equal(ctx.searchActions([{ id: "both", title: "Advanced", source: "Quality", group: "", mode: "advanced" }], "advanced").length,
     1, "a setting that both matches text and requires the mode appears exactly once");
 
+// actionHasWiki: the footer's wiki link/F1 path is offered only when the action carries a wiki flag.
+assert.equal(ctx.actionHasWiki({ id: "x", wiki: true }), true, "a wiki-flagged setting offers the wiki action");
+assert.equal(ctx.actionHasWiki({ id: "x", wiki: false }), false, "a setting without a wiki path offers nothing");
+assert.equal(ctx.actionHasWiki({ id: "x" }), false, "a missing wiki field offers nothing");
+assert.equal(ctx.actionHasWiki(null), false, "no action selected offers nothing");
+
+// actionHasDetail: the footer strip appears only when the highlighted action has a description or
+// wiki link; selecting a plain command hides it.
+assert.equal(ctx.actionHasDetail({ id: "a", desc: "Layer height" }), true, "a description shows the footer");
+assert.equal(ctx.actionHasDetail({ id: "a", wiki: true }), true, "a wiki link shows the footer");
+assert.equal(ctx.actionHasDetail({ id: "a", desc: "Layer height", wiki: true }), true, "both show the footer");
+assert.equal(ctx.actionHasDetail({ id: "a", desc: "" }), false, "an empty description hides the footer");
+assert.equal(ctx.actionHasDetail({ id: "a", desc: "", wiki: false }), false, "empty description and false wiki hide the footer");
+assert.equal(ctx.actionHasDetail({ id: "a" }), false, "an action with neither hides the footer");
+assert.equal(ctx.actionHasDetail(null), false, "no selected action hides the footer");
+
 console.log("ok");

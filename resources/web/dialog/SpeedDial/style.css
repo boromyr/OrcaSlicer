@@ -436,3 +436,48 @@ body {
     color: var(--muted, var(--orca-muted, #6b7280));
     text-align: center;
 }
+
+/* Footer detail strip: the selected action's description plus its wiki link. Auto-sizes to the
+   content; the description is clamped below. */
+.dial-detail {
+    flex: 0 0 auto;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 12px;
+    border-top: 1px solid var(--border, var(--orca-border, #ddd));
+    overflow: hidden;
+}
+
+.dial-detail[hidden] {
+    display: none;
+}
+
+.detail-desc {
+    flex: 1 1 auto;
+    min-width: 0;
+    font-size: 11px;
+    line-height: 1.4;
+    color: var(--muted, var(--orca-muted, #6b7280));
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 3;
+    overflow: hidden;
+    overflow-wrap: anywhere;
+}
+
+.detail-wiki {
+    flex: 0 0 auto;
+    border: 0;
+    padding: 0;
+    background: transparent;
+    font: inherit;
+    font-size: 11px;
+    color: var(--main-color, var(--orca-accent, #009688));
+    cursor: pointer;
+    white-space: nowrap;
+}
+
+.detail-wiki:hover {
+    text-decoration: underline;
+}

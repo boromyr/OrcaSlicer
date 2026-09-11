@@ -8,6 +8,7 @@
 //   - action.mode token           -> ActionRegistry::mode_key / SpeedDialDialog::mode_label
 //   - action.input "percent"/"tab" -> NativeCommands catalog (phases handled in activateEntry)
 //   - action.icon SVG base name   -> AppAction::icon / resources/images/<name>.svg
+//   - action.desc/wiki            -> AppAction::tooltip / help_url (footer detail strip)
 //   - action list is frecency-sorted -> ActionRegistry::snapshot()
 
 // ---- state (populated by the C++ bridge via window.HandleStudio) ----
@@ -77,7 +78,7 @@ var tabOptions = [];       // [{id,title}] - notebook pages, fetched on entering
 //      ../../js/fuzzy-search.js, loaded before this script. Search is always case-insensitive.
 
 // element handles, assigned in OnInit (kept null so load-time touches no DOM)
-var qEl = null, listEl = null, favEl = null, clearEl = null, eyeEl = null, countEl = null;
+var qEl = null, listEl = null, favEl = null, clearEl = null, eyeEl = null, countEl = null, detailEl = null;
 
 // ---- pure helpers (no DOM; unit-tested) -------------------------------------
 // Pre-normalized haystacks, cached on the action object. The fold is length-preserving (1:1 per
@@ -399,6 +400,11 @@ function selectedActionId(sel, actions, favIds) {
     var a = actions[sel.i];
     return a && a.id;
 }
+
+function actionHasWiki(a) { return !!(a && a.wiki); }
+
+// Whether the action has anything for the footer strip to show (a description or a wiki link).
+function actionHasDetail(a) { return !!(a && ((a.desc && a.desc.length) || a.wiki)); }
 
 function foldLabel(s) { return String(s || "").toLowerCase().replace(/[^a-z0-9]+/g, ""); }
 
@@ -996,9 +1002,43 @@ function renderList() {
         renderCommandsList();
 }
 
+// The action the footer describes: the current selection resolved through the active list/fav bar.
+function currentDetailAction() {
+    if (phase !== "commands") return null;
+    var id = selectedActionId(sel, currentList(), currentVisibleFavs());
+    return id ? byId(id) : null;
+}
+
+// Footer detail strip: the selected action's description plus, when it has a wiki page, a link that
+// opens it (same path as F1). Shown only when the highlighted action has something to say, so
+// selecting a command with no description hides the strip.
+function renderDetail() {
+    if (!detailEl) return;
+    var a = currentDetailAction();
+    var show = phase === "commands" && actionHasDetail(a);
+    detailEl.hidden = !show;
+    detailEl.innerHTML = "";
+    if (!show) return;
+    if (a && a.desc) {
+        var desc = document.createElement("div");
+        desc.className = "detail-desc";
+        desc.textContent = a.desc;
+        detailEl.appendChild(desc);
+    }
+    if (a && a.wiki) {
+        var link = document.createElement("button");
+        link.type = "button";
+        link.className = "detail-wiki";
+        link.textContent = T("sd_wiki", "Wiki") + " (F1)";
+        link.onclick = function (ev) { ev.stopPropagation(); SendMessage({ command: "open_wiki", id: a.id }); };
+        detailEl.appendChild(link);
+    }
+}
+
 function render(opts) {
     renderFav();
     renderList();
+    renderDetail();
     // Pin toggles don't move the selection, so they pass keepScroll to avoid snapping the list
     // back to a row that is currently off-screen.
     if (!(opts && opts.keepScroll))
@@ -1148,7 +1188,7 @@ function focusInput() { setTimeout(function () { if (qEl) qEl.focus(); }, 0); }
 
 // ---- init --------------------------------------------------------------------
 function OnInit() {
-    qEl = $("q"); listEl = $("list"); favEl = $("favBar"); clearEl = $("clear"); eyeEl = $("favEyebrow"); countEl = $("count");
+    qEl = $("q"); listEl = $("list"); favEl = $("favBar"); clearEl = $("clear"); eyeEl = $("favEyebrow"); countEl = $("count"); detailEl = $("detail");
     // text.js's TranslatePage() targets jQuery `.trans` nodes; this page has none and defines its own
     // `$`, so don't call it. Runtime strings go through T() instead.
     qEl.placeholder = T("sd_search", "Search actions");
@@ -1187,6 +1227,15 @@ function OnInit() {
 
     document.addEventListener("keydown", function (e) {
         if (favMenuEl && !favMenuEl.hidden && e.key === "Escape") { e.preventDefault(); hideFavMenu(); return; }
+        // F1 opens the selected setting's wiki page. Settings without one flash a hint instead.
+        if (e.key === "F1") {
+            e.preventDefault();
+            if (phase !== "commands") return;
+            var help = currentDetailAction();
+            if (actionHasWiki(help)) SendMessage({ command: "open_wiki", id: help.id });
+            else flashHint(T("sd_no_wiki", "No wiki page for this action"));
+            return;
+        }
         // Pin/unpin the highlighted action: Ctrl/Cmd+B. Commands phase only (tabs/percent aren't pinnable).
         if (phase === "commands" && (e.ctrlKey || e.metaKey) && !e.altKey && !e.shiftKey &&
             e.key.toLowerCase() === "b") {

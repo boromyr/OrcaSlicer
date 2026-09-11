@@ -14,6 +14,7 @@
 #include <wx/display.h>
 #include <wx/sizer.h>
 #include <wx/stattext.h>
+#include <wx/utils.h>
 
 #ifdef __linux__
 #include <gtk/gtk.h>
@@ -152,6 +153,8 @@ void SpeedDialWebDialog::handle_web_command(const nlohmann::json& payload)
         wxGetApp().action_registry().reorder_favourites(ids);
     } else if (command == "run_action")
         run_action(payload.value("id", ""), payload.value("title", ""), payload.value("param", ""));
+    else if (command == "open_wiki")
+        open_wiki(payload.value("id", ""));
     else if (command == "search_tabs")
         search_tabs();
     else if (command == "resize")
@@ -251,6 +254,15 @@ void SpeedDialWebDialog::run_action(const std::string& id, const std::string& ti
                                         NotificationManager::NotificationLevel::RegularNotificationLevel,
                                     into_u8(result.message));
     });
+}
+
+void SpeedDialWebDialog::open_wiki(const std::string& id)
+{
+    const AppAction* a = wxGetApp().action_registry().by_id(id);
+    if (!a || a->help_url.empty())
+        return;
+    Hide();
+    wxLaunchDefaultBrowser(from_u8(a->help_url));
 }
 
 void SpeedDialWebDialog::send_actions()

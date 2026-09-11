@@ -46,6 +46,7 @@ struct GroupAndCategory
     wxString group;
     wxString category;
     wxString icon; // icon of the group's own header, or empty
+    std::string path; // wiki path (Line::label_path) of the option's line, or empty
 };
 
 struct Option
@@ -66,6 +67,8 @@ struct Option
     std::wstring category_local;
     bool multi_category { false };
     ConfigOptionMode mode{comSimple}; // option's visibility threshold; drives the Speed Dial's mode prompt
+    std::string  tooltip;             // localized ConfigOptionDef::tooltip, or empty
+    std::string  wiki_path;           // Line::label_path for the option's row, or empty
 
     std::string opt_key() const;
 };
@@ -132,6 +135,10 @@ public:
 
     void add_key(const std::string &opt_key, Preset::Type type, const wxString &group, const wxString &category,
                  const wxString &icon = wxEmptyString);
+
+    // Records the wiki path of an option's row (Line::label_path) so the Speed Dial can offer a
+    // "open wiki" affordance. Empty paths are ignored.
+    void set_path(const std::string &opt_key, Preset::Type type, const std::string &path);
 
     size_t size() const { return found_size(); }
 

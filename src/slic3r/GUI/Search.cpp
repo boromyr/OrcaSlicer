@@ -85,7 +85,7 @@ static std::string get_key(const std::string &opt_key, Preset::Type type) { retu
 
 void OptionsSearcher::append_options(DynamicPrintConfig *config, Preset::Type type, ConfigOptionMode mode)
 {
-    auto emplace = [this, type](std::vector<Option> &dst, const std::string &key, const wxString &label, ConfigOptionMode opt_mode) {
+    auto emplace = [this, type](std::vector<Option> &dst, const std::string &key, const wxString &label, ConfigOptionMode opt_mode, std::string tooltip) {
         const GroupAndCategory &gc = groups_and_categories[key];
         if (gc.group.IsEmpty() || gc.category.IsEmpty()) return;
 
@@ -101,7 +101,7 @@ void OptionsSearcher::append_options(DynamicPrintConfig *config, Preset::Type ty
         if (!label.IsEmpty())
             dst.emplace_back(Option{boost::nowide::widen(key), type, (label + suffix).ToStdWstring(), (_(label) + suffix_local).ToStdWstring(), gc.group.ToStdWstring(),
                                     _(gc.group).ToStdWstring(), into_u8(gc.icon), gc.category.ToStdWstring(), GUI::Tab::translate_category(gc.category, type).ToStdWstring(),
-                                    false, opt_mode});
+                                    false, opt_mode, std::move(tooltip), gc.path});
     };
 
     for (std::string opt_key : config->keys()) {
@@ -131,8 +131,8 @@ void OptionsSearcher::append_options(DynamicPrintConfig *config, Preset::Type ty
         std::string key = get_key(opt_key, type);
         auto add = [&](const std::string &k) {
             if (in_filtered)
-                emplace(options, k, label, opt.mode);
-            emplace(options_all_modes, k, label, opt.mode);
+                emplace(options, k, label, opt.mode, into_u8(_(opt.tooltip)));
+            emplace(options_all_modes, k, label, opt.mode, into_u8(_(opt.tooltip)));
         };
         if (cnt == 0)
             add(key);
@@ -459,7 +459,19 @@ void OptionsSearcher::dlg_msw_rescale()
 
 void OptionsSearcher::add_key(const std::string &opt_key, Preset::Type type, const wxString &group, const wxString &category, const wxString &icon)
 {
-    groups_and_categories[get_key(opt_key, type)] = GroupAndCategory{group, category, icon};
+    // Update fields in place so a page rebuild (get_option after set_path) doesn't drop the
+    // previously recorded wiki path.
+    GroupAndCategory &gc = groups_and_categories[get_key(opt_key, type)];
+    gc.group    = group;
+    gc.category = category;
+    gc.icon     = icon;
+}
+
+void OptionsSearcher::set_path(const std::string &opt_key, Preset::Type type, const std::string &path)
+{
+    if (path.empty())
+        return;
+    groups_and_categories[get_key(opt_key, type)].path = path;
 }
 //------------------------------------------
 //          SearchItem

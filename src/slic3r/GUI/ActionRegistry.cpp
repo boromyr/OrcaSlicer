@@ -6,6 +6,7 @@
 #include "MainFrame.hpp"
 #include "NativeCommands.hpp"
 #include "Notebook.hpp"
+#include "OptionsGroup.hpp"
 #include "Plater.hpp"
 #include "Search.hpp"
 #include "Tab.hpp"
@@ -571,6 +572,11 @@ void ActionRegistry::materialize_setting_actions()
             }
         }
 
+        // Footer description + wiki affordance; only settings whose row declared a wiki path have one.
+        action->tooltip = opt.tooltip;
+        if (!opt.wiki_path.empty())
+            action->help_url = into_u8(OptionsGroup::get_url(opt.wiki_path));
+
         seed_from(stats, favs, id, *action);
         auto const action_id  = action->id();
         auto const app_action = std::shared_ptr<AppAction>(std::move(action));
@@ -723,7 +729,9 @@ nlohmann::json ActionRegistry::snapshot()
                                {"kind", a->kind == AppActionKind::Plugin ? "plugin" : "command"},
                                {"input", a->input},
                                {"icon", a->icon},
-                               {"mode", mode_key(a->required_mode)}});
+                               {"mode", mode_key(a->required_mode)},
+                               {"desc", a->tooltip},
+                               {"wiki", !a->help_url.empty()}});
     };
 
     nlohmann::json actions = nlohmann::json::array();

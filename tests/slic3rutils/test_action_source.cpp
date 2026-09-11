@@ -105,6 +105,21 @@ TEST_CASE("Command action construction keys by catalog key", "[ActionSource][Spe
     CHECK(action->icon == c.icon);
 }
 
+// The footer description/wiki link is settings-only: built-in commands leave both fields empty, so
+// the palette's detail strip depends on list-level visibility for them.
+TEST_CASE("Actions default to no description or wiki link", "[ActionSource][SpeedDial]")
+{
+    const TestAppAction action;
+    CHECK(action.tooltip.empty());
+    CHECK(action.help_url.empty());
+
+    REQUIRE_FALSE(Slic3r::GUI::NativeCommands::catalog().empty());
+    std::unique_ptr<AppAction> command = Slic3r::GUI::NativeCommands::make_action(Slic3r::GUI::NativeCommands::catalog().front());
+    REQUIRE(command != nullptr);
+    CHECK(command->tooltip.empty());
+    CHECK(command->help_url.empty());
+}
+
 // Two-phase commands declare the input the palette must collect before they can run.
 TEST_CASE("Two-phase commands declare their input phase", "[ActionSource][SpeedDial]")
 {

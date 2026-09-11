@@ -21,6 +21,7 @@ private:
     void handle_web_command(const nlohmann::json& payload);
     void resize_to_content(int height);
     void run_action(const std::string& id, const std::string& title, const std::string& param = "");
+    void open_wiki(const std::string& id);
     void send_actions();
     void search_tabs();
 

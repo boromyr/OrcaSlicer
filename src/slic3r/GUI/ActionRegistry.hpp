@@ -83,6 +83,10 @@ struct AppAction
     // Settings mode required to edit this action (SettingActions only). The palette prompts before
     // running an action whose mode is above the user's current mode. comSimple for everything else.
     ConfigOptionMode required_mode = comSimple;
+    // Description shown in the Speed Dial's footer strip (SettingActions: the localized tooltip).
+    std::string tooltip;
+    // Full wiki URL, when the action has one (SettingActions whose row declared a label_path).
+    std::string help_url;
 
     virtual ~AppAction() = default;
     // Re-resolves + runs (UI thread). `param` carries an optional per-run argument for

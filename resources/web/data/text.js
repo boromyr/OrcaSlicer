@@ -150,6 +150,8 @@ var LangText = {
     sd_mode_advanced: "Advanced",
     sd_mode_expert: "Expert",
     sd_mode_develop: "Developer",
+    sd_wiki: "Wiki",
+    sd_no_wiki: "No wiki page for this action",
   },
   ca_ES: {
     t1: "Benvingut a Orca Slicer",
