@@ -113,7 +113,7 @@ public:
 
     void SetLabelColor(StateColor const &color);
 
-    virtual void Rescale();
+    void Rescale() override;
 
     virtual bool Enable(bool enable = true) override;
 
