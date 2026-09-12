@@ -59,6 +59,7 @@
 #include "BedShapeDialog.hpp"
 #include "libslic3r/GCode/Thumbnails.hpp"
 #include "WipeTowerDialog.hpp"
+#include "SmallAreaInfillFlowCompensationDialog.hpp"
 
 #include "DeviceCore/DevManager.h"
 
@@ -2754,11 +2755,23 @@ void TabPrint::build()
         optgroup->append_single_option_line("max_travel_detour_distance", "quality_settings_wall_and_surfaces#max-detour-length");
 
         optgroup->append_single_option_line("small_area_infill_flow_compensation", "quality_settings_wall_and_surfaces#small-area-flow-compensation");
-        Option option = optgroup->get_option("small_area_infill_flow_compensation_model");
-        option.opt.full_width = true;
-        option.opt.is_code = true;
-        option.opt.height = 15;
-        optgroup->append_single_option_line(option, "quality_settings_wall_and_surfaces#small-area-flow-compensation");
+        create_line_with_widget(optgroup.get(), "small_area_infill_flow_compensation_model", "quality_settings_wall_and_surfaces#small-area-flow-compensation", [this](wxWindow* parent) {
+
+            Button* btn = new Button(parent, _(L("Set")) + " " + dots);
+            btn->SetStyle(ButtonStyle::Regular, ButtonType::Parameter);
+
+            auto sizer = new wxBoxSizer(wxHORIZONTAL);
+            sizer->Add(btn);
+
+            btn->Bind(wxEVT_BUTTON, [this](wxCommandEvent&) {
+                SmallAreaInfillFlowCompensationDialog dlg(this, m_config->option<ConfigOptionStrings>("small_area_infill_flow_compensation_model")->values);
+                if (dlg.ShowModal() == wxID_OK && dlg.is_modified()) {
+                    load_key_value("small_area_infill_flow_compensation_model", dlg.get_parameters());
+                    update_changed_ui();
+                }
+            });
+            return sizer;
+        });
 
         optgroup = page->new_optgroup(L("Bridging"), L"param_bridge");
         optgroup->append_single_option_line("bridge_flow", "quality_settings_bridging#flow-ratio");
@@ -3119,7 +3132,7 @@ void TabPrint::build()
         optgroup->append_single_option_line("exclude_object", "others_settings_g_code_output#exclude-objects");
         // Orca: Place the metadata size trade-off beside the other G-code output switches.
         optgroup->append_single_option_line("gcode_overhangs", "others_settings_g_code_output#add-overhangs-info");
-        option = optgroup->get_option("filename_format");
+        Option option = optgroup->get_option("filename_format");
         // option.opt.full_width = true;
         option.opt.is_code = true;
         option.opt.multiline = true;
