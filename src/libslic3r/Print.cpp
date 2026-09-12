@@ -248,6 +248,8 @@ bool Print::invalidate_state_by_config_options(const ConfigOptionResolver & /* n
         // Orca: Islands only affects the exported G-code.
         "islands_clearance_radius",
         "islands_clearance_height",
+        // Orca: Changing preview metadata requires regenerating the exported G-code.
+        "gcode_overhangs",
         "support_material_interface_fan_speed",
         "internal_bridge_fan_speed", // ORCA: Add support for separate internal bridge fan speed control
         "ironing_fan_speed",

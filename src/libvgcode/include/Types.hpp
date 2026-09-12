@@ -99,6 +99,8 @@ enum class EViewType : uint8_t
     // ORCA: Add Jerk visualization support
     Jerk,
     Tool,
+    // Orca: Use one overhang view with selectable angular or percentage units.
+    Overhang,
     COUNT
 };
 
@@ -203,6 +205,8 @@ enum class EColorRangeType : uint8_t
 {
     Linear,
     Logarithmic,
+    // Orca: Use log(1 + x) for nonnegative ranges that include zero, without changing Layer Time's logarithm.
+    LogarithmicWithZero,
     COUNT
 };
 
