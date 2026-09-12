@@ -637,7 +637,7 @@ DiffViewCtrl::DiffViewCtrl(wxWindow* parent, wxSize size)
     });
 
     //ORCA: Prevent collapsing of non-collapsible items (Presets, Categories)
-    this->Bind(wxEVT_DATAVIEW_ITEM_COLLAPSING, [this](wxDataViewEvent& event) {
+    this->Bind(wxEVT_DATAVIEW_ITEM_COLLAPSING, [](wxDataViewEvent& event) {
         wxDataViewItem item = event.GetItem();
         if (item.IsOk()) {
             ModelNode* node = static_cast<ModelNode*>(item.GetID());
