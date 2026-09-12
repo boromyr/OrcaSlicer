@@ -5167,7 +5167,7 @@ void TabPrinter::build_fff()
         optgroup->append_single_option_line("extruder_clearance_height_to_rod", "printer_basic_information_extruder_clearance#height-to-rod");
         optgroup->append_single_option_line("extruder_clearance_height_to_lid", "printer_basic_information_extruder_clearance#height-to-lid");
 
-        optgroup = page->new_optgroup(L("Islands clearance"), "param_islands_clearance");
+        optgroup = page->new_optgroup(L("Islands clearance"));
         optgroup->append_single_option_line("islands_clearance_radius", "printer_basic_information_islands_clearance#radius");
         optgroup->append_single_option_line("islands_clearance_height", "printer_basic_information_islands_clearance#height");
 
