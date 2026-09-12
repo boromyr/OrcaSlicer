@@ -173,6 +173,8 @@ enum class IroningType {
     TopSurfaces,
     TopmostOnly,
     AllSolid,
+    // Iron only the top surfaces painted with the ironing painting gizmo.
+    PaintedOnly,
     Count,
 };
 
