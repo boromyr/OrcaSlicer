@@ -439,7 +439,7 @@ static ExtrusionPath make_wave_path(const Polyline &polyline, const Flow &flow, 
 static ExtrusionPath make_wave_path(Polyline &&polyline, const Flow &flow, double mm3_per_mm)
 {
     ExtrusionPath path(erWaveBridgeInfill, mm3_per_mm, flow.width(), flow.height());
-    path.polyline = std::move(Polyline3(polyline, flow.height()));
+    path.polyline = Polyline3(polyline, flow.height());
     return path;
 }
 
