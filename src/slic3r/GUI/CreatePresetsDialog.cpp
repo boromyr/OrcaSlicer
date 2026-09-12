@@ -309,7 +309,7 @@ static wxBoxSizer* create_checkbox(wxWindow* parent, Preset* preset, wxString& p
     wxStaticText *preset_name_str = new wxStaticText(parent, wxID_ANY, preset_name);
     wxToolTip *   toolTip         = new wxToolTip(preset_name);
     preset_name_str->SetToolTip(toolTip);
-    sizer->Add(preset_name_str, 0, wxLEFT, 5);
+    sizer->Add(preset_name_str, 0, wxLEFT, parent->FromDIP(5));
     return sizer;
 }
 
@@ -320,7 +320,7 @@ static wxBoxSizer *create_checkbox(wxWindow *parent, std::string &compatible_pri
     sizer->Add(checkbox, 0, 0, 0);
     ptinter_compatible_filament_preset[checkbox] = std::make_pair(compatible_printer, preset);
     wxStaticText *preset_name_str = new wxStaticText(parent, wxID_ANY, wxString::FromUTF8(compatible_printer));
-    sizer->Add(preset_name_str, 0, wxLEFT, 5);
+    sizer->Add(preset_name_str, 0, wxLEFT, parent->FromDIP(5));
     return sizer;
 }
 
@@ -331,7 +331,7 @@ static wxBoxSizer *create_checkbox(wxWindow *parent, wxString &preset_name, std:
     sizer->Add(checkbox, 0, 0, 0);
     preset_checkbox.push_back(std::make_pair(checkbox, into_u8(preset_name)));
     wxStaticText *preset_name_str = new wxStaticText(parent, wxID_ANY, preset_name);
-    sizer->Add(preset_name_str, 0, wxLEFT, 5);
+    sizer->Add(preset_name_str, 0, wxLEFT, parent->FromDIP(5));
     return sizer;
 }
 
@@ -422,11 +422,11 @@ static wxBoxSizer *create_select_filament_preset_checkbox(wxWindow *            
     wxBoxSizer *horizontal_sizer = new wxBoxSizer(wxHORIZONTAL);
     wxBoxSizer *checkbox_sizer   = new wxBoxSizer(wxVERTICAL);
     ::CheckBox *checkbox         = new ::CheckBox(parent);
-    checkbox_sizer->Add(checkbox, 0, wxEXPAND | wxRIGHT, 5);
+    checkbox_sizer->Add(checkbox, 0, wxEXPAND | wxRIGHT, parent->FromDIP(5));
 
     wxBoxSizer *combobox_sizer = new wxBoxSizer(wxVERTICAL);
     wxStaticText *machine_name_str = new wxStaticText(parent, wxID_ANY, wxString::FromUTF8(compatible_printer));
-    ComboBox *    combobox        = new ComboBox(parent, wxID_ANY, wxEmptyString, wxDefaultPosition, wxSize(200, 24), 0, nullptr, wxCB_READONLY);
+    ComboBox *    combobox        = new ComboBox(parent, wxID_ANY, wxEmptyString, wxDefaultPosition, parent->FromDIP(wxSize(200, 24)), 0, nullptr, wxCB_READONLY);
     combobox->SetBackgroundColor(PRINTER_LIST_COLOUR);
     combobox->SetBorderColor(*wxWHITE);
     combobox->SetLabel(_L("Select filament preset"));
@@ -442,7 +442,7 @@ static wxBoxSizer *create_select_filament_preset_checkbox(wxWindow *            
         e.Skip();
     });
     combobox_sizer->Add(machine_name_str, 0, wxEXPAND, 0);
-    combobox_sizer->Add(combobox, 0, wxEXPAND | wxTOP, 5);
+    combobox_sizer->Add(combobox, 0, wxEXPAND | wxTOP, parent->FromDIP(5));
 
     wxArrayString choices;
     for (Preset *preset : presets) {
@@ -689,12 +689,12 @@ CreateFilamentPresetDialog::CreateFilamentPresetDialog(wxWindow *parent)
 
     wxStaticText *presets_information = new wxStaticText(this, wxID_ANY, _L("Add Filament Preset under this filament"));
     presets_information->SetFont(Label::Head_16);
-    m_main_sizer->Add(presets_information, 0, wxLEFT | wxRIGHT, FromDIP(15));
+    m_main_sizer->Add(presets_information, 0, wxLEFT | wxRIGHT, FromDIP(10));
 
     m_main_sizer->Add(create_item(FilamentOptionType::FILAMENT_PRESET), 0, wxEXPAND | wxLEFT | wxRIGHT | wxBOTTOM, FromDIP(5));
 
     m_filament_preset_text = new wxStaticText(this, wxID_ANY, _L("We could create the filament presets for your following printer:"), wxDefaultPosition, wxDefaultSize);
-    m_main_sizer->Add(m_filament_preset_text, 0, wxEXPAND | wxLEFT | wxRIGHT, FromDIP(15));
+    m_main_sizer->Add(m_filament_preset_text, 0, wxEXPAND | wxLEFT | wxRIGHT, FromDIP(10));
 
     m_scrolled_preset_panel = new wxScrolledWindow(this, wxID_ANY);
     m_scrolled_preset_panel->SetMaxSize(wxSize(-1, FromDIP(350)));
@@ -735,7 +735,34 @@ CreateFilamentPresetDialog::~CreateFilamentPresetDialog()
 }
 
 void CreateFilamentPresetDialog::on_dpi_changed(const wxRect &suggested_rect) {
+
+    std::function<void(wxWindow*, int)> WalkControls;
+    WalkControls = [&](wxWindow* parent, int depth) -> void {
+        if (!parent) return;
+
+        for (auto* child : parent->GetChildren()) {
+            if (!child)
+                continue;
+            else if (auto* btn = dynamic_cast<Button*>(child))
+                btn->Rescale();
+            else if (auto* chk = dynamic_cast<CheckBox*>(child))
+                chk->msw_rescale();
+            else if (auto* txt = dynamic_cast<TextInput*>(child))
+                txt->Rescale();
+            else if (auto* cmb = dynamic_cast<ComboBox*>(child))
+                cmb->Rescale();
+            else if (auto* spn = dynamic_cast<SpinInput*>(child))
+                spn->Rescale();
+            else if (auto* rbx = dynamic_cast<RadioBox*>(child))
+                rbx->Rescale();
+            WalkControls(child, depth + 1);
+        }
+    };
+    WalkControls(this, 0);
+
     Layout();
+    Fit();
+    Refresh();
 }
 
 bool CreateFilamentPresetDialog::is_check_box_selected()
@@ -769,9 +796,8 @@ wxBoxSizer *CreateFilamentPresetDialog::create_vendor_item()
     wxBoxSizer *horizontal_sizer = new wxBoxSizer(wxHORIZONTAL);
 
     wxBoxSizer *  optionSizer = new wxBoxSizer(wxVERTICAL);
-    wxStaticText *static_vendor_text = new wxStaticText(this, wxID_ANY, _L("Vendor"), wxDefaultPosition, wxDefaultSize);
+    wxStaticText *static_vendor_text = new wxStaticText(this, wxID_ANY, _L("Vendor"), wxDefaultPosition, OPTION_SIZE); // create with scaled size so wxWidgets handles scaled size
     optionSizer->Add(static_vendor_text, 0, wxEXPAND | wxALL, 0);
-    optionSizer->SetMinSize(OPTION_SIZE);
     horizontal_sizer->Add(optionSizer, 0, wxEXPAND | wxALL, FromDIP(5));
 
     // Convert all std::any to std::string
@@ -861,9 +887,8 @@ wxBoxSizer *CreateFilamentPresetDialog::create_type_item()
     wxBoxSizer *horizontal_sizer = new wxBoxSizer(wxHORIZONTAL);
 
     wxBoxSizer *  optionSizer        = new wxBoxSizer(wxVERTICAL);
-    wxStaticText *static_type_text = new wxStaticText(this, wxID_ANY, _L("Type"), wxDefaultPosition, wxDefaultSize);
+    wxStaticText *static_type_text = new wxStaticText(this, wxID_ANY, _L("Type"), wxDefaultPosition, OPTION_SIZE); // create with scaled size so wxWidgets handles scaled size
     optionSizer->Add(static_type_text, 0, wxEXPAND | wxALL, 0);
-    optionSizer->SetMinSize(OPTION_SIZE);
     horizontal_sizer->Add(optionSizer, 0, wxEXPAND | wxALL, FromDIP(5));
 
     wxArrayString filament_type;
@@ -907,9 +932,8 @@ wxBoxSizer *CreateFilamentPresetDialog::create_serial_item()
     wxBoxSizer *horizontal_sizer = new wxBoxSizer(wxHORIZONTAL);
 
     wxBoxSizer *  optionSizer        = new wxBoxSizer(wxVERTICAL);
-    wxStaticText *static_serial_text = new wxStaticText(this, wxID_ANY, _L("Serial"), wxDefaultPosition, wxDefaultSize);
+    wxStaticText *static_serial_text = new wxStaticText(this, wxID_ANY, _L("Serial"), wxDefaultPosition, OPTION_SIZE); // create with scaled size so wxWidgets handles scaled size
     optionSizer->Add(static_serial_text, 0, wxEXPAND | wxALL, 0);
-    optionSizer->SetMinSize(OPTION_SIZE);
     horizontal_sizer->Add(optionSizer, 0, wxEXPAND | wxALL, FromDIP(5));
 
     wxBoxSizer *comboBoxSizer = new wxBoxSizer(wxVERTICAL);
@@ -939,10 +963,9 @@ wxBoxSizer *CreateFilamentPresetDialog::create_filament_preset_item()
     wxBoxSizer *horizontal_sizer = new wxBoxSizer(wxHORIZONTAL);
 
     wxBoxSizer *  optionSizer        = new wxBoxSizer(wxVERTICAL);
-    wxStaticText *static_filament_preset_text = new wxStaticText(this, wxID_ANY, _L("Filament Preset"), wxDefaultPosition, wxDefaultSize);
+    wxStaticText *static_filament_preset_text = new wxStaticText(this, wxID_ANY, _L("Filament Preset"), wxDefaultPosition, OPTION_SIZE); // create with scaled size so wxWidgets handles scaled size
     optionSizer->Add(static_filament_preset_text, 0, wxEXPAND | wxALL, 0);
-    optionSizer->SetMinSize(OPTION_SIZE);
-    horizontal_sizer->Add(optionSizer, 0, wxEXPAND | wxALL, FromDIP(10));
+    horizontal_sizer->Add(optionSizer, 0, wxEXPAND | wxALL, FromDIP(5));
 
     wxBoxSizer *  comboBoxSizer  = new wxBoxSizer(wxVERTICAL);
     comboBoxSizer->Add(create_radio_item(m_create_type.base_filament, this, wxEmptyString, m_create_type_btns), 0, wxEXPAND | wxALL, 0);
@@ -1017,9 +1040,7 @@ wxBoxSizer *CreateFilamentPresetDialog::create_filament_preset_item()
 
     comboBoxSizer->Add(create_radio_item(m_create_type.base_filament_preset, this, wxEmptyString, m_create_type_btns), 0, wxEXPAND | wxTOP, FromDIP(10));
 
-    horizontal_sizer->Add(comboBoxSizer, 0, wxEXPAND | wxALL, FromDIP(10));
-
-    horizontal_sizer->Add(0, 0, 0, wxLEFT, FromDIP(30));
+    horizontal_sizer->Add(comboBoxSizer, 0, wxEXPAND | wxALL, FromDIP(5));
 
     return horizontal_sizer;
 
@@ -1631,7 +1652,35 @@ CreatePrinterPresetDialog::~CreatePrinterPresetDialog()
 }
 
 void CreatePrinterPresetDialog::on_dpi_changed(const wxRect &suggested_rect) {
-    Layout();
+    std::function<void(wxWindow*, int)> WalkControls;
+    WalkControls = [&](wxWindow* parent, int depth) -> void {
+        if (!parent) return;
+
+        for (auto* child : parent->GetChildren()) {
+            if (!child)
+                continue;
+            else if (auto* btn = dynamic_cast<Button*>(child))
+                btn->Rescale();
+            else if (auto* chk = dynamic_cast<CheckBox*>(child))
+                chk->msw_rescale();
+            else if (auto* txt = dynamic_cast<TextInput*>(child))
+                txt->Rescale();
+            else if (auto* cmb = dynamic_cast<ComboBox*>(child))
+                cmb->Rescale();
+            else if (auto* spn = dynamic_cast<SpinInput*>(child))
+                spn->Rescale();
+            else if (auto* rbx = dynamic_cast<RadioBox*>(child))
+                rbx->Rescale();
+            WalkControls(child, depth + 1);
+        }
+    };
+    WalkControls(this, 0);
+
+    // rebuild step icons and call Layout
+    if(m_page1->IsShown())
+        show_page1();
+    if(m_page2->IsShown())
+        show_page2();
 }
 
 wxBoxSizer *CreatePrinterPresetDialog::create_step_switch_item()
@@ -1704,9 +1753,8 @@ wxBoxSizer *CreatePrinterPresetDialog::create_type_item(wxWindow *parent)
     wxBoxSizer *horizontal_sizer = new wxBoxSizer(wxHORIZONTAL);
 
     wxBoxSizer *  optionSizer        = new wxBoxSizer(wxVERTICAL);
-    wxStaticText *static_serial_text = new wxStaticText(parent, wxID_ANY, _L("Create Type"), wxDefaultPosition, wxDefaultSize);
+    wxStaticText *static_serial_text = new wxStaticText(parent, wxID_ANY, _L("Create Type"), wxDefaultPosition, OPTION_SIZE); // create with scaled size so wxWidgets handles scaled size
     optionSizer->Add(static_serial_text, 0, wxEXPAND | wxALL, 0);
-    optionSizer->SetMinSize(OPTION_SIZE);
     horizontal_sizer->Add(optionSizer, 0, wxEXPAND | wxALL, FromDIP(10));
 
     wxBoxSizer *radioBoxSizer = new wxBoxSizer(wxVERTICAL);
@@ -1723,9 +1771,8 @@ wxBoxSizer *CreatePrinterPresetDialog::create_printer_item(wxWindow *parent)
     wxBoxSizer *horizontal_sizer = new wxBoxSizer(wxHORIZONTAL);
 
     wxBoxSizer *  optionSizer        = new wxBoxSizer(wxVERTICAL);
-    wxStaticText *static_vendor_text = new wxStaticText(parent, wxID_ANY, _L("Printer"), wxDefaultPosition, wxDefaultSize);
+    wxStaticText *static_vendor_text = new wxStaticText(parent, wxID_ANY, _L("Printer"), wxDefaultPosition, OPTION_SIZE); // create with scaled size so wxWidgets handles scaled size
     optionSizer->Add(static_vendor_text, 0, wxEXPAND | wxALL, 0);
-    optionSizer->SetMinSize(OPTION_SIZE);
     horizontal_sizer->Add(optionSizer, 0, wxEXPAND | wxALL, FromDIP(10));
 
     wxBoxSizer *vertical_sizer = new wxBoxSizer(wxVERTICAL);
@@ -1865,9 +1912,8 @@ wxBoxSizer *CreatePrinterPresetDialog::create_nozzle_diameter_item(wxWindow *par
     wxBoxSizer *horizontal_sizer = new wxBoxSizer(wxHORIZONTAL);
 
     wxBoxSizer *  optionSizer      = new wxBoxSizer(wxVERTICAL);
-    wxStaticText *static_type_text = new wxStaticText(parent, wxID_ANY, _L("Nozzle Diameter"), wxDefaultPosition, wxDefaultSize);
+    wxStaticText *static_type_text = new wxStaticText(parent, wxID_ANY, _L("Nozzle Diameter"), wxDefaultPosition, OPTION_SIZE); // create with scaled size so wxWidgets handles scaled size
     optionSizer->Add(static_type_text, 0, wxEXPAND | wxALL, 0);
-    optionSizer->SetMinSize(OPTION_SIZE);
     horizontal_sizer->Add(optionSizer, 0, wxEXPAND | wxALL, FromDIP(10));
 
     wxBoxSizer *vertical_sizer = new wxBoxSizer(wxVERTICAL);
@@ -1944,9 +1990,8 @@ wxBoxSizer *CreatePrinterPresetDialog::create_bed_shape_item(wxWindow *parent)
     wxBoxSizer *horizontal_sizer = new wxBoxSizer(wxHORIZONTAL);
 
     wxBoxSizer *  optionSizer      = new wxBoxSizer(wxVERTICAL);
-    wxStaticText *static_type_text = new wxStaticText(parent, wxID_ANY, _L("Bed Shape"), wxDefaultPosition, wxDefaultSize);
+    wxStaticText *static_type_text = new wxStaticText(parent, wxID_ANY, _L("Bed Shape"), wxDefaultPosition, OPTION_SIZE); // create with scaled size so wxWidgets handles scaled size
     optionSizer->Add(static_type_text, 0, wxEXPAND | wxALL, 0);
-    optionSizer->SetMinSize(OPTION_SIZE);
     horizontal_sizer->Add(optionSizer, 0, wxEXPAND | wxALL, FromDIP(10));
 
     wxBoxSizer *  bed_shape_sizer       = new wxBoxSizer(wxVERTICAL);
@@ -1962,9 +2007,8 @@ wxBoxSizer *CreatePrinterPresetDialog::create_bed_size_item(wxWindow *parent)
     wxBoxSizer *horizontal_sizer = new wxBoxSizer(wxHORIZONTAL);
 
     wxBoxSizer *  optionSizer      = new wxBoxSizer(wxVERTICAL);
-    wxStaticText *static_type_text = new wxStaticText(parent, wxID_ANY, _L("Printable Space"), wxDefaultPosition, wxDefaultSize);
+    wxStaticText *static_type_text = new wxStaticText(parent, wxID_ANY, _L("Printable Space"), wxDefaultPosition, OPTION_SIZE); // create with scaled size so wxWidgets handles scaled size
     optionSizer->Add(static_type_text, 0, wxEXPAND | wxALL, 0);
-    optionSizer->SetMinSize(OPTION_SIZE);
     horizontal_sizer->Add(optionSizer, 0, wxEXPAND | wxALL, FromDIP(10));
 
     wxBoxSizer *  length_sizer          = new wxBoxSizer(wxVERTICAL);
@@ -1995,9 +2039,8 @@ wxBoxSizer *CreatePrinterPresetDialog::create_origin_item(wxWindow *parent)
     wxBoxSizer *horizontal_sizer = new wxBoxSizer(wxHORIZONTAL);
 
     wxBoxSizer *  optionSizer      = new wxBoxSizer(wxVERTICAL);
-    wxStaticText *static_type_text = new wxStaticText(parent, wxID_ANY, _L("Origin"), wxDefaultPosition, wxDefaultSize);
+    wxStaticText *static_type_text = new wxStaticText(parent, wxID_ANY, _L("Origin"), wxDefaultPosition, OPTION_SIZE); // create with scaled size so wxWidgets handles scaled size
     optionSizer->Add(static_type_text, 0, wxEXPAND | wxALL, 0);
-    optionSizer->SetMinSize(OPTION_SIZE);
     horizontal_sizer->Add(optionSizer, 0, wxEXPAND | wxALL, FromDIP(10));
 
     wxBoxSizer *  length_sizer       = new wxBoxSizer(wxVERTICAL);
@@ -2027,9 +2070,8 @@ wxBoxSizer *CreatePrinterPresetDialog::create_hot_bed_stl_item(wxWindow *parent)
     wxBoxSizer *horizontal_sizer = new wxBoxSizer(wxHORIZONTAL);
 
     wxBoxSizer *  optionSizer      = new wxBoxSizer(wxVERTICAL);
-    wxStaticText *static_type_text = new wxStaticText(parent, wxID_ANY, _L("Hot Bed STL"), wxDefaultPosition, wxDefaultSize);
+    wxStaticText *static_type_text = new wxStaticText(parent, wxID_ANY, _L("Hot Bed STL"), wxDefaultPosition, OPTION_SIZE); // create with scaled size so wxWidgets handles scaled size
     optionSizer->Add(static_type_text, 0, wxEXPAND | wxALL, 0);
-    optionSizer->SetMinSize(OPTION_SIZE);
     horizontal_sizer->Add(optionSizer, 0, wxEXPAND | wxALL, FromDIP(10));
 
     wxBoxSizer *hot_bed_stl_sizer = new wxBoxSizer(wxVERTICAL);
@@ -2053,9 +2095,8 @@ wxBoxSizer *CreatePrinterPresetDialog::create_hot_bed_svg_item(wxWindow *parent)
     wxBoxSizer *horizontal_sizer = new wxBoxSizer(wxHORIZONTAL);
 
     wxBoxSizer *  optionSizer      = new wxBoxSizer(wxVERTICAL);
-    wxStaticText *static_type_text = new wxStaticText(parent, wxID_ANY, _L("Hot Bed SVG"), wxDefaultPosition, wxDefaultSize);
+    wxStaticText *static_type_text = new wxStaticText(parent, wxID_ANY, _L("Hot Bed SVG"), wxDefaultPosition, OPTION_SIZE); // create with scaled size so wxWidgets handles scaled size
     optionSizer->Add(static_type_text, 0, wxEXPAND | wxALL, 0);
-    optionSizer->SetMinSize(OPTION_SIZE);
     horizontal_sizer->Add(optionSizer, 0, wxEXPAND | wxALL, FromDIP(10));
 
     wxBoxSizer *hot_bed_stl_sizer = new wxBoxSizer(wxVERTICAL);
@@ -2079,9 +2120,8 @@ wxBoxSizer *CreatePrinterPresetDialog::create_max_print_height_item(wxWindow *pa
     wxBoxSizer *  horizontal_sizer  = new wxBoxSizer(wxHORIZONTAL);
 
     wxBoxSizer *  optionSizer      = new wxBoxSizer(wxVERTICAL);
-    wxStaticText *static_type_text = new wxStaticText(parent, wxID_ANY, _L("Max Print Height"), wxDefaultPosition, wxDefaultSize);
+    wxStaticText *static_type_text = new wxStaticText(parent, wxID_ANY, _L("Max Print Height"), wxDefaultPosition, OPTION_SIZE); // create with scaled size so wxWidgets handles scaled size
     optionSizer->Add(static_type_text, 0, wxEXPAND | wxALL, 0);
-    optionSizer->SetMinSize(OPTION_SIZE);
     horizontal_sizer->Add(optionSizer, 0, wxEXPAND | wxALL, FromDIP(10));
 
     wxBoxSizer *hight_input_sizer = new wxBoxSizer(wxVERTICAL);
@@ -2586,9 +2626,8 @@ wxBoxSizer *CreatePrinterPresetDialog::create_printer_preset_item(wxWindow *pare
     wxBoxSizer *horizontal_sizer = new wxBoxSizer(wxHORIZONTAL);
 
     wxBoxSizer *  optionSizer        = new wxBoxSizer(wxVERTICAL);
-    wxStaticText *static_vendor_text = new wxStaticText(parent, wxID_ANY, _L("Printer Preset"), wxDefaultPosition, wxDefaultSize);
+    wxStaticText *static_vendor_text = new wxStaticText(parent, wxID_ANY, _L("Printer Preset"), wxDefaultPosition, OPTION_SIZE); // create with scaled size so wxWidgets handles scaled size
     optionSizer->Add(static_vendor_text, 0, wxEXPAND | wxALL, 0);
-    optionSizer->SetMinSize(OPTION_SIZE);
     horizontal_sizer->Add(optionSizer, 0, wxEXPAND | wxALL, FromDIP(10));
 
     wxBoxSizer *  vertical_sizer = new wxBoxSizer(wxVERTICAL);
@@ -2633,9 +2672,8 @@ wxBoxSizer *CreatePrinterPresetDialog::create_presets_item(wxWindow *parent)
     wxBoxSizer *horizontal_sizer = new wxBoxSizer(wxHORIZONTAL);
 
     wxBoxSizer *  optionSizer        = new wxBoxSizer(wxVERTICAL);
-    wxStaticText *static_serial_text = new wxStaticText(parent, wxID_ANY, _L("Presets"), wxDefaultPosition, wxDefaultSize);
+    wxStaticText *static_serial_text = new wxStaticText(parent, wxID_ANY, _L("Presets"), wxDefaultPosition, OPTION_SIZE); // create with scaled size so wxWidgets handles scaled size
     optionSizer->Add(static_serial_text, 0, wxEXPAND | wxALL, 0);
-    optionSizer->SetMinSize(OPTION_SIZE);
     horizontal_sizer->Add(optionSizer, 0, wxEXPAND | wxALL, FromDIP(10));
 
     wxBoxSizer *radioBoxSizer = new wxBoxSizer(wxVERTICAL);
@@ -2950,8 +2988,8 @@ wxWindow *CreatePrinterPresetDialog::create_page2_dialog_buttons(wxWindow *paren
 
 void CreatePrinterPresetDialog::show_page1()
 {
-    m_step_1->SetBitmap(create_scaled_bitmap("step_1", nullptr, FromDIP(20)));
-    m_step_2->SetBitmap(create_scaled_bitmap("step_2_ready", nullptr, FromDIP(20)));
+    m_step_1->SetBitmap(create_scaled_bitmap("step_1", nullptr, 20)); // ORCA value already scales inside create_scaled_bitmap
+    m_step_2->SetBitmap(create_scaled_bitmap("step_2_ready", nullptr, 20));
     m_page1->Show();
     m_page2->Hide();
     Refresh();
@@ -2961,8 +2999,8 @@ void CreatePrinterPresetDialog::show_page1()
 
 void CreatePrinterPresetDialog::show_page2()
 {
-    m_step_1->SetBitmap(create_scaled_bitmap("step_is_ok", nullptr, FromDIP(20)));
-    m_step_2->SetBitmap(create_scaled_bitmap("step_2", nullptr, FromDIP(20)));
+    m_step_1->SetBitmap(create_scaled_bitmap("step_is_ok", nullptr, 20)); // ORCA value already scales inside create_scaled_bitmap
+    m_step_2->SetBitmap(create_scaled_bitmap("step_2", nullptr, 20));
     m_page2->Show();
     m_page1->Hide();
     Refresh();
@@ -3598,7 +3636,33 @@ ExportConfigsDialog::~ExportConfigsDialog()
 }
 
 void ExportConfigsDialog::on_dpi_changed(const wxRect &suggested_rect) {
+    std::function<void(wxWindow*, int)> WalkControls;
+    WalkControls = [&](wxWindow* parent, int depth) -> void {
+        if (!parent) return;
+
+        for (auto* child : parent->GetChildren()) {
+            if (!child)
+                continue;
+            else if (auto* btn = dynamic_cast<Button*>(child))
+                btn->Rescale();
+            else if (auto* chk = dynamic_cast<CheckBox*>(child))
+                chk->msw_rescale();
+            else if (auto* txt = dynamic_cast<TextInput*>(child))
+                txt->Rescale();
+            else if (auto* cmb = dynamic_cast<ComboBox*>(child))
+                cmb->Rescale();
+            else if (auto* spn = dynamic_cast<SpinInput*>(child))
+                spn->Rescale();
+            else if (auto* rbx = dynamic_cast<RadioBox*>(child))
+                rbx->Rescale();
+            WalkControls(child, depth + 1);
+        }
+    };
+    WalkControls(this, 0);
+
     Layout();
+    Fit();
+    Refresh();
 }
 
 void ExportConfigsDialog::show_export_result(const ExportCase &export_case)
@@ -3729,9 +3793,8 @@ wxBoxSizer *ExportConfigsDialog::create_export_config_item(wxWindow *parent)
     wxBoxSizer *horizontal_sizer = new wxBoxSizer(wxHORIZONTAL);
 
     wxBoxSizer *  optionSizer        = new wxBoxSizer(wxVERTICAL);
-    wxStaticText *static_serial_text = new wxStaticText(parent, wxID_ANY, _L("Presets"), wxDefaultPosition, wxDefaultSize);
+    wxStaticText *static_serial_text = new wxStaticText(parent, wxID_ANY, _L("Presets"), wxDefaultPosition, OPTION_SIZE); // create with scaled size so wxWidgets handles scaled size
     optionSizer->Add(static_serial_text, 0, wxEXPAND | wxALL, 0);
-    optionSizer->SetMinSize(OPTION_SIZE);
     horizontal_sizer->Add(optionSizer, 0, wxEXPAND | wxALL, FromDIP(10));
 
     wxBoxSizer *radioBoxSizer = new wxBoxSizer(wxVERTICAL);
@@ -4478,7 +4541,34 @@ EditFilamentPresetDialog::EditFilamentPresetDialog(wxWindow *parent, Filamentinf
 EditFilamentPresetDialog::~EditFilamentPresetDialog() {}
 
 void EditFilamentPresetDialog::on_dpi_changed(const wxRect &suggested_rect) {
+
+    std::function<void(wxWindow*, int)> WalkControls;
+    WalkControls = [&](wxWindow* parent, int depth) -> void {
+        if (!parent) return;
+
+        for (auto* child : parent->GetChildren()) {
+            if (!child)
+                continue;
+            else if (auto* btn = dynamic_cast<Button*>(child))
+                btn->Rescale();
+            else if (auto* chk = dynamic_cast<CheckBox*>(child))
+                chk->msw_rescale();
+            else if (auto* txt = dynamic_cast<TextInput*>(child))
+                txt->Rescale();
+            else if (auto* cmb = dynamic_cast<ComboBox*>(child))
+                cmb->Rescale();
+            else if (auto* spn = dynamic_cast<SpinInput*>(child))
+                spn->Rescale();
+            else if (auto* rbx = dynamic_cast<RadioBox*>(child))
+                rbx->Rescale();
+            WalkControls(child, depth + 1);
+        }
+    };
+    WalkControls(this, 0);
+
     Layout();
+    Fit();
+    Refresh();
 }
 
 bool EditFilamentPresetDialog::get_same_filament_id_presets(std::string filament_id)
@@ -4663,9 +4753,8 @@ wxBoxSizer *EditFilamentPresetDialog::create_filament_basic_info()
 
     //vendor
     wxBoxSizer *  vendor_key_sizer        = new wxBoxSizer(wxVERTICAL);
-    wxStaticText *static_vendor_text = new wxStaticText(this, wxID_ANY, _L("Vendor"), wxDefaultPosition, wxDefaultSize);
+    wxStaticText *static_vendor_text = new wxStaticText(this, wxID_ANY, _L("Vendor"), wxDefaultPosition, OPTION_SIZE); // create with scaled size so wxWidgets handles scaled size
     vendor_key_sizer->Add(static_vendor_text, 0, wxEXPAND | wxALL, 0);
-    vendor_key_sizer->SetMinSize(OPTION_SIZE);
     vendor_sizer->Add(vendor_key_sizer, 0, wxEXPAND | wxLEFT | wxBOTTOM, FromDIP(10));
 
     wxBoxSizer *vendor_value_sizer = new wxBoxSizer(wxVERTICAL);
@@ -4675,9 +4764,8 @@ wxBoxSizer *EditFilamentPresetDialog::create_filament_basic_info()
 
     //type
     wxBoxSizer *  type_key_sizer   = new wxBoxSizer(wxVERTICAL);
-    wxStaticText *static_type_text = new wxStaticText(this, wxID_ANY, _L("Type"), wxDefaultPosition, wxDefaultSize);
+    wxStaticText *static_type_text = new wxStaticText(this, wxID_ANY, _L("Type"), wxDefaultPosition, OPTION_SIZE); // create with scaled size so wxWidgets handles scaled size
     type_key_sizer->Add(static_type_text, 0, wxEXPAND | wxALL, 0);
-    type_key_sizer->SetMinSize(OPTION_SIZE);
     type_sizer->Add(type_key_sizer, 0, wxEXPAND | wxLEFT | wxBOTTOM, FromDIP(10));
 
     wxBoxSizer *  type_value_sizer = new wxBoxSizer(wxVERTICAL);
@@ -4687,9 +4775,8 @@ wxBoxSizer *EditFilamentPresetDialog::create_filament_basic_info()
 
     //serial
     wxBoxSizer *  serial_key_sizer   = new wxBoxSizer(wxVERTICAL);
-    wxStaticText *static_serial_text = new wxStaticText(this, wxID_ANY, _L("Serial"), wxDefaultPosition, wxDefaultSize);
+    wxStaticText *static_serial_text = new wxStaticText(this, wxID_ANY, _L("Serial"), wxDefaultPosition, OPTION_SIZE); // create with scaled size so wxWidgets handles scaled size
     serial_key_sizer->Add(static_serial_text, 0, wxEXPAND | wxALL, 0);
-    serial_key_sizer->SetMinSize(OPTION_SIZE);
     serial_sizer->Add(serial_key_sizer, 0, wxEXPAND | wxLEFT | wxBOTTOM, FromDIP(10));
 
     wxBoxSizer *  serial_value_sizer = new wxBoxSizer(wxVERTICAL);
@@ -4839,7 +4926,34 @@ CreatePresetForPrinterDialog::CreatePresetForPrinterDialog(wxWindow *parent, std
 CreatePresetForPrinterDialog::~CreatePresetForPrinterDialog() {}
 
 void CreatePresetForPrinterDialog::on_dpi_changed(const wxRect &suggested_rect) {
+
+    std::function<void(wxWindow*, int)> WalkControls;
+    WalkControls = [&](wxWindow* parent, int depth) -> void {
+        if (!parent) return;
+
+        for (auto* child : parent->GetChildren()) {
+            if (!child)
+                continue;
+            else if (auto* btn = dynamic_cast<Button*>(child))
+                btn->Rescale();
+            else if (auto* chk = dynamic_cast<CheckBox*>(child))
+                chk->msw_rescale();
+            else if (auto* txt = dynamic_cast<TextInput*>(child))
+                txt->Rescale();
+            else if (auto* cmb = dynamic_cast<ComboBox*>(child))
+                cmb->Rescale();
+            else if (auto* spn = dynamic_cast<SpinInput*>(child))
+                spn->Rescale();
+            else if (auto* rbx = dynamic_cast<RadioBox*>(child))
+                rbx->Rescale();
+            WalkControls(child, depth + 1);
+        }
+    };
+    WalkControls(this, 0);
+
     Layout();
+    Fit();
+    Refresh();
 }
 
 void CreatePresetForPrinterDialog::get_visible_printer_and_compatible_filament_presets()

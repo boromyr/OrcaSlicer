@@ -40,7 +40,7 @@ public:
 
     void Unselect();
 
-    virtual void Rescale();
+    virtual void Rescale() override;
 
     wxString GetItemText(unsigned int item) const;
     void SetItemText(unsigned int item, wxString const& value);

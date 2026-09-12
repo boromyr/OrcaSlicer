@@ -130,6 +130,11 @@ void StaticBox::ShowBadge(bool show)
     }
 }
 
+void StaticBox::Rescale()
+{
+    badge.msw_rescale();
+}
+
 void StaticBox::eraseEvent(wxEraseEvent& evt)
 {
     // for transparent background, but not work
