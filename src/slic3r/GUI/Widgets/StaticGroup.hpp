@@ -12,7 +12,7 @@ public:
     void ShowBadge(bool show);
 
 protected:
-    void Rescale() override;
+    virtual void Rescale();
 
 private:
     void DrawBorderAndLabel(wxDC& dc) override;
