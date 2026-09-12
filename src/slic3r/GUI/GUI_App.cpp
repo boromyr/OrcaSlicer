@@ -73,6 +73,7 @@
 #include <wx/dialog.h>
 #include <wx/textctrl.h>
 #include <wx/splash.h>
+#include <wx/dcgraph.h>
 #include <wx/weakref.h>
 #include <wx/fontutil.h>
 #include <wx/glcanvas.h>
@@ -341,6 +342,10 @@ public:
         m_progress_bg_color = StateColor::darkModeColorFor(wxColour("#DFDFDF"));
         m_progress_fg_color = StateColor::darkModeColorFor(wxColour("#009688"));
         m_progress_h = FromDIP(6);
+        m_progress_margin_x = FromDIP(32);
+        m_progress_margin_b = FromDIP(24);
+        m_corner_radius     = FromDIP(8);
+        apply_rounded_corners();
         bool dark_mode = m_fg_color != wxColour("#6B6A6A");
         wxSize sz  = m_window->GetClientSize();
         BitmapCache bmp_cache;
@@ -374,17 +379,56 @@ public:
         rc.height = dc.GetTextExtent(m_text_action).GetHeight();
         dc.DrawLabel(m_text_action, rc, wxALIGN_CENTER);
 
-        const wxRect progress_rc(0, c_sz.GetHeight() - m_progress_h, c_sz.GetWidth(), m_progress_h);
-                
-        dc.SetPen(*wxTRANSPARENT_PEN);
-        dc.SetBrush(wxBrush(m_progress_bg_color));
-        dc.DrawRectangle(progress_rc);
+        // Orca: inset the progress bar from the window edges and round its ends
+        // so it doesn't collide with the rounded splash corners.
+        const wxRect progress_rc(m_progress_margin_x, c_sz.GetHeight() - m_progress_margin_b - m_progress_h,
+                                 c_sz.GetWidth() - 2 * m_progress_margin_x, m_progress_h);
+        const double radius = m_progress_h * 0.5;
+
+        wxGCDC gdc(dc);
+        gdc.SetPen(*wxTRANSPARENT_PEN);
+        gdc.SetBrush(wxBrush(m_progress_bg_color));
+        gdc.DrawRoundedRectangle(progress_rc, radius);
 
         const int fill_width = progress_rc.GetWidth() * m_progress * 0.01;
-        if (fill_width > 0) {
-            dc.SetBrush(wxBrush(m_progress_fg_color));
-            dc.DrawRectangle(0, progress_rc.GetTop(), fill_width, m_progress_h);
+        if (fill_width >= m_progress_h) {
+            gdc.SetBrush(wxBrush(m_progress_fg_color));
+            gdc.DrawRoundedRectangle(progress_rc.GetLeft(), progress_rc.GetTop(), fill_width, m_progress_h, radius);
         }
+    }
+
+    // Orca: give the borderless splash the same rounded corners as a regular
+    // Windows 11 window. DWM does the rounding (and its antialiasing) itself
+    // where it is supported; everywhere else fall back to a clipping region
+    // built from a rounded rectangle mask.
+    void apply_rounded_corners()
+    {
+#ifdef __WXMSW__
+        if (HMODULE dwmapi = ::LoadLibraryW(L"dwmapi.dll")) {
+            using DwmSetWindowAttribute_t = HRESULT(WINAPI *)(HWND, DWORD, LPCVOID, DWORD);
+            const auto  set_attribute = reinterpret_cast<DwmSetWindowAttribute_t>(::GetProcAddress(dwmapi, "DwmSetWindowAttribute"));
+            const DWORD dwmwa_window_corner_preference = 33; // DWMWA_WINDOW_CORNER_PREFERENCE, Windows 11 and later
+            DWORD       preference                     = 2;  // DWMWCP_ROUND
+            const bool  rounded = set_attribute != nullptr &&
+                                  SUCCEEDED(set_attribute(GetHandle(), dwmwa_window_corner_preference, &preference, sizeof(preference)));
+            ::FreeLibrary(dwmapi);
+            if (rounded)
+                return;
+        }
+#endif // __WXMSW__
+        const wxSize sz = GetSize();
+        wxBitmap     mask(sz);
+        {
+            wxMemoryDC mask_dc(mask);
+            mask_dc.SetBackground(*wxBLACK_BRUSH);
+            mask_dc.Clear();
+            mask_dc.SetPen(*wxTRANSPARENT_PEN);
+            mask_dc.SetBrush(*wxWHITE_BRUSH);
+            mask_dc.DrawRoundedRectangle(0, 0, sz.GetWidth(), sz.GetHeight(), m_corner_radius);
+        }
+        const wxRegion region(mask, *wxBLACK);
+        if (region.IsOk())
+            SetShape(region);
     }
 
     void SetText(const wxString& text, int progress)
@@ -441,6 +485,9 @@ private:
     wxString m_text_action  = _L("Loading configuration") + dots;
     int      m_progress     = 0;
     int      m_progress_h   = 6;
+    int      m_progress_margin_x = 32;
+    int      m_progress_margin_b = 24;
+    int      m_corner_radius     = 8;
 
     wxFont m_font_version = Label::Body_16;
     wxFont m_font_action  = Label::Body_16;

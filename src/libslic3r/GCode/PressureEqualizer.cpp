@@ -31,6 +31,16 @@ static constexpr int max_look_back_limit = 128;
 // lines where some extruder pressure will remain (so we should equalize between these small travels)
 static constexpr long max_ignored_gap_between_extruding_segments = 3;
 
+// Orca: Bounds of the flow ramps applied around the Z seam of an external perimeter loop, see
+// smooth_external_perimeter_seams(). Both are relative to the loop itself, so that a ramp behaves the
+// same way on a 5mm boss and on a 500mm outline.
+// A single ramp may not consume more than this fraction of the extruded volume of its loop, so that a
+// short loop is not printed entirely at the ramp flow.
+static constexpr float seam_ramp_max_volume_fraction = 0.25f;
+// A ramp may not pull the flow at the seam below this fraction of the nominal flow there. Ramping all
+// the way down to a stop would print the seam at a crawl, trading the seam artefact for a worse blob.
+static constexpr float seam_ramp_min_rate_fraction = 0.25f;
+
 PressureEqualizer::PressureEqualizer(const Slic3r::GCodeConfig &config) : m_use_relative_e_distances(config.use_relative_e_distances.value)
 {
     // Preallocate some data, so that output_buffer.data() will return an empty string.
@@ -108,7 +118,12 @@ void PressureEqualizer::process_layer(const std::string &gcode)
         }
         assert(!this->opened_extrude_set_speed_block);
     }
-    
+
+    // Orca: Seed the flow ramps around the Z seams before the equalizer runs below. Both passes only
+    // ever lower the flow, so the ramps survive the equalizer and the equalizer keeps propagating them.
+    if (m_extrusion_rate_smoothing_external_perimeter_only)
+        this->smooth_external_perimeter_seams();
+
     // at this point, we have an entire layer of gcode lines loaded into m_gcode_lines
     // now we will split the mix of travels and extrudes into segments of continous extrusion and process those
     // We skip over large travels, and pretend small ones are part of a continous extrusion segment
@@ -169,6 +184,136 @@ long PressureEqualizer::advance_segment_beyond_small_gap(const long idx_orig)
     }
     // looped until end of layer and couldn't extend extrusion
      return idx_orig;
+}
+
+// Orca: Extrusion rate smoothing across the Z seam of the external perimeters.
+//
+// adjust_volumetric_rate() smooths a flow change between two neighbouring extrusions. An external
+// perimeter loop however is entered and left through a travel move, so its first and its last extrusion
+// have no neighbour at all: the flow jumps between zero and the nominal flow at a single point, which is
+// exactly where the Z seam is placed. Ramp the flow there as well, so the pressure in the nozzle is built
+// up and bled off over a short stretch of the loop instead of instantly.
+//
+// The ramps are laid out over extruded volume rather than over distance, which makes them independent of
+// how the loop happens to be split into G-code lines: whether the seam falls on a long straight wall, in
+// the middle of a curve made of hundreds of sub-millimeter segments, or right on a corner, the same amount
+// of material is used to reach the nominal flow.
+void PressureEqualizer::smooth_external_perimeter_seams()
+{
+    const size_t num_lines = m_gcode_lines.size();
+
+    // Comments, cooling markers and bare "G1 F..." speed commands neither move the head nor change the
+    // filament state, so they must not break a run of continuous extrusion.
+    auto breaks_extrusion = [](const GCodeLine &line) {
+        return line.type == GCODELINETYPE_RETRACT || line.type == GCODELINETYPE_UNRETRACT ||
+               line.type == GCODELINETYPE_TOOL_CHANGE || line.moving_xy() || line.moving_z();
+    };
+    // Ramp only what the "apply only on external features" option is allowed to touch, and only inside an
+    // ";_EXTRUDE_SET_SPEED" block, where the feed rate may be rewritten. A loop that starts or ends on an
+    // overhang is ramped as well, the overhang role is a part of the external perimeter loop there.
+    auto is_seam_line = [](const GCodeLine &line) {
+        return line.adjustable_flow && (line.extrusion_role == ExtrusionRole::erExternalPerimeter ||
+                                        line.extrusion_role == ExtrusionRole::erOverhangPerimeter);
+    };
+
+    std::vector<size_t> loop_lines;
+    for (size_t idx = 0; idx < num_lines;) {
+        if (!m_gcode_lines[idx].extruding()) {
+            ++ idx;
+            continue;
+        }
+
+        // Collect the run of uninterrupted extrusions starting here. For an external perimeter this run is
+        // exactly one loop: the seam is where the run is entered and left.
+        loop_lines.clear();
+        loop_lines.emplace_back(idx);
+        bool run_closed = false;
+        for (size_t line_idx = idx + 1; line_idx < num_lines; ++ line_idx) {
+            const GCodeLine &line = m_gcode_lines[line_idx];
+            if (line.extruding())
+                loop_lines.emplace_back(line_idx);
+            else if (breaks_extrusion(line)) {
+                run_closed = true;
+                break;
+            }
+        }
+        idx = loop_lines.back() + 1;
+
+        // How many lines at the start and at the end of the run may be ramped. Both cover the whole run
+        // unless it is joined to a neighbouring feature that must not be slowed down.
+        size_t leading = 0;
+        while (leading < loop_lines.size() && is_seam_line(m_gcode_lines[loop_lines[leading]]))
+            ++ leading;
+        size_t trailing = 0;
+        while (trailing < loop_lines.size() && is_seam_line(m_gcode_lines[loop_lines[loop_lines.size() - 1 - trailing]]))
+            ++ trailing;
+
+        // A run starting on the very first line of the buffer continues an extrusion of the previously
+        // flushed layer (spiral vase), and the last run of the buffer is still open. Neither is a seam;
+        // the open one is ramped once the next layer has been appended to the buffer.
+        if (leading > 0 && loop_lines.front() > 0)
+            this->apply_seam_flow_ramp(loop_lines, leading, true);
+        if (trailing > 0 && run_closed)
+            this->apply_seam_flow_ramp(loop_lines, trailing, false);
+    }
+}
+
+void PressureEqualizer::apply_seam_flow_ramp(const std::vector<size_t> &loop_lines, const size_t count, const bool ramp_up)
+{
+    assert(count > 0 && count <= loop_lines.size());
+    // Walk the loop away from the seam: forwards from the start of the loop, backwards from its end.
+    auto line_at = [&loop_lines, ramp_up](const size_t i) {
+        return loop_lines[ramp_up ? i : loop_lines.size() - 1 - i];
+    };
+
+    const GCodeLine          &seam_line    = m_gcode_lines[line_at(0)];
+    const ExtrusionRateSlope &slopes       = m_max_volumetric_extrusion_rate_slopes[size_t(seam_line.extrusion_role)];
+    const float               slope        = ramp_up ? slopes.positive : slopes.negative;
+    const float               nominal_rate = seam_line.volumetric_extrusion_rate;
+    if (slope <= 0.f || nominal_rate <= 0.f)
+        return;
+
+    float volume_budget = 0.f;
+    for (size_t i = 0; i < count; ++ i)
+        volume_budget += m_gcode_lines[line_at(i)].volume();
+    volume_budget *= seam_ramp_max_volume_fraction;
+
+    // Flow at the seam: as low as the slope can pull it within the volume budget, but never below a fixed
+    // fraction of the nominal flow there.
+    float rate = std::max(seam_ramp_min_rate_fraction * nominal_rate,
+                          std::sqrt(std::max(0.f, nominal_rate * nominal_rate - 2.f * slope * volume_budget)));
+
+    // Note that the ramp is always derived from volumetric_extrusion_rate, which the equalizer never
+    // modifies, and it only ever lowers the start / end rates. Running this over an already processed layer
+    // - which happens because a layer stays in the buffer until its successor has been parsed - is therefore
+    // idempotent.
+    float volume = 0.f;
+    for (size_t i = 0; i < count && volume < volume_budget; ++ i) {
+        GCodeLine &line = m_gcode_lines[line_at(i)];
+        if (rate >= line.volumetric_extrusion_rate)
+            break; // The ramp has caught up with the nominal flow, the rest of the loop is left alone.
+
+        float &rate_at_seam = ramp_up ? line.volumetric_extrusion_rate_start : line.volumetric_extrusion_rate_end;
+        float &rate_at_far  = ramp_up ? line.volumetric_extrusion_rate_end : line.volumetric_extrusion_rate_start;
+        bool   modified     = false;
+        if (rate < rate_at_seam) {
+            rate_at_seam = rate;
+            modified     = true;
+        }
+
+        const float line_volume = line.volume();
+        volume += line_volume;
+        rate    = std::sqrt(rate * rate + 2.f * slope * line_volume);
+        if (rate < rate_at_far) {
+            rate_at_far = rate;
+            modified    = true;
+        }
+
+        if (modified) {
+            (ramp_up ? line.max_volumetric_extrusion_rate_slope_positive : line.max_volumetric_extrusion_rate_slope_negative) = slope;
+            line.modified = true;
+        }
+    }
 }
 
 LayerResult PressureEqualizer::process_layer(LayerResult &&input)

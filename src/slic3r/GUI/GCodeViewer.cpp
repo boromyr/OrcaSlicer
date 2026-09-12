@@ -1175,6 +1175,8 @@ void GCodeViewer::load_as_gcode(const GCodeProcessorResult& gcode_result, const 
     // ORCA: darken the layers the preview layer slider is not scrubbed to
     m_viewer.set_dim_previous_layers(get_app_config()->get_bool("preview_dim_previous_layers"));
     m_viewer.set_dim_previous_layers_brightness(0.01f * std::stoi(get_app_config()->get("preview_dim_previous_layers_brightness")));
+    // ORCA: scale the colors of the current view type to the layer shown alone
+    m_viewer.set_rescale_colors_to_visible_layer(get_app_config()->get_bool("preview_rescale_colors_to_layer"));
 
     // avoid processing if called with the same gcode_result
     if (m_last_result_id == gcode_result.id && wxGetApp().is_editor()) {
@@ -1533,6 +1535,9 @@ void GCodeViewer::load_as_gcode(const GCodeProcessorResult& gcode_result, const 
 void GCodeViewer::load_as_preview(libvgcode::GCodeInputData&& data)
 {
     m_loaded_as_preview = true;
+
+    // ORCA: scale the colors of the current view type to the layer shown alone
+    m_viewer.set_rescale_colors_to_visible_layer(get_app_config()->get_bool("preview_rescale_colors_to_layer"));
 
     m_move_type_counts.fill(0);
     for (auto& move_type_times : m_move_type_times)
@@ -3910,6 +3915,19 @@ void GCodeViewer::render_legend(float &legend_height, int canvas_width, int canv
         }
     };
 
+    // ORCA: option row toggling the scaling of the colors to the layer shown alone, rendered like
+    // the other legend options
+    auto append_scale_to_layer_item = [this, append_item, predictable_icon_pos, &imgui](float label_offset) {
+        const bool enabled = m_viewer.is_rescale_colors_to_visible_layer();
+        append_item(EItemType::None, ColorRGBA::WHITE(), { { _u8L("Scale to shown layer"), label_offset } },
+            true, predictable_icon_pos, enabled, [this, &imgui, enabled]() {
+                m_viewer.set_rescale_colors_to_visible_layer(!enabled);
+                get_app_config()->set_bool("preview_rescale_colors_to_layer", !enabled);
+                imgui.set_requires_extra_frame();
+                wxGetApp().plater()->get_current_canvas3D()->set_as_dirty();
+            });
+    };
+
     const libvgcode::EViewType new_view_type = curr_view_type;
 
     // extrusion paths section -> items
@@ -3998,7 +4016,8 @@ void GCodeViewer::render_legend(float &legend_height, int canvas_width, int canv
         ImGui::Spacing();
         ImGui::Dummy({ window_padding, window_padding });
         ImGui::SameLine();
-        offsets = calculate_offsets({ { _u8L("Options"), { _u8L("Travel")}}, { _u8L("Display"), {""}} }, icon_size);
+        // ORCA: the per layer color scaling is offered next to the travel toggle
+        offsets = calculate_offsets({ { _u8L("Options"), { _u8L("Travel"), _u8L("Scale to shown layer")}}, { _u8L("Display"), {""}} }, icon_size);
         append_headers({ {_u8L("Options"), offsets[0] }, { _u8L("Display"), offsets[1]} });
         const bool travel_visible = m_viewer.is_option_visible(libvgcode::EOptionType::Travels);
         ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(0.0f, 3.0f));
@@ -4006,6 +4025,7 @@ void GCodeViewer::render_legend(float &legend_height, int canvas_width, int canv
             m_viewer.toggle_option_visibility(libvgcode::EOptionType::Travels);
             update_moves_slider();
             });
+        append_scale_to_layer_item(offsets[0]);
         ImGui::PopStyleVar(1);
         break;
     }
@@ -4014,7 +4034,8 @@ void GCodeViewer::render_legend(float &legend_height, int canvas_width, int canv
         ImGui::Spacing();
         ImGui::Dummy({ window_padding, window_padding });
         ImGui::SameLine();
-        offsets = calculate_offsets({ { _u8L("Options"), { _u8L("Travel")}}, { _u8L("Display"), {""}} }, icon_size);
+        // ORCA: the per layer color scaling is offered next to the travel toggle
+        offsets = calculate_offsets({ { _u8L("Options"), { _u8L("Travel"), _u8L("Scale to shown layer")}}, { _u8L("Display"), {""}} }, icon_size);
         append_headers({ {_u8L("Options"), offsets[0] }, { _u8L("Display"), offsets[1]} });
         const bool travel_visible = m_viewer.is_option_visible(libvgcode::EOptionType::Travels);
         ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(0.0f, 3.0f));
@@ -4022,6 +4043,7 @@ void GCodeViewer::render_legend(float &legend_height, int canvas_width, int canv
             m_viewer.toggle_option_visibility(libvgcode::EOptionType::Travels);
             update_moves_slider();
             });
+        append_scale_to_layer_item(offsets[0]);
         ImGui::PopStyleVar(1);
         break;
     }
@@ -4031,8 +4053,32 @@ void GCodeViewer::render_legend(float &legend_height, int canvas_width, int canv
     case libvgcode::EViewType::PressureAdvance:          { append_range(m_viewer.get_color_range(libvgcode::EViewType::PressureAdvance), 3); break; }
     case libvgcode::EViewType::LayerTimeLinear:          { append_range(m_viewer.get_color_range(libvgcode::EViewType::LayerTimeLinear), true); break; }
     case libvgcode::EViewType::LayerTimeLogarithmic:     { append_range(m_viewer.get_color_range(libvgcode::EViewType::LayerTimeLogarithmic), true); break; }
-    case libvgcode::EViewType::VolumetricFlowRate:       { append_range(m_viewer.get_color_range(libvgcode::EViewType::VolumetricFlowRate), 2); break; }
-    case libvgcode::EViewType::ActualVolumetricFlowRate: { append_range(m_viewer.get_color_range(libvgcode::EViewType::ActualVolumetricFlowRate), 2); break; }
+    case libvgcode::EViewType::VolumetricFlowRate:       {
+        append_range(m_viewer.get_color_range(libvgcode::EViewType::VolumetricFlowRate), 2);
+        // ORCA: the per layer color scaling is offered as a legend option, as for the speed views
+        ImGui::Spacing();
+        ImGui::Dummy({ window_padding, window_padding });
+        ImGui::SameLine();
+        offsets = calculate_offsets({ { _u8L("Options"), { _u8L("Scale to shown layer")}}, { _u8L("Display"), {""}} }, icon_size);
+        append_headers({ {_u8L("Options"), offsets[0] }, { _u8L("Display"), offsets[1]} });
+        ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(0.0f, 3.0f));
+        append_scale_to_layer_item(offsets[0]);
+        ImGui::PopStyleVar(1);
+        break;
+    }
+    case libvgcode::EViewType::ActualVolumetricFlowRate: {
+        append_range(m_viewer.get_color_range(libvgcode::EViewType::ActualVolumetricFlowRate), 2);
+        // ORCA: the per layer color scaling is offered as a legend option, as for the speed views
+        ImGui::Spacing();
+        ImGui::Dummy({ window_padding, window_padding });
+        ImGui::SameLine();
+        offsets = calculate_offsets({ { _u8L("Options"), { _u8L("Scale to shown layer")}}, { _u8L("Display"), {""}} }, icon_size);
+        append_headers({ {_u8L("Options"), offsets[0] }, { _u8L("Display"), offsets[1]} });
+        ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(0.0f, 3.0f));
+        append_scale_to_layer_item(offsets[0]);
+        ImGui::PopStyleVar(1);
+        break;
+    }
     case libvgcode::EViewType::Tool:
     {
         // shows only extruders actually used
@@ -4064,6 +4110,8 @@ void GCodeViewer::render_legend(float &legend_height, int canvas_width, int canv
         ImGui::SameLine();
         ::sprintf(buf, "%.2f", ps.total_cost);
         imgui.text(buf);
+        ImGui::SameLine();
+        imgui.text("€");
 
         ImGui::Dummy({window_padding, window_padding});
         ImGui::SameLine();
@@ -4211,6 +4259,8 @@ void GCodeViewer::render_legend(float &legend_height, int canvas_width, int canv
         ImGui::SameLine();
         ::sprintf(buf, "%.2f", ps.total_cost);
         imgui.text(buf);
+        ImGui::SameLine();
+        imgui.text("€");
 
         break;
     }
@@ -4672,6 +4722,8 @@ void GCodeViewer::render_legend(float &legend_height, int canvas_width, int canv
         ImGui::SameLine(max_len);
         ::sprintf(buf, "%.2f", ps.total_cost);
         imgui.text(buf);
+        ImGui::SameLine();
+        imgui.text("€");
     }
     //BBS: start gcode is mostly same with prepeare time
     if (time_mode.prepare_time != 0.0f) {

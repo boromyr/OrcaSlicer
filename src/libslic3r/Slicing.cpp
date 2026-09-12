@@ -546,8 +546,11 @@ void adjust_layer_height_profile(
             coordf_t h1 = layer_height_profile[i + 1];
             coordf_t z2 = layer_height_profile[i + 2];
             coordf_t h2 = layer_height_profile[i + 3];
-            current_layer_height = lerp(h1, h2, (z - z1) / (z2 - z1));
-			break;
+            if (z2 - z1 > EPSILON)
+                current_layer_height = lerp(h1, h2, (z - z1) / (z2 - z1));
+            else
+                current_layer_height = h1; // punti quasi-duplicati: prendi il primo
+            break;
         }
     }
 
@@ -664,6 +667,22 @@ void adjust_layer_height_profile(
     idx += 2;
     assert(idx > 0);
     size_t i_resampled_end = profile_new.size();
+    if (idx < layer_height_profile.size()) {
+        coordf_t z_border = layer_height_profile[idx];
+        coordf_t h_border = layer_height_profile[idx + 1];
+        if (idx >= 2) {
+            coordf_t z_prev = layer_height_profile[idx - 2];
+            coordf_t h_prev = layer_height_profile[idx - 1];
+            if (z_border > z_prev + EPSILON)
+                h_border = lerp(h_prev, h_border, (zz - z_prev) / (z_border - z_prev));
+        }
+        if (!profile_new.empty() && profile_new[profile_new.size() - 2] + EPSILON >= zz) {
+            profile_new.pop_back();
+            profile_new.pop_back();
+        }
+        profile_new.push_back(zz);
+        profile_new.push_back(h_border);
+    }
 	if (idx < layer_height_profile.size()) {
         assert(zz >= layer_height_profile[idx - 2]);
         assert(zz <= layer_height_profile[idx]);
@@ -673,6 +692,20 @@ void adjust_layer_height_profile(
 		profile_new.insert(profile_new.end(), layer_height_profile.end() - 2, layer_height_profile.end());
 	}
     layer_height_profile = std::move(profile_new);
+
+    for (size_t i = 2; i + 1 < layer_height_profile.size(); i += 2) {
+        if (layer_height_profile[i] - layer_height_profile[i - 2] < EPSILON) {
+            if (i - 2 < i_resampled_end) {
+                if (i_resampled_end >= 2)
+                    i_resampled_end -= 2;
+            }
+            if (i - 2 < i_resampled_start && i_resampled_start >= 2)
+                i_resampled_start -= 2;
+            layer_height_profile.erase(layer_height_profile.begin() + i - 2,
+                                       layer_height_profile.begin() + i);
+            i -= 2;
+        }
+    }
 
     if (action == LAYER_HEIGHT_EDIT_ACTION_SMOOTH) {
         if (i_resampled_start == 0)
@@ -779,18 +812,11 @@ bool adjust_layer_series_to_align_object_height(const SlicingParameters &slicing
         return remain_gap;
     };
 
-    while (gap > 0) {
+    int max_iterations = 20;
+    while (gap > EPSILON && max_iterations-- > 0) {
         int valid_size = get_valid_size();
-        if (valid_size == 0) {
-            // 5 layers can not adjust z within valid layer height
-            return false;
-        }
-
+        if (valid_size == 0) return false;
         gap = adjust_layer_height(gap);
-        if (is_approx(gap, 0.0)) {
-            // adjust succeed
-            break;
-        }
     }
 
     for (size_t i = 0; i < last_5_layers_heght.size(); ++i) {

@@ -1,3 +1,5 @@
+/* ORCA disable dark.css. makes css file unusable. tempopary fix until disabling all dark.css usage*/
+@media (invalid-condition) { 
 body
 {
 	background-color:#242428;
@@ -29,34 +31,6 @@ body
 
 
 
-
-/*----Left Menu Button----*/
-.BtnItem
-{
-	color:#B3B3B5;
-}
-
-.BtnItem:hover
-{
-	color: #efeff0;
-	background-color: var(--row-hover);
-}
-
-.BtnItem:hover .LeftIcon
-{
-	filter: brightness(300%);
-}
-
-.BtnItemSelected
-{
-	color: #efeff0;
-	background-color: var(--row-hover);
-}
-
-.BtnItemSelected .LeftIcon
-{
-	filter: brightness(300%);
-}
 
 /*-----Right Top MenuBtn-----*/
 .MenuItem:hover
@@ -129,7 +103,9 @@ body
     border: 1px solid rgba(129, 129, 131, 0.64);
 }
 
-/*--- Account rows and account menu ---*/
+} /* @media (invalid-condition) */
+
+/*--- Account rows and account menu (left sidebar; kept live, not part of the disabled block) ---*/
 :root
 {
 	--row-hover            : #223C3C;
@@ -148,4 +124,32 @@ body
 	--account-dot-off      : #5A5A62;
 	--account-dot-on       : #4CAF50;
 	--account-menu-shadow  : 0 10px 28px rgba(0, 0, 0, 0.45);
+}
+
+/*----Left Menu Button (part of the left sidebar; kept live, home.css itself sets no color here)----*/
+.BtnItem
+{
+	color:#B3B3B5;
+}
+
+.BtnItem:hover
+{
+	color: #efeff0;
+	background-color: var(--row-hover);
+}
+
+.BtnItem:hover .LeftIcon
+{
+	filter: brightness(300%);
+}
+
+.BtnItemSelected
+{
+	color: #efeff0;
+	background-color: var(--row-hover);
+}
+
+.BtnItemSelected .LeftIcon
+{
+	filter: brightness(300%);
 }

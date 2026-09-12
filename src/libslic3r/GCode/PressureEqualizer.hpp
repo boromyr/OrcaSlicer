@@ -65,8 +65,8 @@ private:
         float negative;
     };
     ExtrusionRateSlope              m_max_volumetric_extrusion_rate_slopes[size_t(ExtrusionRole::erCount)];
-    float                           m_max_volumetric_extrusion_rate_slope_positive;
-    float                           m_max_volumetric_extrusion_rate_slope_negative;
+    float                           m_max_volumetric_extrusion_rate_slope_positive = 0.f;
+    float                           m_max_volumetric_extrusion_rate_slope_negative = 0.f;
 
     // Configuration extracted from config.
     // Area of the crossestion of each filament. Necessary to calculate the volumetric flow rate.
@@ -85,7 +85,7 @@ private:
     float                           m_max_segment_length;
     
     // Apply ERS only on external perimeters and overhangs
-    bool                           m_extrusion_rate_smoothing_external_perimeter_only;
+    bool                           m_extrusion_rate_smoothing_external_perimeter_only = false;
 
     // Indicate if extrude set speed block was opened using the tag ";_EXTRUDE_SET_SPEED"
     // or not (not opened, or it was closed using the tag ";_EXTRUDE_END").
@@ -128,6 +128,10 @@ private:
 
         float       feedrate()      const { return pos_end[4]; }
         float       time()          const { return dist_xyz() / feedrate(); }
+        // Volume extruded by this line [mm^3]. The extrusion rate slope is a change of the volumetric
+        // flow over time, which integrates to rate^2 = rate_0^2 + 2 * slope * volume, so the volume is
+        // the natural parameter of a flow ramp.
+        float       volume()        const { return feedrate() > 0.f ? volumetric_extrusion_rate * dist_xyz() / feedrate() : 0.f; }
         float       time_inv()      const { return feedrate() / dist_xyz(); }
         float       volumetric_correction_avg() const { 
         // Orca: cap the correction to 0.05 - 1.00000001 to avoid zero feedrate
@@ -192,6 +196,16 @@ private:
     // Go back from the current circular_buffer_pos and lower the feedtrate to decrease the slope of the extrusion rate changes.
     // Then go forward and adjust the feedrate to decrease the slope of the extrusion rate changes.
     void adjust_volumetric_rate(size_t first_line_idx, size_t last_line_idx);
+
+    // Orca: Smooth the extrusion rate at the two ends of every external perimeter loop, which is where
+    // the Z seam is placed. adjust_volumetric_rate() only smooths a flow change between two neighbouring
+    // extrusions, and at the seam there is no neighbour to smooth against.
+    void smooth_external_perimeter_seams();
+    // Ramp the volumetric flow of one external perimeter loop between the seam and the nominal flow.
+    // loop_lines holds the indices of the extruding G-code lines of the loop; the first count of them are
+    // ramped up from the seam at the start of the loop, or the last count of them are ramped down towards
+    // the seam at its end.
+    void apply_seam_flow_ramp(const std::vector<size_t> &loop_lines, size_t count, bool ramp_up);
 
     // Push the text to the end of the output_buffer.
     inline void push_to_output(GCodeG1Formatter &formatter);

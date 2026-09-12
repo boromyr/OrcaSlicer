@@ -682,6 +682,12 @@ private:
     //double                              m_volumetric_speed;
     // Support for the extrusion role markers. Which marker is active?
     ExtrusionRole                       m_last_extrusion_role;
+    // Orca: nozzle temperature currently forced by bridge_temperature/overhang_temperature
+    // (0 when none), the temperature last asked for (so the next transition knows the ramp
+    // direction and size) and the filament it was all emitted for.
+    int                                 m_role_temperature_override{ 0 };
+    int                                 m_role_temperature_current{ 0 };
+    unsigned int                        m_role_temperature_filament{ 0 };
     // To ignore gapfill role for retract_lift_enforce
     ExtrusionRole                       m_last_notgapfill_extrusion_role;
     // Support for G-Code Processor
@@ -770,6 +776,16 @@ private:
 
     double      calc_max_volumetric_speed(const double layer_height, const double line_width, const std::string co_str);
     std::string _extrude(const ExtrusionPath &path, std::string description = "", double speed = -1);
+
+    // Orca: nozzle temperature override for bridges and overhangs (filament settings).
+    // Which per-feature override a role asks for, if any.
+    enum class FeatureTemp : uint8_t { None, Overhang, Bridge };
+    FeatureTemp     role_temperature_source(ExtrusionRole role) const;
+    // 0 when the role keeps the regular nozzle temperature.
+    int             role_temperature(ExtrusionRole role) const;
+    // Emits a temperature command only when the override state changes, tagged for the
+    // post-processor, which decides where it lands and whether it is worth keeping.
+    std::string     apply_role_temperature(ExtrusionRole role);
     bool _needSAFC(const ExtrusionPath &path);
     void print_machine_envelope(GCodeOutputStream& file, Print& print);
     void _print_first_layer_bed_temperature(GCodeOutputStream &file, Print &print, const std::string &gcode, unsigned int first_printing_extruder_id, bool wait);

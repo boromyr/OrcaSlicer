@@ -13,7 +13,8 @@
  * @param x The x-coordinates of the data points.
  * @param y The y-coordinates of the data points.
  */
-PchipInterpolatorHelper::PchipInterpolatorHelper(const std::vector<double>& x, const std::vector<double>& y) {
+PchipInterpolatorHelper::PchipInterpolatorHelper(const std::vector<double>& x, const std::vector<double>& y, bool extrapolate)
+    : m_extrapolate(extrapolate) {
     setData(x, y);
 }
 
@@ -80,8 +81,14 @@ void PchipInterpolatorHelper::computePCHIP() {
  * @brief Interpolates the value at a given point.
  */
 double PchipInterpolatorHelper::interpolate(double xi) const {
-    if (xi <= x_.front()) return y_.front();
-    if (xi >= x_.back()) return y_.back();
+    if (xi <= x_.front()) {
+        if (m_extrapolate) return y_.front() + d_.front() * (xi - x_.front());
+        return y_.front();
+    }
+    if (xi >= x_.back()) {
+        if (m_extrapolate) return y_.back() + d_.back() * (xi - x_.back());
+        return y_.back();
+    }
 
     auto it = std::lower_bound(x_.begin(), x_.end(), xi);
     size_t i = std::distance(x_.begin(), it) - 1;

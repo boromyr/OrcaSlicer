@@ -94,6 +94,11 @@ public:
     float get_dim_previous_layers_brightness() const { return m_settings.dim_previous_layers_brightness; }
     void set_dim_previous_layers_brightness(float value);
 
+    // ORCA: scale the color ranges of the current view type to the values found in the layer
+    // currently shown alone, instead of the values found in the whole print
+    bool is_rescale_colors_to_visible_layer() const { return m_settings.rescale_colors_to_visible_layer; }
+    void set_rescale_colors_to_visible_layer(bool value);
+
     bool is_spiral_vase_mode() const { return m_settings.spiral_vase_mode; }
 
     std::vector<ETimeMode> get_time_modes() const;
@@ -292,6 +297,9 @@ private:
     // Variables used for toolpaths coloring
     //
     std::optional<Settings> m_settings_used_for_ranges;
+    // ORCA: layers the cached color ranges were computed from, to detect when scrubbing the
+    // layer slider invalidates them while rescaling to the visible layer is enabled
+    std::optional<Interval> m_layers_range_used_for_ranges;
     ColorRange m_height_range;
     ColorRange m_width_range;
     ColorRange m_speed_range;
@@ -471,6 +479,8 @@ private:
 
     void update_view_full_range();
     void update_color_ranges();
+    // ORCA: layers the color ranges have to be restricted to, or nullopt to use the whole print
+    std::optional<Interval> color_ranges_layers_restriction() const;
     void update_heights_widths();
     void render_segments(const Mat4x4& view_matrix, const Mat4x4& projection_matrix, const Vec3& camera_position);
     void render_options(const Mat4x4& view_matrix, const Mat4x4& projection_matrix);

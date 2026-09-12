@@ -92,6 +92,16 @@ void Viewer::set_dim_previous_layers_brightness(float value)
     m_impl->set_dim_previous_layers_brightness(value);
 }
 
+bool Viewer::is_rescale_colors_to_visible_layer() const
+{
+    return m_impl->is_rescale_colors_to_visible_layer();
+}
+
+void Viewer::set_rescale_colors_to_visible_layer(bool value)
+{
+    m_impl->set_rescale_colors_to_visible_layer(value);
+}
+
 bool Viewer::is_option_visible(EOptionType type) const
 {
     return m_impl->is_option_visible(type);

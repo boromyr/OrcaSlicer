@@ -457,6 +457,8 @@ set(SLIC3R_GUI_SOURCES
     GUI/PublishSettingsDialog.hpp
     GUI/PurgeModeDialog.cpp
     GUI/PurgeModeDialog.hpp
+    GUI/QuickSettingsBar.cpp
+    GUI/QuickSettingsBar.hpp
     GUI/RammingChart.cpp
     GUI/RammingChart.hpp
     GUI/RecenterDialog.cpp
@@ -490,6 +492,8 @@ set(SLIC3R_GUI_SOURCES
     GUI/SendSystemInfoDialog.hpp
     GUI/SendToPrinter.cpp
     GUI/SendToPrinter.hpp
+    GUI/ShellThumbnail.cpp
+    GUI/ShellThumbnail.hpp
     GUI/SingleChoiceDialog.cpp
     GUI/SingleChoiceDialog.hpp
     GUI/SliceInfoPanel.cpp
@@ -844,7 +848,9 @@ target_include_directories(libslic3r_gui PRIVATE Utils ${CMAKE_CURRENT_BINARY_DI
 
 if (WIN32)
     target_include_directories(libslic3r_gui SYSTEM PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/../../deps/WebView2/include)
-    target_link_libraries(libslic3r_gui Advapi32)
+    # Shell32/windowscodecs: recent file thumbnails come from the registered shell handlers
+    # (GUI/ShellThumbnail.cpp) and are re-encoded to PNG with WIC.
+    target_link_libraries(libslic3r_gui Advapi32 Shell32 windowscodecs Gdi32)
 endif()
 
 source_group(TREE ${CMAKE_CURRENT_SOURCE_DIR} FILES ${SLIC3R_GUI_SOURCES})
