@@ -1829,7 +1829,7 @@ void GLCanvas3D::reset_select_plate_toolbar_selection() {
 
 void GLCanvas3D::force_toolbar_render_update()
 {
-    m_sel_plate_toolbar.is_render_finish = false;
+    wxGetApp().plater()->mark_plate_toolbar_image_dirty();
     set_as_dirty();
 }
 

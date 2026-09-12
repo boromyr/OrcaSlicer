@@ -16199,7 +16199,7 @@ void Plater::calib_progressive_flowratio(const Calib_Params& params) {
     wxString calib_name = L"Progressive Flow Ratio Calibration Test";
     if (new_project(false, false, calib_name) == wxID_CANCEL)
         return;
-    wxGetApp().mainframe->select_tab(size_t(MainFrame::tp3DEditor));
+    wxGetApp().mainframe->select_tab(TAB_ID_PREPARE);
     
     auto print_config    = &wxGetApp().preset_bundle->prints.get_edited_preset().config;
     auto printer_config  = &wxGetApp().preset_bundle->printers.get_edited_preset().config;
