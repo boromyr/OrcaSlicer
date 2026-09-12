@@ -1090,7 +1090,6 @@ wxDEFINE_EVENT(EVT_GLCANVAS_ORIENT_PARTPLATE, SimpleEvent);
 wxDEFINE_EVENT(EVT_GLCANVAS_SELECT_CURR_PLATE_ALL, SimpleEvent);
 wxDEFINE_EVENT(EVT_GLCANVAS_SELECT_ALL, SimpleEvent);
 wxDEFINE_EVENT(EVT_GLCANVAS_QUESTION_MARK, SimpleEvent);
-wxDEFINE_EVENT(EVT_GLCANVAS_OPEN_SPEED_DIAL, SimpleEvent);
 wxDEFINE_EVENT(EVT_GLCANVAS_INCREASE_INSTANCES, Event<int>);
 wxDEFINE_EVENT(EVT_GLCANVAS_INSTANCE_MOVED, SimpleEvent);
 wxDEFINE_EVENT(EVT_GLCANVAS_INSTANCE_ROTATED, SimpleEvent);
@@ -3555,10 +3554,9 @@ void GLCanvas3D::on_char(wxKeyEvent& evt)
         }
         case '?': { post_event(SimpleEvent(EVT_GLCANVAS_QUESTION_MARK)); break; }
         case ' ': { // same key code as WXK_SPACE
-            if (m_canvas_type == ECanvasType::CanvasView3D)
-                post_event(SimpleEvent(EVT_GLCANVAS_OPEN_SPEED_DIAL));
-            // Toggle legend fold when the GCode preview legend is visible (no modifier keys)
-            else if (!evt.HasAnyModifiers() && m_gcode_viewer.is_legend_shown()) {
+            // Toggle legend fold when the GCode preview legend is visible (no modifier keys).
+            // Opening the speed dial itself is handled at MainFrame level so it works from any page.
+            if (!evt.HasAnyModifiers() && m_gcode_viewer.is_legend_shown()) {
                 m_gcode_viewer.toggle_legend_fold();
                 m_dirty = true;
                 request_extra_frame();
