@@ -45,6 +45,10 @@ public:
     // ORCA: a companion widget shown right after the tab buttons (before any side_tools), e.g.
     // an overflow indicator. Pass nullptr to remove it; ownership stays with the caller.
     void SetOverflowButton(wxWindow* button);
+    // ORCA: widget filling the empty space after the tab buttons, e.g. the quick settings.
+    // Pass nullptr to remove it; ownership stays with the caller.
+    void SetTrailingControls(wxWindow* window);
+    wxWindow* GetTrailingControls() const { return m_trailing_controls; }
 
 private:
     wxFlexGridSizer*                m_buttons_sizer;
@@ -57,6 +61,7 @@ private:
     std::vector<wxString>           m_pageLabels; // ORCA
     std::vector<std::string>        m_pageIcons;  // ORCA: resource icon name per page, plugin pages empty
     wxWindow*                       m_overflow_button{nullptr}; // ORCA
+    wxWindow*                       m_trailing_controls{nullptr}; // ORCA
 };
 
 class Notebook : public wxBookCtrlBase
@@ -297,6 +302,7 @@ public:
 
     ButtonsListCtrl* GetBtnsListCtrl() const { return static_cast<ButtonsListCtrl*>(m_bookctrl); }
     void SetOverflowButton(wxWindow* button) { GetBtnsListCtrl()->SetOverflowButton(button); }
+    void SetTrailingControls(wxWindow* window) { GetBtnsListCtrl()->SetTrailingControls(window); }
 
     // Insertion index just past the first of `ids` that is present, or the end of the bar
     // if none is — lets call sites state tab order as "after X" instead of re-deriving it.

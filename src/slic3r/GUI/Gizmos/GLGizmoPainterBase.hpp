@@ -241,7 +241,7 @@ protected:
     float m_cursor_height = 0.2f;
     static constexpr float CursorRadiusMin  = 0.4f; // cannot be zero
     static constexpr float CursorRadiusMax  = 8.f;
-    static constexpr float CursorRadiusStep = 0.2f;
+    static constexpr float CursorRadiusStep = 0.1f;
     static constexpr float CursorHeightMin = 0.1f; // cannot be zero
     static constexpr float CursorHeightMax = 8.f;
     static constexpr float CursorHeightStep = 0.2f;

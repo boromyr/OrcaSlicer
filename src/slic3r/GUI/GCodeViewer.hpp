@@ -338,12 +338,17 @@ public:
     // ORCA: brightness of those darkened layers, 1.0 = unchanged, 0.0 = black
     void set_dim_previous_layers_brightness(float value) { m_viewer.set_dim_previous_layers_brightness(value); }
     float get_dim_previous_layers_brightness() const { return m_viewer.get_dim_previous_layers_brightness(); }
+    // ORCA: scale the colors of the current view type to the layer shown alone
+    void set_rescale_colors_to_visible_layer(bool value) { m_viewer.set_rescale_colors_to_visible_layer(value); }
+    bool is_rescale_colors_to_visible_layer() const { return m_viewer.is_rescale_colors_to_visible_layer(); }
 
     void set_layers_z_range(const std::array<unsigned int, 2>& layers_z_range);
 
     bool is_legend_shown() const { return m_legend_visible && m_legend_enabled; }
     void show_legend(bool show) { m_legend_visible = show; }
     void enable_legend(bool enable) { m_legend_enabled = enable; }
+    bool is_legend_folded() const { return m_fold; }
+    void toggle_legend_fold() { m_fold = !m_fold; }
     float get_legend_height() { return m_legend_height; }
 
     void export_toolpaths_to_obj(const char* filename) const;

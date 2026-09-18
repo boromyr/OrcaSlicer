@@ -3640,6 +3640,13 @@ void GLCanvas3D::on_char(wxKeyEvent& evt)
         //}
         case 'v':
         case 'V': { post_event(SimpleEvent(EVT_GLCANVAS_PRINTABLE)); break; }
+        case 'x':
+        case 'X': {
+            // Center the selection on the plate
+            if (m_canvas_type == CanvasView3D && !m_selection.is_empty())
+                wxGetApp().plater()->center_selection();
+            break;
+        }
         default:  { evt.Skip(); break; }
         }
     }
@@ -4045,7 +4052,7 @@ void GLCanvas3D::on_mouse_wheel(wxMouseEvent& evt)
             // A volume is selected. Test, whether hovering over a layer thickness bar.
             if (m_layers_editing.bar_rect_contains(*this, (float)evt.GetX(), (float)evt.GetY())) {
                 // Adjust the width of the selection.
-                m_layers_editing.band_width = std::max(std::min(m_layers_editing.band_width * (1.0f + 0.1f * (float)evt.GetWheelRotation() / (float)evt.GetWheelDelta()), 10.0f), 1.5f);
+                m_layers_editing.band_width = std::max(std::min(m_layers_editing.band_width * (1.0f + 0.1f * (float)evt.GetWheelRotation() / (float)evt.GetWheelDelta()), 10.0f), 0.5f);
                 if (m_canvas != nullptr)
                     m_canvas->Refresh();
 
@@ -4274,6 +4281,21 @@ void GLCanvas3D::on_mouse(wxMouseEvent& evt)
 #endif
 
     Point pos(evt.GetX(), evt.GetY());
+
+#ifdef __WXMSW__
+    // is_camera_rotate()/is_camera_pan() below can grab the mouse capture on a Moving event, i.e.
+    // with no mouse button pressed, so no button up event is guaranteed to ever release it again.
+    // Release it here, ahead of the early returns further down (ImGui and the toolbars), as soon as
+    // nothing that needs the capture is active any more: every other holder of the capture (gizmo
+    // grabber, object move, rectangle selection, layer editing, ImGui drag) requires a button down.
+    // Restrict this to Moving() events (motion with no button held): on a button *up* event
+    // LeftIsDown()/etc. already read false, so without this the cleanup would wipe
+    // m_mouse.drag.move_volume_idx and m_mouse.dragging before the LeftUp handler below can
+    // commit the drag via do_move(), losing the object move and its re-slice invalidation.
+    if (evt.Moving() && has_mouse_capture() && !evt.LeftIsDown() && !evt.MiddleIsDown() && !evt.RightIsDown() &&
+        (::GetAsyncKeyState(VK_LMENU) & 0x8000) == 0 && (::GetAsyncKeyState(VK_RCONTROL) & 0x8000) == 0)
+        mouse_up_cleanup();
+#endif /* __WXMSW__ */
 
     ImGuiWrapper* imgui = wxGetApp().imgui();
     if (m_tooltip.is_in_imgui() && evt.LeftUp())

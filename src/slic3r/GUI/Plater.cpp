@@ -3760,6 +3760,10 @@ void Sidebar::update_presets(Preset::Type preset_type)
     // Synchronize config.ini with the current selections.
     wxGetApp().preset_bundle->export_selections(*wxGetApp().app_config);
 
+    // ORCA the tab bar shows a few of these settings as well
+    if (wxGetApp().mainframe != nullptr)
+        wxGetApp().mainframe->update_quick_settings();
+
     BOOST_LOG_TRIVIAL(debug) << __FUNCTION__ << boost::format(": exit.");
 }
 
@@ -13116,6 +13120,8 @@ void Plater::priv::on_plate_selected(SimpleEvent&)
 {
     BOOST_LOG_TRIVIAL(debug) << __FUNCTION__ << ":received plate selected event\n" ;
     sidebar->obj_list()->on_plate_selected(partplate_list.get_curr_plate_index());
+    // ORCA plates can carry their own bed type, which the tab bar shows the temperature of
+    main_frame->update_quick_settings();
 }
 
 void Plater::priv::on_action_request_model_id(wxCommandEvent& evt)
@@ -20213,6 +20219,9 @@ void Plater::on_config_change(const DynamicPrintConfig &config)
         update_title_dirty_status();
         p->schedule_auto_reslice_if_needed();
     }
+
+    // ORCA the bed temperature shown in the tab bar depends on the plate type
+    p->main_frame->update_quick_settings();
 }
 
 void Plater::update_flush_volume_matrix(size_t old_nozzle_size, size_t new_nozzle_size)
@@ -21632,6 +21641,8 @@ void Plater::open_platesettings_dialog(wxCommandEvent& evt) {
         wxGetApp().plater()->config_change_notification(plate_config, std::string("print_sequence"));
         update();
         wxGetApp().obj_list()->update_selections();
+        // ORCA the bed temperature shown in the tab bar follows the plate type
+        wxGetApp().mainframe->update_quick_settings();
         });
     dlg.set_plate_name(from_u8(curr_plate->get_plate_name()));
 
