@@ -130,7 +130,7 @@ PA_Calibration_Dlg::PA_Calibration_Dlg(wxWindow* parent, wxWindowID id, Plater* 
     wxString end_pa_str      = _L("End PA: ");
     wxString PA_step_str     = _L("PA step: ");
     wxString sp_accel_str    = _L("Accelerations: ");
-    wxString sp_speed_str    = _L("Speeds: ");
+    wxString sp_speed_str    = _L(u8"Flow (mm³/s): ");
     wxString cb_print_no_str = _L("Print numbers");
 
     int text_max = GetTextMax(this, std::vector<wxString>{start_pa_str, end_pa_str, PA_step_str, sp_accel_str, sp_speed_str, cb_print_no_str});
@@ -198,7 +198,8 @@ PA_Calibration_Dlg::PA_Calibration_Dlg(wxWindow* parent, wxWindowID id, Plater* 
     auto sp_speed_sizer = new wxBoxSizer(wxHORIZONTAL);
     auto sp_speed_text = new wxStaticText(this, wxID_ANY, sp_speed_str, wxDefaultPosition, st_size, wxALIGN_LEFT);
     m_tiBMSpeeds = new TextInput(this, "", "", "", wxDefaultPosition, ti_size, wxTE_PROCESS_ENTER);
-    m_tiBMSpeeds->SetToolTip(_L("Comma-separated list of printing speeds"));
+    m_tiBMSpeeds->SetToolTip(_L("Comma-separated list of volumetric flow rates (mm³/s). Each value is converted to a "
+                               "print speed based on the test's line width, layer height and flow ratio."));
     m_tiBMSpeeds->GetTextCtrl()->SetValidator(val_list_validator);
     sp_speed_sizer->Add(sp_speed_text, 0, wxALL | wxALIGN_CENTER_VERTICAL, FromDIP(2));
     sp_speed_sizer->Add(m_tiBMSpeeds , 0, wxALL | wxALIGN_CENTER_VERTICAL, FromDIP(2));
@@ -309,20 +310,8 @@ void PA_Calibration_Dlg::on_start(wxCommandEvent& event) {
 
     m_params.print_numbers = m_cbPrintNum->GetValue();
     ParseStringValues(m_tiBMAccels->GetTextCtrl()->GetValue().ToStdString(), m_params.accelerations);
+    // Orca: these are volumetric flow rates (mm³/s); converted to speeds in Plater::_calib_pa_pattern
     ParseStringValues(m_tiBMSpeeds->GetTextCtrl()->GetValue().ToStdString(), m_params.speeds);
-
-    if (!m_params.accelerations.empty() && !m_params.speeds.empty()) {
-        // Guard against swapped inputs by ensuring acceleration magnitudes exceed speeds.
-        const double min_accel = *std::min_element(m_params.accelerations.begin(), m_params.accelerations.end());
-        const double max_speed = *std::max_element(m_params.speeds.begin(), m_params.speeds.end());
-        if (min_accel <= max_speed) {
-            MessageDialog msg_dlg(nullptr,
-                _L("Acceleration values must be greater than speed values.\nPlease verify the inputs."),
-                wxEmptyString, wxICON_WARNING | wxOK);
-            msg_dlg.ShowModal();
-            return;
-        }
-    }
 
     m_plater->calib_pa(m_params);
     EndModal(wxID_OK);

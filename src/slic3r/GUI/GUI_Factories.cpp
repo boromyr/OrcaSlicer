@@ -145,6 +145,7 @@ std::map<std::string, std::vector<SimpleSettingData>> SettingsFactory::PART_CATE
        {"infill_combination_max_layer_height", "", 1},
        {"infill_wall_overlap", "", 1},
        {"top_bottom_infill_wall_overlap", "", 1},
+       {"bridge_infill_wall_overlap", "", 1},
        {"solid_infill_direction", "", 1},
        {"top_layer_direction", "", 1},
        {"bottom_layer_direction", "", 1},
@@ -2110,7 +2111,8 @@ void MenuFactory::append_menu_item_smooth_mesh(wxMenu *menu)
 
 void MenuFactory::append_menu_item_center(wxMenu* menu)
 {
-     append_menu_item(menu, wxID_ANY, _L("Center") , "",
+    const std::string accel = wxGetApp().shortcuts().accelerator(Shortcut::CenterSelection);
+    append_menu_item(menu, wxID_ANY, _L("Center") + (accel.empty() ? wxString() : "\t" + from_u8(accel)), "",
         [](wxCommandEvent&) {
             plater()->center_selection();
         }, "", nullptr,

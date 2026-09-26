@@ -230,6 +230,10 @@ void AppConfig::set_defaults()
     if (get("preview_default_view_type").empty())
         set("preview_default_view_type", "auto");
 
+    // ORCA: scale the preview colors to the layer shown alone
+    if (get("preview_rescale_colors_to_layer").empty())
+        set_bool("preview_rescale_colors_to_layer", true);
+
     if (get("filaments_area_preferred_count").empty())
         set("filaments_area_preferred_count", "10");
 
