@@ -2236,7 +2236,7 @@ void GLCanvas3D::_render_scene(const Camera& camera, const Size& cnv_size)
         if (!no_partplate && m_show_bed)
             _render_bed(camera.get_view_matrix(), camera.get_projection_matrix(), !camera.is_looking_downward(), m_show_world_axes);
         if (!no_partplate && m_show_bed) //BBS: add outline logic
-            _render_platelist(camera.get_view_matrix(), camera.get_projection_matrix(), !camera.is_looking_downward(), only_current, only_body, hover_id, true, show_grid);
+            _render_platelist(camera.get_view_matrix(), camera.get_projection_matrix(), camera.get_viewport(), !camera.is_looking_downward(), only_current, only_body, hover_id, true, show_grid);
         if (m_axes_at_bed_center && m_show_bed && !no_partplate)
             // Design tab: replace the plate's corner-origin grid with the origin-centred CAD grid.
             _render_cad_grid(camera.get_view_matrix(), camera.get_projection_matrix());
@@ -2256,7 +2256,7 @@ void GLCanvas3D::_render_scene(const Camera& camera, const Size& cnv_size)
         _render_sla_slices();
         _render_selection();
         _render_bed(camera.get_view_matrix(), camera.get_projection_matrix(), !camera.is_looking_downward(), m_show_world_axes);
-        _render_platelist(camera.get_view_matrix(), camera.get_projection_matrix(), !camera.is_looking_downward(), only_current, true, hover_id);
+        _render_platelist(camera.get_view_matrix(), camera.get_projection_matrix(), camera.get_viewport(), !camera.is_looking_downward(), only_current, true, hover_id);
         // BBS: GUI refactor: add canvas size as parameters
         _render_gcode(cnv_size.get_width(), cnv_size.get_height());
     }
