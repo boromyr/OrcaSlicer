@@ -3257,7 +3257,8 @@ void GCodeViewer::render_legend(float &legend_height, int canvas_width, int canv
         bool checkbox = true,
         float checkbox_pos = 0.f, // ORCA use calculated value for eye icon. Aligned to "Display" header or end of combo box
         bool visible = true,
-        std::function<void()> callback = nullptr)
+        std::function<void()> callback = nullptr,
+        std::function<void()> on_right_click = nullptr)
     {
         // render icon
         ImVec2 pos = ImVec2(ImGui::GetCursorScreenPos().x + window_padding * 3, ImGui::GetCursorScreenPos().y);
@@ -3305,8 +3306,14 @@ void GCodeViewer::render_legend(float &legend_height, int canvas_width, int canv
             bool b_menu_item = ImGui::BBLMenuItem(("##" + columns_offsets[0].first).c_str(), nullptr, false, true, max_height);
             ImGui::PopStyleVar(2);
             ImGui::PopStyleColor(3);
-            if (b_menu_item)
+            // Left-click (normal toggle)
+            if (b_menu_item && callback) {
                 callback();
+            }
+            // Right-click (solo / isolate)
+            if (on_right_click && ImGui::IsItemHovered() && ImGui::IsMouseClicked(ImGuiMouseButton_Right)) {
+                on_right_click();
+            }
             if (checkbox) {
                 // ORCA replace checkboxes with eye icon
                 // Use calculated position from argument. this method has predictable result compared to alingning button using window width
@@ -3518,6 +3525,36 @@ auto append_headers = [&imgui, window_padding, this](const std::vector<std::pair
         std::pair<double, double> ret = { koef * volume / (PI * sqr(0.5 * m_filament_diameters[extruder_id])),
                                           volume * m_filament_densities[extruder_id] * 0.001 };
         return ret;
+    };
+
+    auto isolate_extrusion_role = [this](libvgcode::EGCodeExtrusionRole target_role) {
+        // Hide all options (Travel, Seams, Retractions, etc.)
+        m_viewer.set_all_options_visibility(false);
+
+        // Turn all extrusion roles OFF except the target one
+        const auto roles = m_viewer.get_extrusion_roles();
+        for (auto role : roles) {
+            bool target_state = (role == target_role);
+            if (m_viewer.is_extrusion_role_visible(role) != target_state) {
+                m_viewer.toggle_extrusion_role_visibility(role);
+            }
+        }
+        update_moves_slider();
+    };
+
+    auto isolate_option = [this](libvgcode::EOptionType target_option) {
+        // Hide all extrusion roles
+        m_viewer.set_all_extrusion_roles_visibility(false);
+
+        // Turn all options OFF except the target one
+        const auto options = m_viewer.get_options();
+        for (auto option : options) {
+            bool target_state = (option == target_option);
+            if (m_viewer.is_option_visible(option) != target_state) {
+                m_viewer.toggle_option_visibility(option);
+            }
+        }
+        update_moves_slider();
     };
 
     //BBS display Color Scheme
@@ -3850,7 +3887,8 @@ auto append_headers = [&imgui, window_padding, this](const std::vector<std::pair
     default: { break; }
     }
 
-    auto append_option_item = [this, append_item, current_time_mode, total_estimated_time, &format_compact_count, &format_percent, &format_distance](libvgcode::EOptionType type, std::vector<float> offsets) {
+    auto append_option_item = [this, append_item, isolate_option, current_time_mode, total_estimated_time, &format_compact_count,
+                               &format_percent, &format_distance](libvgcode::EOptionType type, std::vector<float> offsets) {
         const bool full_layout = offsets.size() > 4;
         auto option_stats = [this, current_time_mode, total_estimated_time, &format_compact_count, &format_percent, &format_distance, full_layout](libvgcode::EOptionType option_type) -> std::array<std::string, 4> {
             libvgcode::EMoveType move_type;
@@ -3885,7 +3923,7 @@ auto append_headers = [&imgui, window_padding, this](const std::vector<std::pair
             return { time_text, percent_text, distance_text, count_text };
         };
 
-        auto append_option_item_with_type = [this, offsets, append_item, full_layout](libvgcode::EOptionType type, const ColorRGBA& color, const std::string& label, bool visible,
+        auto append_option_item_with_type = [this, offsets, append_item, isolate_option, full_layout](libvgcode::EOptionType type, const ColorRGBA& color, const std::string& label, bool visible,
             const std::string& time_text, const std::string& percent_text, const std::string& distance_text, const std::string& count_text) {
             std::vector<std::pair<std::string, float>> columns_offsets;
             columns_offsets.push_back({ label , offsets[0] });
@@ -3900,6 +3938,9 @@ auto append_headers = [&imgui, window_padding, this](const std::vector<std::pair
             append_item(EItemType::Rect, color, columns_offsets, true, offsets.back()/*ORCA checkbox_pos*/, visible, [this, type]() {
                 m_viewer.toggle_option_visibility(type);
                 update_moves_slider();
+                },
+                [isolate_option, type]() { 
+                    isolate_option(type); 
                 });
         };
         const bool visible = m_viewer.is_option_visible(type);
@@ -3957,6 +3998,9 @@ auto append_headers = [&imgui, window_padding, this](const std::vector<std::pair
                 true, offsets.back(), visible, [this, role]() {
                     m_viewer.toggle_extrusion_role_visibility(role);
                     update_moves_slider();
+                },
+                [isolate_extrusion_role, role]() { 
+                    isolate_extrusion_role(role); 
                 });
         }
 
@@ -3976,6 +4020,9 @@ auto append_headers = [&imgui, window_padding, this](const std::vector<std::pair
                 append_item(EItemType::Rect, libvgcode::convert(m_viewer.get_option_color(libvgcode::EOptionType::Travels)), columns_offsets, true, offsets.back()/*ORCA checkbox_pos*/, visible, [this, item]() {
                         m_viewer.toggle_option_visibility(item);
                         update_moves_slider();
+                    },
+                    [isolate_option, item]() { 
+                        isolate_option(item); 
                     });
             }
         }
