@@ -299,9 +299,9 @@ enum SeamPosition {
 };
 
 // For the spCustom ("Center/custom point") seam position: place the seam at the perimeter point
-// closest to, or farthest from, the configured reference point.
-enum SeamRelativeReference {
-    srrClosest, srrFarthest
+// closest to, or farthest from, the custom point.
+enum SeamSide {
+    ssClosest, ssFarthest
 };
 
 // Orca
@@ -696,7 +696,7 @@ CONFIG_OPTION_ENUM_DECLARE_STATIC_MAPS(SupportMaterialInterfacePattern)
 // BBS
 CONFIG_OPTION_ENUM_DECLARE_STATIC_MAPS(SupportType)
 CONFIG_OPTION_ENUM_DECLARE_STATIC_MAPS(SeamPosition)
-CONFIG_OPTION_ENUM_DECLARE_STATIC_MAPS(SeamRelativeReference)
+CONFIG_OPTION_ENUM_DECLARE_STATIC_MAPS(SeamSide)
 CONFIG_OPTION_ENUM_DECLARE_STATIC_MAPS(SeamScarfType)
 CONFIG_OPTION_ENUM_DECLARE_STATIC_MAPS(SLADisplayOrientation)
 CONFIG_OPTION_ENUM_DECLARE_STATIC_MAPS(SLAPillarConnectionMode)
@@ -1157,7 +1157,7 @@ PRINT_CONFIG_CLASS_DEFINE(
     ((ConfigOptionEnum<SeamPosition>,  seam_position))
     ((ConfigOptionFloat,               seam_position_x))
     ((ConfigOptionFloat,               seam_position_y))
-    ((ConfigOptionEnum<SeamRelativeReference>, seam_position_ref))
+    ((ConfigOptionEnum<SeamSide>, seam_position_ref))
     ((ConfigOptionBool,                seam_position_align))
     ((ConfigOptionBool,                staggered_inner_seams))
     ((ConfigOptionFloat,               slice_closing_radius))

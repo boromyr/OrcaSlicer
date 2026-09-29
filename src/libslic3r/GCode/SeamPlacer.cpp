@@ -799,7 +799,7 @@ void gather_enforcers_blockers(GlobalModelInfo &result, const PrintObject *po) {
 struct SeamComparator {
   SeamPosition setup;
   float angle_importance;
-  // For spCustom: the reference point (in the object's local frame, origin = part center).
+  // For spCustom: the custom point, relative to the object center (the PrintObject frame).
   // Each perimeter loop's seam is placed at the point closest to (or, if custom_farthest, the
   // point farthest from) this location.
   Vec2f custom_point;
@@ -824,10 +824,9 @@ struct SeamComparator {
     }
 
     // "Center/custom point" is an explicit positional choice by the user, so the distance to the
-    // configured reference point takes precedence over the automatic overhang/visibility
-    // heuristics below. Those heuristics pull every seam towards hidden points, which is fine
-    // for "Closest to point" but defeats "Farthest from point" (the outer-side option).
-    // Seam painting (handled above) still wins over this.
+    // custom point takes precedence over the automatic overhang/visibility heuristics below.
+    // Those heuristics pull every seam towards hidden points, which is fine for "Closest to point"
+    // but defeats "Farthest from point". Seam painting (handled above) still wins over this.
     if (setup == SeamPosition::spCustom) {
       float dist_a = (a.position.head<2>() - custom_point).squaredNorm();
       float dist_b = (b.position.head<2>() - custom_point).squaredNorm();
@@ -893,13 +892,13 @@ struct SeamComparator {
       return a.type > b.type;
     }
 
-    // Keep the aligned seam string on the chosen side (closest/farthest to the reference point),
-    // consistent with is_first_better, so alignment doesn't drift the seam off-target.
+    // Keep the aligned seam string on the chosen side, consistent with is_first_better, so
+    // alignment doesn't drift the seam off-target.
     if (setup == SeamPosition::spCustom) {
       float da = (a.position.head<2>() - custom_point).norm();
       float db = (b.position.head<2>() - custom_point).norm();
-      float tol = SeamPlacer::seam_align_score_tolerance * 5.0f;
-      return custom_farthest ? (da > db - tol) : (da < db + tol);
+      return custom_farthest ? (da > db - SeamPlacer::seam_align_position_tolerance)
+                             : (da < db + SeamPlacer::seam_align_position_tolerance);
     }
 
     //avoid overhangs
@@ -921,7 +920,7 @@ struct SeamComparator {
     }
 
     if (setup == SeamPosition::spRear) {
-      return a.position.y() + SeamPlacer::seam_align_score_tolerance * 5.0f > b.position.y();
+      return a.position.y() + SeamPlacer::seam_align_position_tolerance > b.position.y();
     }
 
     float penalty_a = a.overhang + a.visibility
@@ -1522,10 +1521,10 @@ void SeamPlacer::init(Print &print, std::function<void(void)> throw_if_canceled_
   for (const PrintObject *po : print.objects()) {
     throw_if_canceled_func();
     SeamPosition configured_seam_preference = po->config().seam_position.value;
-    // For "Center/custom point", the reference point is given in the object's local frame
-    // (origin = part center), which matches the frame of the gathered seam candidate positions.
+    // For "Center/custom point", the custom point is relative to the object center, which is the
+    // PrintObject frame the seam candidate positions are gathered in.
     Vec2f custom_point { float(po->config().seam_position_x.value), float(po->config().seam_position_y.value) };
-    bool  custom_farthest = po->config().seam_position_ref.value == srrFarthest;
+    bool  custom_farthest = po->config().seam_position_ref.value == ssFarthest;
     bool  custom_align    = po->config().seam_position_align.value;
     SeamComparator comparator { configured_seam_preference, custom_point, custom_farthest };
 

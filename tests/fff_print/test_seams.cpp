@@ -1,13 +1,3 @@
-#ifdef WIN32
-#ifndef WIN32_LEAN_AND_MEAN
-#define WIN32_LEAN_AND_MEAN
-#endif
-#ifndef NOMINMAX
-#define NOMINMAX
-#endif
-#include <Windows.h>
-#endif
-
 #include <catch2/catch_all.hpp>
 
 #include "libslic3r/libslic3r.h"
@@ -25,21 +15,16 @@
 using namespace Slic3r;
 using namespace Slic3r::Test;
 
-// Verifies the "Center/custom point" option is registered correctly, round-trips through
-// (de)serialization, has the expected defaults, and is carried by the Print preset.
-// This exercises the whole config surface of the feature without slicing (see the
-// slicing test below for the actual seam-placement behavior).
 TEST_CASE("Center/custom-point seam option is registered and round-trips", "[Seams]")
 {
     DynamicPrintConfig config = DynamicPrintConfig::full_print_config();
 
-    // Defaults: the mode is not "custom", and the coordinates default to the part center (0,0).
+    // The custom point defaults to the object center.
     REQUIRE(config.opt_enum<SeamPosition>("seam_position") != spCustom);
     REQUIRE(config.opt_float("seam_position_x") == 0.0);
     REQUIRE(config.opt_float("seam_position_y") == 0.0);
 
-    // "custom" deserializes to spCustom and serializes back (this also proves the enum value is
-    // registered in the name table — otherwise serialize() would read out of bounds).
+    // Serializing back also checks that "custom" is registered in the enum name table.
     config.set_deserialize_strict({
         { "seam_position",   "custom" },
         { "seam_position_x", "40"     },
@@ -50,17 +35,14 @@ TEST_CASE("Center/custom-point seam option is registered and round-trips", "[Sea
     REQUIRE(config.opt_float("seam_position_x") == 40.0);
     REQUIRE(config.opt_float("seam_position_y") == -15.0);
 
-    // The closest/farthest reference defaults to "closest" and round-trips to "farthest".
-    REQUIRE(config.opt_enum<SeamRelativeReference>("seam_position_ref") == srrClosest);
+    REQUIRE(config.opt_enum<SeamSide>("seam_position_ref") == ssClosest);
     config.set_deserialize_strict({ { "seam_position_ref", "farthest" } });
-    REQUIRE(config.opt_enum<SeamRelativeReference>("seam_position_ref") == srrFarthest);
+    REQUIRE(config.opt_enum<SeamSide>("seam_position_ref") == ssFarthest);
     REQUIRE(config.opt_serialize("seam_position_ref") == "farthest");
 
-    // Cross-layer alignment defaults ON.
     REQUIRE(config.opt_bool("seam_position_align") == true);
 
-    // The new keys must be part of the Print preset, otherwise the Process tab cannot bind them
-    // ("No <key> in ConfigOptionsGroup config." at runtime).
+    // The Process tab can only bind options that are part of the print preset.
     const std::vector<std::string> &opts = Preset::print_options();
     REQUIRE(std::find(opts.begin(), opts.end(), "seam_position")       != opts.end());
     REQUIRE(std::find(opts.begin(), opts.end(), "seam_position_x")     != opts.end());
@@ -69,13 +51,10 @@ TEST_CASE("Center/custom-point seam option is registered and round-trips", "[Sea
     REQUIRE(std::find(opts.begin(), opts.end(), "seam_position_align") != opts.end());
 }
 
-// Slices a 20 mm-tall, 20 mm-diameter cylinder with seam_position = "custom" aimed at
-// (target_x, target_y) and returns the mean XY of the outer-wall seam (start point of each
-// outer perimeter loop) across layers. A cylinder is used because it is the rotationally-
-// symmetric case this feature targets, its smooth wall gives a single unambiguous nearest
-// point (unlike a cube's corner ties), and its vertical wall is free of overhang interference.
-// The seam target is in the part's local frame, so the arranger's placement is irrelevant to
-// the between-run seam *differences* the test asserts on.
+// Slices a cylinder with the seam aimed at (target_x, target_y) and returns the mean XY of the
+// outer wall seams across layers. A cylinder has a single nearest point (no corner ties) and no
+// overhangs. The custom point is relative to the object center, so the tests compare seams
+// between runs rather than against absolute bed coordinates.
 static Vec2d outer_wall_seam_mean(const std::string &target_x, const std::string &target_y, size_t &n_seams,
                                   const std::string &reference = "closest")
 {
@@ -87,11 +66,10 @@ static Vec2d outer_wall_seam_mean(const std::string &target_x, const std::string
         { "seam_position_ref",  reference  },
         { "wall_loops",         "2"        },
         { "layer_height",       "0.3"      },
-        { "first_layer_height", "0.3"      },
+        { "initial_layer_print_height", "0.3" },
         { "gcode_comments",     "1"        },
     });
 
-    // r=10mm, h=20mm: vertical walls, no overhang interference.
     const std::string gcode = slice({ make_cylinder(10.0, 20.0) }, config);
 
     std::vector<Vec2d> seams;
@@ -133,17 +111,14 @@ TEST_CASE("Center/custom-point seam follows the configured X/Y point", "[Seams]"
     REQUIRE(n_yp > 5);
     REQUIRE(n_yn > 5);
 
-    // Aiming at +X vs -X moves the seam to opposite sides of the cylinder: X separates by
-    // roughly the diameter (~20 mm) while the orthogonal (Y) coordinate stays near the centre.
+    // Aiming at +X vs -X moves the seam to opposite sides of the 20 mm cylinder; Y stays put.
     REQUIRE(seam_x_plus.x() - seam_x_minus.x() > 8.0);
     REQUIRE_THAT(seam_x_plus.y() - seam_x_minus.y(), Catch::Matchers::WithinAbs(0.0, 4.0));
 
-    // Symmetric check on the Y axis.
     REQUIRE(seam_y_plus.y() - seam_y_minus.y() > 8.0);
     REQUIRE_THAT(seam_y_plus.x() - seam_y_minus.x(), Catch::Matchers::WithinAbs(0.0, 4.0));
 
-    // "Farthest from point" flips the side: aiming at +X with reference=farthest puts the seam
-    // on the -X side, i.e. opposite the closest-to-+X result.
+    // "Farthest from point" flips the side.
     size_t n_far = 0;
     const Vec2d seam_x_plus_far = outer_wall_seam_mean("40", "0", n_far, "farthest");
     REQUIRE(n_far > 5);
