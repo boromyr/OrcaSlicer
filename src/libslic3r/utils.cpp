@@ -1321,6 +1321,31 @@ unsigned get_current_pid()
 #endif
 }
 
+boost::filesystem::path download_marker_path(const boost::filesystem::path &dest_folder, const std::string &filename)
+{
+    return dest_folder / (filename + "." + std::to_string(get_current_pid()) + ".download");
+}
+
+bool find_unused_filename(const boost::filesystem::path &dest_folder, const std::string &filename,
+                          const boost::filesystem::path &ignored_marker, std::string &result)
+{
+    // Probe the name that will be written, so a name the sanitizing maps onto an existing file is versioned too.
+    const std::string sanitized = sanitize_filename(filename);
+    const std::string extension = boost::filesystem::path(sanitized).extension().string();
+    const std::string stem      = sanitized.substr(0, sanitized.size() - extension.size());
+    auto is_used = [&](const std::string &name) {
+        const boost::filesystem::path marker = download_marker_path(dest_folder, name);
+        return boost::filesystem::exists(dest_folder / name) || (marker != ignored_marker && boost::filesystem::exists(marker));
+    };
+    result = sanitized;
+    for (size_t version = 1; is_used(result); ++version) {
+        if (version > 999)
+            return false;
+        result = stem + "(" + std::to_string(version) + ")" + extension;
+    }
+    return true;
+}
+
 std::string per_user_temp_id()
 {
 #ifdef WIN32
@@ -1337,6 +1362,19 @@ std::string per_user_temp_dir(const std::string &base, const std::string &user_i
     // Keep the id at the top level so each user's dir sits directly in the world-writable temp
     // root; a shared parent dir would be owned by whichever user created it first.
     return base + "/orcaslicer_" + user_id;
+}
+
+std::string resolve_cli_input_path(const std::string &path)
+{
+    const boost::filesystem::path input(path);
+    if (path.empty() || is_supported_open_protocol(path) || input.is_absolute())
+        return path;
+
+    boost::system::error_code ec;
+    const boost::filesystem::path resolved = boost::filesystem::system_complete(input, ec);
+    if (ec)
+        return path;
+    return resolved.lexically_normal().make_preferred().string();
 }
 
 // BBS: backup & restore
