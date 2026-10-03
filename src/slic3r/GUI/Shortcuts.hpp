@@ -34,7 +34,7 @@ enum class Shortcut : uint8_t {
     // Objects
     AddInstance, RemoveInstance, TogglePrintable, ToggleAutoDrop,
     // Placement
-    Arrange, ArrangePlate, Orient, OrientPlate,
+    Arrange, ArrangePlate, Orient, OrientPlate, CenterSelection,
     MoveSelectionLeft, MoveSelectionRight, MoveSelectionUp, MoveSelectionDown, RotateSelectionLeft, RotateSelectionRight,
     // Gizmos
     GizmoMove, GizmoRotate, GizmoScale, GizmoFlatten, GizmoCut, GizmoMeshBoolean, GizmoFdmSupports, GizmoSeam, GizmoFuzzySkin,
@@ -46,7 +46,7 @@ enum class Shortcut : uint8_t {
     // Camera
     ViewDefault, ViewTop, ViewBottom, ViewFront, ViewRear, ViewLeft, ViewRight, ViewPlate, ZoomIn, ZoomOut, Mouse3DSettings,
     // Display
-    ShowLabels, ShowWireframe, ToggleGcodeWindow, ToggleOneLayerMode,
+    ShowLabels, ShowWireframe, ToggleGcodeWindow, ToggleOneLayerMode, ToggleLegendFold,
     // Application
     Preferences, Search, SwitchView, CollapseSidebar, ReloadDevicePage, KeyboardShortcuts,
     // Speed Dial
