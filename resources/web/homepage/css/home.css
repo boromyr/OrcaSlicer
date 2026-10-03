@@ -705,7 +705,7 @@ body
 {
 	width: 184px;
 	height: 184px;
-	border-radius: 8px;
+	border-radius: 13px; /* Match .FileImg so the corners stay inside the frame */
 	display: inline-block;
 	object-fit: cover;
 }
@@ -713,6 +713,25 @@ body
 .FileItem:hover .FileImg {
 	background-color: var(--focus-bg-box); 
 	box-shadow: inset 0 0 1px 1px var(--main-color) ;
+}
+
+/*ORCA Draw the frame above the thumbnail, an opaque image covers the inset shadow of .FileImg.
+  Positioned against .FileItem so .FileImg stays unpositioned and .FileTip keeps its tooltip*/
+.FileImg::after
+{
+	content: "";
+	position: absolute;
+	top: 0;
+	left: 0;
+	width: 184px;
+	height: 184px;
+	border-radius: 13px;
+	box-shadow: inset 0 0 1px 1px var(--border-color);
+	pointer-events: none;
+}
+
+.FileItem:hover .FileImg::after {
+	box-shadow: inset 0 0 1px 1px var(--main-color);
 }
 
 .FileImg .FileLogoBadge

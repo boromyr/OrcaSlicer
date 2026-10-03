@@ -70,7 +70,7 @@ public:
 
     void SetSize(wxSize const &size);
 
-    void Rescale();
+    void Rescale() override;
 
     virtual bool Enable(bool enable = true) wxOVERRIDE;
 
