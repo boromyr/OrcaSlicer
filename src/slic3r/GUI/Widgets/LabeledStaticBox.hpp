@@ -53,10 +53,10 @@ public:
     int        GetCornerRadius() const { return m_radius; }
     int        GetBorderWidth() const  { return m_border_width; }
     StateColor GetBorderColor() const  { return border_color; }
-    float      GetScale() const        { return m_scale; }
 
 private:
-    void PickDC(wxDC& dc);
+    void calc_label_size(int& w, int& h) const;
+    void update_label_size();
 
 protected:
     StateHandler state_handler;
@@ -65,11 +65,9 @@ protected:
     StateColor   background_color;
     int          m_border_width;
     int          m_radius;
-    wxFont       m_font;
     wxString     m_label;
     int          m_label_height;
     int          m_label_width;
-    float        m_scale;
     wxPoint      m_pos;
 
     virtual void DrawBorderAndLabel(wxDC& dc);

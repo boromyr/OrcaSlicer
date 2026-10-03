@@ -83,6 +83,7 @@ void TabCtrl::Unselect() { SelectItem(-1); }
 
 void TabCtrl::Rescale()
 {
+    StaticBox::Rescale();
     for (auto& b : btns)
         b->Rescale();
     relayout();

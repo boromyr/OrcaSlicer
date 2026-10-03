@@ -128,6 +128,7 @@ bool TabButton::Enable(bool enable)
 
 void TabButton::Rescale()
 {
+    StaticBox::Rescale();
     messureSize();
 }
 

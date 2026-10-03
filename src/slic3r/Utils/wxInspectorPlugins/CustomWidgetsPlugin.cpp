@@ -19,6 +19,21 @@
 #include <wx/tglbtn.h>
 #include <wx/wxcrtvararg.h>
 
+namespace {
+
+template<typename T>
+void addRescaleMethod(T* w, wxVector<wxInspector::MethodInfo>& methods)
+{
+    methods.push_back({"Rescale", "Rescale()",
+        "Re-apply DPI-scaled sizes and fonts to this widget",
+        [w](const wxVector<wxString>&) -> wxString {
+            w->Rescale();
+            return "Rescaled";
+        }});
+}
+
+} // anonymous namespace
+
 wxString CustomWidgetsPlugin::GetName() const
 {
     return "OrcaCustomWidgets";
@@ -52,6 +67,36 @@ wxVector<wxInspector::PropertyDef> CustomWidgetsPlugin::GetProperties(
         addLabeledStaticBoxProps(lsb, props);
 
     return props;
+}
+
+wxVector<wxInspector::MethodInfo> CustomWidgetsPlugin::GetMethods(
+    wxInspector::InspectableObject& obj)
+{
+    wxVector<wxInspector::MethodInfo> methods;
+    wxWindow* win = obj.AsWindow();
+    if (!win) return methods;
+
+    if (auto* btn = dynamic_cast<Button*>(win))
+        addRescaleMethod(btn, methods);
+    if (auto* cb = dynamic_cast<CheckBox*>(win))
+        addRescaleMethod(cb, methods);
+    if (auto* ti = dynamic_cast<TextInput*>(win))
+        addRescaleMethod(ti, methods);
+    if (auto* sb = dynamic_cast<SwitchButton*>(win))
+        addRescaleMethod(sb, methods);
+    if (auto* pb = dynamic_cast<ProgressBar*>(win))
+        addRescaleMethod(pb, methods);
+    if (auto* msb = dynamic_cast<ModeSwitchButton*>(win)) {
+        addRescaleMethod(msb, methods);
+        methods.push_back({"msw_rescale", "msw_rescale()",
+            wxString::FromUTF8("MSW alias of Rescale() — re-apply DPI-scaled sizes and fonts"),
+            [msb](const wxVector<wxString>&) -> wxString {
+                msb->msw_rescale();
+                return "msw_rescaled";
+            }});
+    }
+
+    return methods;
 }
 
 void CustomWidgetsPlugin::addButtonProps(Button* btn,
@@ -274,9 +319,4 @@ void CustomWidgetsPlugin::addLabeledStaticBoxProps(LabeledStaticBox* lsb,
             lsb->SetBorderColor(StateColor(c));
             return true;
         }});
-
-    props.push_back({"Scale", "LabeledStaticBox", PropertyType::ReadOnly,
-        wxString::Format("%.2f", lsb->GetScale()), true, {},
-        [lsb]() { return wxString::Format("%.2f", lsb->GetScale()); },
-        nullptr});
 }

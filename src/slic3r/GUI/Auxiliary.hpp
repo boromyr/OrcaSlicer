@@ -97,6 +97,7 @@ public:
     AuxiliaryFolderType m_type;
     bool                m_hover{false};
     bool                m_cover{false};
+    wxPanel*            m_text_panel {nullptr};
     wxStaticText*       m_text_name {nullptr};
     ::TextInput*        m_input_name {nullptr};
     fs::path m_file_path;
@@ -209,6 +210,8 @@ public:
 class AuxiliaryPanel : public wxPanel, public StagedBuild
 {
 private:
+    Button * back_btn = {nullptr};
+
     Tabbook *m_tabpanel = {nullptr};
     wxSizer *m_main_sizer = {nullptr};
 
