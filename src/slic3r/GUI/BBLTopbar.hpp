@@ -7,6 +7,9 @@
 #include "DeviceManager.hpp"
 
 #include <wx/control.h>
+#include <wx/string.h>
+#include <wx/gdicmn.h>
+#include <wx/event.h>
 
 using namespace Slic3r::GUI;
 
@@ -49,12 +52,10 @@ public:
     void OnMouseCaptureLost(wxMouseCaptureLostEvent& event);
     void OnMenuClose(wxMenuEvent& event);
     void OnOpenProject(wxAuiToolBarEvent& event);
-    //void show_publish_button(bool show);
     void OnSaveProject(wxAuiToolBarEvent& event);
     void OnUndo(wxAuiToolBarEvent& event);
     void OnRedo(wxAuiToolBarEvent& event);
     void OnModelStoreClicked(wxAuiToolBarEvent& event);
-    void OnPublishClicked(wxAuiToolBarEvent &event);
 
     wxAuiToolBarItem* FindToolByCurrentPosition();
 	
@@ -94,14 +95,11 @@ private:
     wxString          m_titleText;
 
     
-    //wxAuiToolBarItem *m_publish_item;
     wxAuiToolBarItem* m_undo_item;
     wxAuiToolBarItem* m_redo_item;
     wxAuiToolBarItem* m_calib_item;
     wxAuiToolBarItem* maximize_btn;
 
-    wxBitmap m_publish_bitmap;
-    wxBitmap m_publish_disable_bitmap;
 
     wxBitmap maximize_bitmap;
     wxBitmap window_bitmap;
