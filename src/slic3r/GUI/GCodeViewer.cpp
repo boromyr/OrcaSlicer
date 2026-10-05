@@ -3368,46 +3368,75 @@ void GCodeViewer::render_legend(float &legend_height, int canvas_width, int canv
         }
     };
 
-auto append_headers = [&imgui, window_padding, this](const std::vector<std::pair<std::string, float>>& title_offsets, bool show_master_eye = false) {
-        for (size_t i = 0; i < title_offsets.size(); i++) {
-            if (title_offsets[i].first == _u8L("Display")) { // ORCA Master eye toggle
-                ImGui::SameLine(title_offsets[i].second);
-                if (show_master_eye) {
-                    // Determine whether every role and option is currently visible.
-                    const auto roles       = m_viewer.get_extrusion_roles();
-                    const auto opts        = m_viewer.get_options();
-                    const bool all_visible = std::none_of(roles.begin(), roles.end(),
-                                                          [this](libvgcode::EGCodeExtrusionRole r) {
-                                                              return !m_viewer.is_extrusion_role_visible(r);
-                                                          }) &&
-                                             std::none_of(opts.begin(), opts.end(),
-                                                          [this](libvgcode::EOptionType o) { return !m_viewer.is_option_visible(o); });
+auto append_headers = [&imgui, window_padding, curr_view_type, this](const std::vector<std::pair<std::string, float>>& title_offsets, bool show_master_eye = false) {
+        const std::string display_label = _u8L("Display");
+        const std::string options_label = _u8L("Options");
 
-                    // Render a clickable invisible button with the eye icon drawn on top.
-                    ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(0.0f, 0.0f));
-                    ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(0.0f, 0.0f));
-                    if (ImGui::InvisibleButton("##master_eye", ImVec2(16.f * m_scale, ImGui::GetTextLineHeight()))) {
-                        m_viewer.set_all_extrusion_roles_visibility(!all_visible);
-                        m_viewer.set_all_options_visibility(!all_visible);
-                        update_moves_slider();
-                    }
-                    ImGui::GetWindowDrawList()->AddText(ImGui::GetItemRectMin(), ImGui::GetColorU32(ImGuiCol_Text),
-                                                        into_u8(all_visible ? ImGui::VisibleIcon : ImGui::HiddenIcon).c_str());
-                    ImGui::PopStyleVar(2);
-                } else {
-                    ImGui::Dummy({16.f * m_scale, 1});
-                }
+        // Hoisted — fixed for the entire call, no reason to recompute per iteration.
+        const bool is_options_section = !title_offsets.empty() && title_offsets[0].first == options_label;
+
+        const bool is_travels_only_view = curr_view_type == libvgcode::EViewType::Speed ||
+                                          curr_view_type == libvgcode::EViewType::ActualSpeed ||
+                                          curr_view_type == libvgcode::EViewType::Acceleration ||
+                                          curr_view_type == libvgcode::EViewType::Jerk;
+
+        for (const auto& [label, offset] : title_offsets) {
+            ImGui::SameLine(offset);
+
+            if (label != display_label) {
+                imgui.bold_text(label);
                 continue;
             }
-            ImGui::SameLine(title_offsets[i].second);
-            imgui.bold_text(title_offsets[i].first);
+
+            if (!show_master_eye) {
+                ImGui::Dummy({16.f * m_scale, 1.f});
+                continue;
+            }
+
+            // Compute aggregate visibility for the eye icon state.
+            bool all_visible = false;
+            if (is_options_section) {
+                const auto section_options = is_travels_only_view ? std::vector<libvgcode::EOptionType>{libvgcode::EOptionType::Travels} : m_viewer.get_options();
+                all_visible                = std::all_of(section_options.begin(), section_options.end(), [this](libvgcode::EOptionType o) { 
+                                            return m_viewer.is_option_visible(o); 
+                                            });
+            } else {
+                // Line Type: both roles and options must all be visible.
+                const auto roles = m_viewer.get_extrusion_roles();
+                const auto opts  = m_viewer.get_options();
+                all_visible      = std::all_of(roles.begin(), roles.end(), [this](libvgcode::EGCodeExtrusionRole r) { return m_viewer.is_extrusion_role_visible(r); }) &&
+                                   std::all_of(opts.begin(), opts.end(), [this](libvgcode::EOptionType o) { 
+                                   return m_viewer.is_option_visible(o); 
+                                   });
+            }
+
+            ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(0.f, 0.f));
+            ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(0.f, 0.f));
+
+            const std::string btn_id = "##master_eye_" + title_offsets[0].first;
+            if (ImGui::InvisibleButton(btn_id.c_str(), ImVec2(16.f * m_scale, ImGui::GetTextLineHeight()))) {
+                if (is_options_section) {
+                    // Deferred: only allocate on actual click, not every frame.
+                    const auto section_options = is_travels_only_view ? std::vector<libvgcode::EOptionType>{libvgcode::EOptionType::Travels} : m_viewer.get_options();
+                    for (libvgcode::EOptionType opt : section_options) {
+                        if (m_viewer.is_option_visible(opt) == all_visible)
+                            m_viewer.toggle_option_visibility(opt);
+                    }
+                } else {
+                    m_viewer.set_all_extrusion_roles_visibility(!all_visible);
+                    m_viewer.set_all_options_visibility(!all_visible);
+                }
+                update_moves_slider();
+            }
+
+            ImGui::GetWindowDrawList()->AddText(ImGui::GetItemRectMin(), ImGui::GetColorU32(ImGuiCol_Text), into_u8(all_visible ? ImGui::VisibleIcon : ImGui::HiddenIcon).c_str());
+            ImGui::PopStyleVar(2);
         }
-        // Ensure right padding
+
         ImGui::SameLine();
-        ImGui::Dummy({window_padding, 1});
+        ImGui::Dummy({window_padding, 1.f});
         ImGui::Separator();
     };
-
     auto max_width = [](const std::vector<std::string>& items, const std::string& title, float extra_size = 0.0f) {
         float ret = ImGui::CalcTextSize(title.c_str()).x;
         for (const std::string& item : items) {
