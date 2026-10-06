@@ -5656,7 +5656,7 @@ void PrintConfigDef::init_fff_params()
     def->set_default_value(new ConfigOptionBool(true));
 
     def = this->add("wo_enabled", coBool);
-    def->label = L("Wave overhangs enabled");
+    def->label = L("Wave overhangs");
     def->category = L("Quality");
     def->tooltip = L("Enable wave overhangs");
     def->mode = comExpert;
