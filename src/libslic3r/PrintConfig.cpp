@@ -5655,36 +5655,6 @@ void PrintConfigDef::init_fff_params()
     def->mode = comAdvanced;
     def->set_default_value(new ConfigOptionBool(true));
 
-    def = this->add("wo_enabled", coBool);
-    def->label = L("Wave overhangs");
-    def->category = L("Quality");
-    def->tooltip = L("Enable wave overhangs");
-    def->mode = comExpert;
-    def->set_default_value(new ConfigOptionBool(false));
-
-    def = this->add("wo_density", coPercent);
-    def->label = L("Wave density");
-    def->category = L("Quality");
-    def->tooltip = L("A higher value will decrease the distance between waves. Calculated as a function of nozzle diameter");
-    def->sidetext = L("%");
-    def->min = 100;
-    def->max = 200;
-    def->max_literal = 10;
-    def->mode = comExpert;
-    def->set_default_value(new ConfigOptionPercent(120));
-
-    def = this->add("wo_pattern", coEnum);
-    def->label = L("Wave pattern");
-    def->category = L("Quality");
-    def->tooltip = L("The pattern to use when printing wave overhangs. Monotonic will start each wave from the end that has spent the most time cooling.");
-    def->enum_keys_map = &ConfigOptionEnum<WaveOverhangPattern>::get_enum_values();
-    def->enum_values.push_back("monotonic");
-    def->enum_values.push_back("zigzag");
-    def->enum_labels.push_back(L("Monotonic"));
-    def->enum_labels.push_back(L("Zigzag"));
-    def->mode = comExpert;
-    def->set_default_value(new ConfigOptionEnum<WaveOverhangPattern>(WaveOverhangPattern::ZigZag));
-
     def = this->add("unsupported_wall_last", coBool);
     def->label = L("Print unsupported walls last");
     def->category = L("Quality");
