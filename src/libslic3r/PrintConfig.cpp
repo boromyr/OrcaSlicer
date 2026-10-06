@@ -5696,7 +5696,7 @@ void PrintConfigDef::init_fff_params()
     def->set_default_value(new ConfigOptionBool(false));
 
     def = this->add("wo_enabled", coBool);
-    def->label = L("Wave overhangs enabled");
+    def->label = L("Wave overhangs");
     def->category = L("Quality");
     def->tooltip = L("Enable wave overhangs");
     def->mode = comExpert;
@@ -5721,12 +5721,10 @@ void PrintConfigDef::init_fff_params()
     def->enum_keys_map = &ConfigOptionEnum<WaveOverhangPattern>::get_enum_values();
     def->enum_values.push_back("monotonic");
     def->enum_values.push_back("zigzag");
-    def->enum_values.push_back("repeat");
     def->enum_labels.push_back(L("Monotonic"));
     def->enum_labels.push_back(L("Zigzag"));
-    def->enum_labels.push_back(L("Repeat"));
     def->mode = comExpert;
-    def->set_default_value(new ConfigOptionEnum<WaveOverhangPattern>(WaveOverhangPattern::Repeat));
+    def->set_default_value(new ConfigOptionEnum<WaveOverhangPattern>(WaveOverhangPattern::ZigZag));
 
     def = this->add("outer_wall_filament_id", coInt);
     def->gui_type = ConfigOptionDef::GUIType::i_enum_open;
