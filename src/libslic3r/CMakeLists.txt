@@ -104,6 +104,8 @@ set(lisbslic3r_sources
     Config.cpp
     Config.hpp
     ContourZ.cpp
+    CurveModel.cpp
+    CurveModel.hpp
     CustomGCode.cpp
     CustomGCode.hpp
     CutUtils.cpp
@@ -263,6 +265,8 @@ set(lisbslic3r_sources
     GCode/PreciseSeamInternal.hpp
     GCode/SmallAreaInfillFlowCompensator.cpp
     GCode/SmallAreaInfillFlowCompensator.hpp
+    GCode/SmallAreaInfillFlowCompensationModel.cpp
+    GCode/SmallAreaInfillFlowCompensationModel.hpp
     GCode/SpiralVase.cpp
     GCode/SpiralVase.hpp
     GCode/WipePathHelpers.cpp
