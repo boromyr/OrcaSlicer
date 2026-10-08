@@ -17,6 +17,8 @@
 #include "libslic3r/Polyline.hpp"
 #include "FillGyroid.hpp"
 #include "libslic3r/Polygon.hpp"
+#include "libslic3r/ExtrusionEntityCollection.hpp"
+#include "libslic3r/ShortestPath.hpp"
 
 // ---------------------------------------------------------------------------
 // Marching-squares scalar field for the optimized gyroid branch.

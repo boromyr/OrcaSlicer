@@ -784,9 +784,9 @@ int OG_CustomCtrl::CtrlLine::get_max_opt_pos() // ORCA: Find the max option fiel
                 auto children = field->getSizer()->GetChildren();
                 for (auto child : children)
                     if (child->IsWindow())
-                        h = max(h, child->GetWindow()->GetPosition().x + child->GetWindow()->GetSize().x);
+                        h = std::max(h, child->GetWindow()->GetPosition().x + child->GetWindow()->GetSize().x);
             } else if (field->getWindow())
-                h = max(h, field->getWindow()->GetPosition().x + field->getWindow()->GetSize().x);
+                h = std::max(h, field->getWindow()->GetPosition().x + field->getWindow()->GetSize().x);
         }
     if (h)
         return h;
