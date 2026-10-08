@@ -91,6 +91,7 @@ constexpr std::array<ShortcutInfo, size_t(Shortcut::Count)> shortcut_table = {{
     SHORTCUT(ArrangePlate,      "arrange_plate",      L("Arrange objects on selected plates"),                   PLATER, { 'A', SHIFT }),
     SHORTCUT(Orient,            "orient",             L("Auto orient all/selected objects"),                     PLATER, { 'Q' }),
     SHORTCUT(OrientPlate,       "orient_plate",       L("Auto orient all objects on current plate"),             PLATER, { 'Q', SHIFT }),
+    SHORTCUT(CenterSelection,   "center_selection",   L("Center selection on the plate"),                        PLATER, { 'X' }), // ORCA
     STEPPING(MoveSelectionLeft,   "move_selection_left",    L("Move selection 10mm in negative X direction"),    PLATER, { WXK_LEFT }),
     STEPPING(MoveSelectionRight,  "move_selection_right",   L("Move selection 10mm in positive X direction"),    PLATER, { WXK_RIGHT }),
     STEPPING(MoveSelectionUp,     "move_selection_up",      L("Move selection 10mm in positive Y direction"),    PLATER, { WXK_UP }),
@@ -149,6 +150,8 @@ constexpr std::array<ShortcutInfo, size_t(Shortcut::Count)> shortcut_table = {{
     SHORTCUT(ShowWireframe,     "show_wireframe",     L("Show/Hide wireframe"),                                  CANVAS,  { WXK_RETURN, CTRL_SHIFT }),
     SHORTCUT(ToggleGcodeWindow,   "toggle_gcode_window",   L("On/Off G-code window"),                            PREVIEW, { 'C' }),
     SHORTCUT(ToggleOneLayerMode,  "toggle_one_layer_mode", L("On/Off one layer mode of the vertical slider"),    PREVIEW, { 'L' }),
+    // ORCA: shares Space with the Speed Dial on purpose; in Preview the legend wins and the dial opens with AltGr+Space
+    SHORTCUT(ToggleLegendFold,    "toggle_legend_fold",    L("Fold/Unfold the G-code legend"),                   PREVIEW, { WXK_SPACE }),
 
     // Application
     SHORTCUT(Preferences,       "preferences",        L("Preferences"),                                          GLOBAL, PREFERENCES_CHORD),
