@@ -309,6 +309,7 @@ void ModeSwitchButton::SelectAndNotify(int selection)
 
 void ModeSwitchButton::Rescale()
 {
+    StaticBox::Rescale();
     const wxSize button_size = FromDIP(wxSize(48, 18));
     SetMinSize(button_size);
     SetMaxSize(button_size);
@@ -656,9 +657,9 @@ MultiSwitchButton::MultiSwitchButton(wxWindow *parent, wxWindowID id, const wxPo
           std::make_pair(0x6B6B6B, (int) StateColor::NotChecked),
           std::make_pair(0xFFFFFE, (int) StateColor::Normal)))
     , m_button_radius(10.0)
-    , m_button_padding(FromDIP(wxSize(11, 3)))
+    , m_button_padding(11, 3)
 {
-    SetCornerRadius(m_button_radius);
+    SetCornerRadius(parent->FromDIP(m_button_radius));
     SetBorderWidth(0);
 
     // Orca: a switch can hold more buttons than the layout has room for (a toolchanger lists one per
@@ -776,8 +777,8 @@ int MultiSwitchButton::AppendOption(const wxString &option, void *clientData)
     btn->SetFont(GetFont());
     btn->SetBackgroundColor(m_bg_color);
     btn->SetTextColor(m_text_color);
-    btn->SetCornerRadius(m_button_radius);
-    btn->SetPaddingSize(m_button_padding);
+    btn->SetCornerRadius(m_parent->FromDIP(m_button_radius));
+    btn->SetPaddingSize(m_parent->FromDIP(m_button_padding));
     btn->SetClientData(clientData);
 
     btns.push_back(btn);
@@ -886,10 +887,10 @@ void MultiSwitchButton::SetTextColor(const StateColor &color)
 
 void MultiSwitchButton::SetButtonCornerRadius(double radius)
 {
-    m_button_radius = radius;
-    SetCornerRadius(radius);
+    m_button_radius = m_parent->FromDIP(radius);
+    SetCornerRadius(m_button_radius);
     for (auto *btn : btns)
-        btn->SetCornerRadius(radius);
+        btn->SetCornerRadius(m_button_radius);
     Layout();
     Refresh();
 }
@@ -906,8 +907,12 @@ void MultiSwitchButton::SetButtonPadding(const wxSize &padding)
 
 void MultiSwitchButton::Rescale()
 {
-    for (auto *btn : btns)
+    StaticBox::Rescale();
+    for (auto *btn : btns){
         btn->Rescale();
+        btn->SetCornerRadius(m_parent->FromDIP(m_button_radius));
+        btn->SetPaddingSize(m_parent->FromDIP(m_button_padding));
+    }
     // Rescaling can change how the labels measure, and the scrollbar range follows the buttons.
     update_scroll_range();
 }

@@ -21,6 +21,8 @@ class TextInput : public wxNavigationEnabled<StaticBox>
     StateColor     text_color;
     wxTextCtrl * text_ctrl;
 
+    wxSize m_min_size;
+
     wxString  static_tips;
     wxSize    static_tips_size;
     wxBitmap  static_tips_icon;
@@ -67,7 +69,7 @@ public:
 
     void SetTextColor(StateColor const &color);
 
-    virtual void Rescale();
+    virtual void Rescale() override;
 
     virtual bool Enable(bool enable = true) override;
 

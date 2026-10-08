@@ -354,7 +354,17 @@ void PA_Calibration_Dlg::on_method_changed(wxCommandEvent& event) {
 }
 
 void PA_Calibration_Dlg::on_dpi_changed(const wxRect& suggested_rect) {
-    this->Refresh();
+    m_rbExtruderType->Rescale();
+    m_rbMethod->Rescale();
+    m_tiStartPA->Rescale();
+    m_tiEndPA->Rescale();
+    m_tiPAStep->Rescale();
+    m_cbPrintNum->Rescale();
+    m_tiBMAccels->Rescale();
+    m_tiBMSpeeds->Rescale();
+
+    Layout();
+    Refresh();
     Fit();
 }
 
@@ -564,9 +574,14 @@ void Temp_Calibration_Dlg::on_filament_type_changed(wxCommandEvent& event) {
 }
 
 void Temp_Calibration_Dlg::on_dpi_changed(const wxRect& suggested_rect) {
-    this->Refresh();
-    Fit();
+    m_rbFilamentType->Rescale();
+    m_tiStart->Rescale();
+    m_tiEnd->Rescale();
+    m_tiStep->Rescale();
 
+    Layout();
+    Refresh();
+    Fit();
 }
 
 
@@ -669,9 +684,13 @@ void MaxVolumetricSpeed_Test_Dlg::on_start(wxCommandEvent& event) {
 }
 
 void MaxVolumetricSpeed_Test_Dlg::on_dpi_changed(const wxRect& suggested_rect) {
-    this->Refresh();
-    Fit();
+    m_tiStart->Rescale();
+    m_tiEnd->Rescale();
+    m_tiStep->Rescale();
 
+    Layout();
+    Refresh();
+    Fit();
 }
 
 
@@ -925,7 +944,12 @@ void VFA_Test_Dlg::on_start(wxCommandEvent& event)
 
 void VFA_Test_Dlg::on_dpi_changed(const wxRect& suggested_rect)
 {
-    this->Refresh();
+    m_tiStart->Rescale();
+    m_tiEnd->Rescale();
+    m_tiStep->Rescale();
+
+    Layout();
+    Refresh();
     Fit();
 }
 
@@ -1032,9 +1056,13 @@ void Retraction_Test_Dlg::on_start(wxCommandEvent& event) {
 }
 
 void Retraction_Test_Dlg::on_dpi_changed(const wxRect& suggested_rect) {
-    this->Refresh();
-    Fit();
+    m_tiStart->Rescale();
+    m_tiEnd->Rescale();
+    m_tiStep->Rescale();
 
+    Layout();
+    Refresh();
+    Fit();
 }
 
 // Input_Shaping_Freq_Test_Dlg
@@ -1251,7 +1279,16 @@ void Input_Shaping_Freq_Test_Dlg::on_start(wxCommandEvent& event) {
 }
 
 void Input_Shaping_Freq_Test_Dlg::on_dpi_changed(const wxRect& suggested_rect) {
-    this->Refresh();
+    m_rbModel->Rescale();
+    m_rbType->Rescale();
+    m_tiFreqStartX->Rescale();
+    m_tiFreqStartY->Rescale();
+    m_tiFreqEndX->Rescale();
+    m_tiFreqEndY->Rescale();
+    m_tiDampingFactor->Rescale();
+
+    Layout();
+    Refresh();
     Fit();
 }
 
@@ -1445,7 +1482,15 @@ void Input_Shaping_Damp_Test_Dlg::on_start(wxCommandEvent& event) {
 }
 
 void Input_Shaping_Damp_Test_Dlg::on_dpi_changed(const wxRect& suggested_rect) {
-    this->Refresh();
+    m_rbModel->Rescale();
+    m_rbType->Rescale();
+    m_tiFreqX->Rescale();
+    m_tiFreqY->Rescale();
+    m_tiDampingFactorStart->Rescale();
+    m_tiDampingFactorEnd->Rescale();
+
+    Layout();
+    Refresh();
     Fit();
 }
 
@@ -1632,7 +1677,12 @@ void Cornering_Test_Dlg::on_start(wxCommandEvent& event) {
 }
 
 void Cornering_Test_Dlg::on_dpi_changed(const wxRect& suggested_rect) {
-    this->Refresh();
+    m_rbModel->Rescale();
+    m_tiJDStart->Rescale();
+    m_tiJDEnd->Rescale();
+
+    Layout();
+    Refresh();
     Fit();
 }
 
@@ -1742,7 +1792,12 @@ void FlowRateCalibrationDialog::on_start(wxCommandEvent& event) {
 }
 
 void FlowRateCalibrationDialog::on_dpi_changed(const wxRect& suggested_rect) {
-    this->Refresh();
+    m_rbPattern->Rescale();
+    m_rbType->Rescale();
+
+    Layout();
+    Refresh();
+    Fit();
 }
 
 }} // namespace Slic3r::GUI

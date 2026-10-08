@@ -67,7 +67,7 @@ public:
     void SetSelection(int selection);
     void SelectAndNotify(int selection);
 
-    void Rescale();
+    void Rescale() override;
     void msw_rescale() { Rescale(); }
 
     bool Enable(bool enable = true) override;
@@ -177,7 +177,7 @@ public:
     // A layout with less room than that still squeezes it, and it scrolls its buttons then.
     void SetFitToOptions(bool fit = true) { m_fit_to_options = fit; update_scroll_range(); }
 
-    void Rescale();
+    void Rescale() override;
 
 protected:
     void button_clicked(wxCommandEvent &event);

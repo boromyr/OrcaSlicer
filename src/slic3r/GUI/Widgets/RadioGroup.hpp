@@ -51,6 +51,8 @@ public:
 
     bool Disable();
 
+    void Rescale();
+
     void SetRadioTooltip(int i, wxString tooltip);
 
 private:
