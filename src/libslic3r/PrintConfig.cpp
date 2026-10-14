@@ -4953,6 +4953,23 @@ void PrintConfigDef::init_fff_params()
     def->mode = comAdvanced;
     def->set_default_value(new ConfigOptionPercent(25));
 
+    def = this->add("bridge_infill_wall_overlap", coPercent);
+    def->label = L("Bridge infill/wall overlap");
+    def->category = L("Strength");
+    // xgettext:no-c-format, no-boost-format
+    def->tooltip = L("Bridge fill surfaces are extended along the bridge line direction so that bridge "
+                     "lines anchor deeper into overhanging walls: walls that hang over the void being "
+                     "bridged, e.g. a wall surrounding a hole printed on supports or an overhanging "
+                     "perimeter. Walls resting on solid material below are not extended into (the "
+                     "regular infill/wall overlap is enough there), and the extension always stops "
+                     "before the external perimeter, so it cannot poke past the outer surface. "
+                     "The percentage value is relative to the inner wall line width. "
+                     "Set to 0 to disable. Typical values: 30-60%.");
+    def->sidetext = "%";
+    def->ratio_over = "inner_wall_line_width";
+    def->mode = comAdvanced;
+    def->set_default_value(new ConfigOptionPercent(30));
+
     def = this->add("sparse_infill_speed", coFloats);
     def->label = L("Sparse infill");
     def->category = L("Speed");
