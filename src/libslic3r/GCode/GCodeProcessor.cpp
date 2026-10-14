@@ -54,12 +54,8 @@
 #include <map>
 #include <limits>
 #include <fstream>
-<<<<<<< HEAD
 #include <cctype>
-||||||| 18b70844d1
-=======
 #include <libslic3r/ExtrusionEntity.hpp>
->>>>>>> 008dd9fd2e5cb7b30760db0109e35113ff219b19
 #include <regex>
 #include <set>
 #include <sstream>

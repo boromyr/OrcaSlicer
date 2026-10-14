@@ -42,6 +42,7 @@ add_executable(${_TEST_NAME}_tests
     test_texture_color_palette.cpp
     test_texture_island_view.cpp
     test_file_url.cpp
+    test_small_area_infill_flow_compensation.cpp
     test_user_manager.cpp
     ../fff_print/test_helpers.cpp
     )
@@ -118,3 +119,6 @@ if (ORCA_BUNDLED_UV_EXECUTABLE)
 endif()
 
 orcaslicer_discover_tests(${_TEST_NAME}_tests)
+
+# Native curve interaction tests also belong to the normal build and CI test artifact.
+add_subdirectory(curve_editor_gui)
