@@ -206,14 +206,21 @@ Slic3r::PrintEstimatedStatistics::ETimeMode convert(const ETimeMode& mode)
 // move in type, role or a value the preview colors by. convert() sizes its vertex array by
 // counting these, so the count and the fill must both use this test.
 static bool starts_path(const Slic3r::GCodeProcessorResult::MoveVertex& prev,
-                        const Slic3r::GCodeProcessorResult::MoveVertex& curr, bool first_move)
+                        const Slic3r::GCodeProcessorResult::MoveVertex& curr, bool first_move, bool has_overhang_metadata)
 {
     const EOptionType option_type = move_type_to_option(convert(curr.type));
     if (option_type != EOptionType::COUNT && option_type != EOptionType::Travels && option_type != EOptionType::Wipes)
         return false;
     return first_move || prev.type != curr.type || prev.extrusion_role != curr.extrusion_role
         // ORCA: Split the path when a preview value changes.
-        || prev.mm3_per_mm != curr.mm3_per_mm || prev.acceleration != curr.acceleration || prev.jerk != curr.jerk;
+        || prev.mm3_per_mm != curr.mm3_per_mm || prev.acceleration != curr.acceleration || prev.jerk != curr.jerk
+        // Orca: Split when overhang source values change so percentage and derived degree
+        // colors begin at the exact G-code boundary.
+        || (has_overhang_metadata &&
+            (prev.width != curr.width || prev.height != curr.height ||
+             prev.overhang_percentage != curr.overhang_percentage ||
+             // Orca: A reference-plane change can change angles without changing percentage or extrusion size.
+             prev.overhang_z_distance != curr.overhang_z_distance));
 }
 
 GCodeInputData convert(const Slic3r::GCodeProcessorResult& result, const std::vector<std::string>& str_tool_colors,
@@ -252,7 +259,7 @@ GCodeInputData convert(const Slic3r::GCodeProcessorResult& result, const std::ve
     // while both copies are alive.
     size_t vertices_count = moves.empty() ? 0 : moves.size() - 1;
     for (size_t i = 1; i < moves.size(); ++i)
-        if (starts_path(moves[i - 1], moves[i], i == 1))
+        if (starts_path(moves[i - 1], moves[i], i == 1, result.has_overhang_metadata))
             ++vertices_count;
     ret.vertices.reserve(vertices_count);
     // libvgcode numbers its layers from the vertices it is given and expects them to
@@ -271,7 +278,7 @@ GCodeInputData convert(const Slic3r::GCodeProcessorResult& result, const std::ve
                 ++ layer_id;
             src_layer_id = curr.layer_id;
         }
-        if (starts_path(prev, curr, i == 1)) {
+        if (starts_path(prev, curr, i == 1, result.has_overhang_metadata)) {
             // to allow libvgcode to properly detect the start/end of a path we need to add a 'phantom' vertex
             // equal to the current one with the exception of the position, which should match the previous move position,
             // and the times, which are set to zero
@@ -282,7 +289,9 @@ GCodeInputData convert(const Slic3r::GCodeProcessorResult& result, const std::ve
                 static_cast<uint8_t>(curr.extruder_id), static_cast<uint8_t>(curr.cp_color_id), { 0.0f, 0.0f },
                 /* ORCA: Add Pressure Advance visualization support */ 0.0f, curr.pressure_advance,
                 /* ORCA: Add Acceleration visualization support */ curr.acceleration,
-                /* ORCA: Add Jerk visualization support */ curr.jerk };
+                /* Orca: Add Jerk visualization support */ curr.jerk,
+                /* Orca: Preserve percentage and slice spacing on the phantom vertex. */
+                curr.overhang_percentage, curr.overhang_z_distance };
 #else
             const libvgcode::PathVertex vertex = { xform_pos(prev.position), curr.height, curr.width, curr.feedrate, prev.actual_feedrate,
                 curr.mm3_per_mm, curr.fan_speed, curr.temperature, convert(curr.extrusion_role), curr_type,
@@ -290,7 +299,9 @@ GCodeInputData convert(const Slic3r::GCodeProcessorResult& result, const std::ve
                 static_cast<uint8_t>(curr.extruder_id), static_cast<uint8_t>(curr.cp_color_id), { 0.0f, 0.0f },
                 /* ORCA: Add Pressure Advance visualization support */ 0.0f, curr.pressure_advance,
                 /* ORCA: Add Acceleration visualization support */ curr.acceleration,
-                /* ORCA: Add Jerk visualization support */ curr.jerk };
+                /* Orca: Add Jerk visualization support */ curr.jerk,
+                /* Orca: Preserve percentage and slice spacing on the phantom vertex. */
+                curr.overhang_percentage, curr.overhang_z_distance };
 #endif // VGCODE_ENABLE_COG_AND_TOOL_MARKERS
             ret.vertices.emplace_back(vertex);
         }
@@ -303,7 +314,9 @@ GCodeInputData convert(const Slic3r::GCodeProcessorResult& result, const std::ve
             static_cast<uint8_t>(curr.extruder_id), static_cast<uint8_t>(curr.cp_color_id), curr.time,
             /* ORCA: Add Pressure Advance visualization support */ 0.0f, curr.pressure_advance,
             /* ORCA: Add Acceleration visualization support */ curr.acceleration,
-            /* ORCA: Add Jerk visualization support */ curr.jerk };
+            /* Orca: Add Jerk visualization support */ curr.jerk,
+            /* Orca: Copy parsed overhang metadata to the rendered path vertex. */
+            curr.overhang_percentage, curr.overhang_z_distance };
 #else
         const libvgcode::PathVertex vertex = { xform_pos(curr.position), curr.height, curr.width, curr.feedrate, curr.actual_feedrate,
             curr.mm3_per_mm, curr.fan_speed, curr.temperature, convert(curr.extrusion_role), curr_type,
@@ -311,7 +324,9 @@ GCodeInputData convert(const Slic3r::GCodeProcessorResult& result, const std::ve
             static_cast<uint8_t>(curr.extruder_id), static_cast<uint8_t>(curr.cp_color_id), curr.time,
             /* ORCA: Add Pressure Advance visualization support */ 0.0f, curr.pressure_advance,
             /* ORCA: Add Acceleration visualization support */ curr.acceleration,
-            /* ORCA: Add Jerk visualization support */ curr.jerk };
+            /* Orca: Add Jerk visualization support */ curr.jerk,
+            /* Orca: Copy parsed overhang metadata to the rendered path vertex. */
+            curr.overhang_percentage, curr.overhang_z_distance };
 #endif // VGCODE_ENABLE_COG_AND_TOOL_MARKERS
         ret.vertices.emplace_back(vertex);
     }
