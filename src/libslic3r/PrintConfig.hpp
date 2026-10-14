@@ -23,6 +23,7 @@
 #include "Polygon.hpp"
 #include <boost/container_hash/hash.hpp>
 #include <algorithm>
+#include <boost/mp11/algorithm.hpp>
 #include <boost/preprocessor/facilities/empty.hpp>
 #include <boost/preprocessor/punctuation/comma_if.hpp>
 #include <boost/preprocessor/seq/for_each.hpp>
@@ -650,6 +651,11 @@ enum PrimeVolumeMode {
     pvmFast
 };
 
+enum class WaveOverhangPattern : int {
+    Monotonic,
+    ZigZag,
+};
+
 extern std::string get_extruder_variant_string(ExtruderType extruder_type, NozzleVolumeType nozzle_volume_type);
 
 // The variant index a value is taken from: in a variant list paired with its 1-based extruder or
@@ -823,8 +829,13 @@ CONFIG_OPTION_ENUM_DECLARE_STATIC_MAPS(PerimeterGeneratorType)
 CONFIG_OPTION_ENUM_DECLARE_STATIC_MAPS(ToolChangeOrderingType)
 CONFIG_OPTION_ENUM_DECLARE_STATIC_MAPS(PowerLossRecoveryMode)
 CONFIG_OPTION_ENUM_DECLARE_STATIC_MAPS(SurfaceFillOrder)
+<<<<<<< HEAD
 CONFIG_OPTION_ENUM_DECLARE_STATIC_MAPS(TpmsAdaptiveMode)
 CONFIG_OPTION_ENUM_DECLARE_STATIC_MAPS(TpmsAdaptiveGradient)
+||||||| 18b70844d1
+=======
+CONFIG_OPTION_ENUM_DECLARE_STATIC_MAPS(WaveOverhangPattern)
+>>>>>>> 008dd9fd2e5cb7b30760db0109e35113ff219b19
 
 #undef CONFIG_OPTION_ENUM_DECLARE_STATIC_MAPS
 
@@ -1636,6 +1647,12 @@ PRINT_CONFIG_CLASS_DEFINE(
     ((ConfigOptionBool, zaa_dont_alternate_fill_direction))
     ((ConfigOptionFloat, zaa_min_z))
     ((ConfigOptionFloat, zaa_minimize_perimeter_height))
+
+    // Orca: Wave Overhangs
+    ((ConfigOptionBool, wo_enabled))
+    ((ConfigOptionPercent, wo_density))
+    ((ConfigOptionEnum<WaveOverhangPattern>, wo_pattern))
+    ((ConfigOptionFloatsNullable, wo_bridge_speed))
     )
 
 PRINT_CONFIG_CLASS_DEFINE(

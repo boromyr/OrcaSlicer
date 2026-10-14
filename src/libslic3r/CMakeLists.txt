@@ -557,6 +557,8 @@ set(lisbslic3r_sources
     Utils.hpp
     VariableWidth.cpp
     VariableWidth.hpp
+    WaveOverhangs.cpp
+    WaveOverhangs.hpp
     Zipper.cpp
     Zipper.hpp
     FilamentGroup.hpp
