@@ -9,6 +9,7 @@
 #include <wx/event.h>
 #include "CapsuleButton.hpp"
 #include "Widgets/CheckBox.hpp"
+#include "GUI_Utils.hpp"
 
 class Button;
 
@@ -35,7 +36,7 @@ class SmartFilamentPanel;
 bool try_pop_up_before_slice(bool is_slice_all, Plater* plater_ref, PartPlate* partplate_ref, bool force_pop_up = false);
 
 
-class FilamentMapDialog : public wxDialog
+class FilamentMapDialog : public DPIDialog
 {
     enum PageType {
         ptAuto,
@@ -70,6 +71,8 @@ public:
 
     int ShowModal();
     void set_modal_btn_labels(const wxString& left_label, const wxString& right_label);
+    void on_dpi_changed(const wxRect& suggested_rect) override;
+
 private:
     void on_ok(wxCommandEvent &event);
     void on_cancel(wxCommandEvent &event);

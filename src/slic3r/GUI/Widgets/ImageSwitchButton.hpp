@@ -27,7 +27,7 @@ public:
 	void SetPadding(int padding);
 
 	bool GetValue() { return m_on_off; }
-	void Rescale();
+	void Rescale() override;
 
 private:
     void messureSize();
@@ -67,7 +67,7 @@ public:
     void SetPadding(int padding);
 
     bool GetValue() { return m_on_off; }
-    void Rescale();
+    void Rescale() override;
     void setFanValue(int val);
 
     void UseTextFan();

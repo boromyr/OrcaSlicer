@@ -57,6 +57,7 @@ class OG_CustomCtrl :public wxPanel
 
     int     m_max_win_width{0};
 
+
     struct CtrlLine {
         wxCoord           width{ wxDefaultCoord };
         wxCoord           height{ wxDefaultCoord };
