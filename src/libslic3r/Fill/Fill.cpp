@@ -311,6 +311,9 @@ struct SurfaceFillParams
     // For Gyroid: when true, use the parameterized "optimized" wave.
     bool gyroid_optimized = false;
 
+    // For Gyroid: when true, weld the pattern's in-plane saddle points with internal bridges.
+    bool gyroid_saddle_bridges = false;
+
     // For TPMS: grade the density from the surface to the interior of the object.
     TpmsAdaptiveMode     tpms_adaptive          = TpmsAdaptiveMode::Disabled;
     float                tpms_interior_density  = 0.f;
@@ -358,6 +361,7 @@ struct SurfaceFillParams
 		RETURN_COMPARE_NON_EQUAL(skin_infill_depth);
         RETURN_COMPARE_NON_EQUAL(infill_overhang_angle);
 		RETURN_COMPARE_NON_EQUAL(gyroid_optimized);
+		RETURN_COMPARE_NON_EQUAL(gyroid_saddle_bridges);
 		RETURN_COMPARE_NON_EQUAL(tpms_adaptive);
 		RETURN_COMPARE_NON_EQUAL(tpms_interior_density);
 		RETURN_COMPARE_NON_EQUAL(tpms_adaptive_gradient);
@@ -394,6 +398,7 @@ struct SurfaceFillParams
                 this->center_of_surface_pattern == rhs.center_of_surface_pattern &&
                 this->separated_infills       == rhs.separated_infills &&
                 this->gyroid_optimized        == rhs.gyroid_optimized        &&
+                this->gyroid_saddle_bridges   == rhs.gyroid_saddle_bridges   &&
                 this->tpms_adaptive           == rhs.tpms_adaptive           &&
                 this->tpms_interior_density   == rhs.tpms_interior_density   &&
                 this->tpms_adaptive_gradient  == rhs.tpms_adaptive_gradient  &&
@@ -1021,6 +1026,10 @@ std::vector<SurfaceFill> group_fills(const Layer &layer, LockRegionParam &lock_p
                 // (which would unnecessarily split fill batching). Adaptive density replaces it.
                 // Stored on SurfaceFillParams; copied to FillParams during conversion.
                 params.gyroid_optimized = (params.pattern == ipGyroid) && region_config.gyroid_optimized && !tpms_adaptive;
+                // Same reasoning for the saddle bridges; they are additionally restricted to sparse
+                // infill, as a solid or bridging gyroid has no open necks to weld.
+                params.gyroid_saddle_bridges = (params.pattern == ipGyroid) && ! surface.is_solid() && ! is_bridge &&
+                                               region_config.gyroid_saddle_bridges;
 
                 if (params.extrusion_role == erInternalInfill) {
                     params.angle = calculate_infill_rotation_angle(layer.object(), layer.id(), region_config.infill_direction.value,
@@ -1423,6 +1432,7 @@ void Layer::make_fills(const FillAdaptive::RegionOctrees* fill_octrees, FillLigh
         params.lateral_lattice_angle_2   = surface_fill.params.lateral_lattice_angle_2;
         params.infill_overhang_angle   = surface_fill.params.infill_overhang_angle;
         params.gyroid_optimized          = surface_fill.params.gyroid_optimized;
+        params.gyroid_saddle_bridges     = surface_fill.params.gyroid_saddle_bridges;
         params.tpms_adaptive             = surface_fill.params.tpms_adaptive;
         params.tpms_interior_density     = float(0.01 * surface_fill.params.tpms_interior_density);
         params.tpms_adaptive_gradient    = surface_fill.params.tpms_adaptive_gradient;

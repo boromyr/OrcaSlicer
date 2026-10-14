@@ -1187,6 +1187,7 @@ static std::vector<std::string> s_Preset_print_options{
     "tpms_interior_density",
     "tpms_adaptive_gradient",
     "gyroid_optimized",
+    "gyroid_saddle_bridges",
     "sparse_infill_pattern",
     "sparse_infill_smooth_factor",
     "lateral_lattice_angle_1",
@@ -1494,6 +1495,8 @@ static std::vector<std::string> s_Preset_filament_options {/*"filament_colour", 
     "filament_tower_interface_pre_extrusion_dist", "filament_tower_interface_pre_extrusion_length", "filament_tower_ironing_area", "filament_tower_interface_purge_volume",
     "filament_tower_interface_print_temp",
     "nozzle_temperature", "nozzle_temperature_initial_layer",
+    // Orca: per-feature nozzle temperature overrides
+    "overhang_temperature", "bridge_temperature",
     // BBS
     "cool_plate_temp", "textured_cool_plate_temp", "eng_plate_temp", "hot_plate_temp", "textured_plate_temp", "cool_plate_temp_initial_layer", "textured_cool_plate_temp_initial_layer", "eng_plate_temp_initial_layer", "hot_plate_temp_initial_layer", "textured_plate_temp_initial_layer", "supertack_plate_temp_initial_layer", "supertack_plate_temp",
     // "bed_type",
@@ -1527,7 +1530,7 @@ static std::vector<std::string> s_Preset_filament_options {/*"filament_colour", 
     "nozzle_temperature_range_low", "nozzle_temperature_range_high",
     "filament_extruder_variant",
     //SoftFever
-    "enable_pressure_advance", "pressure_advance","adaptive_pressure_advance","adaptive_pressure_advance_model","adaptive_pressure_advance_overhangs", "adaptive_pressure_advance_bridges","chamber_temperature", "filament_shrink","filament_shrinkage_compensation_z", "support_material_interface_fan_speed","internal_bridge_fan_speed", "filament_notes" /*,"filament_seam_gap"*/,
+    "enable_pressure_advance", "pressure_advance","adaptive_pressure_advance","adaptive_pressure_advance_model","adaptive_pressure_advance_overhangs", "adaptive_pressure_advance_bridges","chamber_temperature", "filament_shrinkage_compensation_x", "filament_shrinkage_compensation_y", "filament_shrinkage_compensation_z", "support_material_interface_fan_speed","internal_bridge_fan_speed", "filament_notes" /*,"filament_seam_gap"*/,
     "ironing_fan_speed",
     // Filament ironing overrides
     "filament_ironing_flow", "filament_ironing_spacing", "filament_ironing_inset", "filament_ironing_speed",
@@ -1569,6 +1572,8 @@ static std::vector<std::string> s_Preset_machine_limits_options {
 
 static std::vector<std::string> s_Preset_printer_options {
     "printer_technology",
+    // Orca: hotend ramp rates for the per-feature nozzle temperature lookahead
+    "nozzle_heating_rate", "nozzle_cooling_rate",
     "printable_area", "extruder_printable_area", "support_parallel_printheads", "parallel_printheads_count", "parallel_printheads_bed_exclude_areas", "bed_exclude_area","bed_custom_texture", "bed_custom_model", "build_plate_tilt_x", "build_plate_tilt_y", "belt_printer", "belt_printer_infinite_y",
     "belt_slice_rotation", "belt_slice_rotation_angle",
     "gcode_remap_x", "gcode_remap_y", "gcode_remap_z",

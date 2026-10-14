@@ -854,6 +854,7 @@ void ConfigManipulation::toggle_print_fff_options(DynamicPrintConfig *config, in
     // gyroid_optimized only applies when the sparse infill pattern is gyroid without adaptive density;
     // hide the whole line otherwise.
     toggle_line("gyroid_optimized", have_infill && pattern == ipGyroid && !have_tpms_adaptive);
+    toggle_line("gyroid_saddle_bridges", have_infill && pattern == ipGyroid);
 
     // If there is infill, enable/disable fill_multiline according to whether the pattern supports multiline infill.
     if (have_infill) {

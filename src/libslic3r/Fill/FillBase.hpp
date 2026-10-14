@@ -92,6 +92,10 @@ struct FillParams
     // For Gyroid: when true, use the parameterized "optimized" variant.
     bool        gyroid_optimized { false };
 
+    // For Gyroid: when true, weld the pattern's in-plane saddle points with a small patch of
+    // internal bridge infill on the single layer where each of them opens up.
+    bool        gyroid_saddle_bridges { false };
+
     // For TPMS: grade the density from the surface to the interior of the object. Density fraction.
     TpmsAdaptiveMode     tpms_adaptive { TpmsAdaptiveMode::Disabled };
     float                tpms_interior_density { 0.f };
