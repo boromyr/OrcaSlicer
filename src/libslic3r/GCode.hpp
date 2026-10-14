@@ -469,7 +469,7 @@ protected:
     std::string generate_object_brim(const Print &print,
         const PrintObject &object,
         size_t instance_id,
-        bool first_layer,
+        const Layer *layer,
         const Layer *object_layer);
 
     // Belt printers: emit one brim-only apron layer.  These print below the
@@ -661,7 +661,8 @@ protected:
     // BBS
     LiftType to_lift_type(ZHopType z_hop_types);
 
-    std::set<ObjectInstanceID>      m_objsWithBrim; // indicates the object instances with brim
+    std::map<ObjectInstanceID, unsigned int> m_objsWithBrim; // maps instance IDs to remaining brim layers
+    std::set<const Print::SkirtBrimGroup::Brim*> m_brim_emitted_this_layer; // brims already emitted this layer
     // Cache for custom seam enforcers/blockers for each layer.
     SeamPlacer                          m_seam_placer;
 
