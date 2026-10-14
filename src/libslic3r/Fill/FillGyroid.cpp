@@ -1,5 +1,7 @@
 #include "../ClipperUtils.hpp"
 #include "../MarchingSquares.hpp"
+#include "../ExtrusionEntityCollection.hpp"
+#include "../ShortestPath.hpp"
 #include <cmath>
 #include <algorithm>
 #include <cstddef>
