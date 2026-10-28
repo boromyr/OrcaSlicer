@@ -2043,7 +2043,7 @@ TEST_CASE("Filament shrinkage compensation scales the sliced object", "[Print][R
 
     Print print;
     init_and_process_print({ cube(20.) }, print, {
-        { "filament_shrink", xy },
+        { "filament_shrinkage_compensation_x", xy }, { "filament_shrinkage_compensation_y", xy },
         { "filament_shrinkage_compensation_z", z },
         { "layer_height", layer_height },
         { "initial_layer_print_height", layer_height },
@@ -2068,7 +2068,7 @@ TEST_CASE("Filament shrinkage compensation follows the filaments the object prin
 
     Print print;
     init_and_process_print({ cube(20.) }, print, multifilament_config(2, {
-        { "filament_shrink", "90%,100%" },
+        { "filament_shrinkage_compensation_x", "90%,100%" }, { "filament_shrinkage_compensation_y", "90%,100%" },
         { "outer_wall_filament_id", wall_filament },
         { "inner_wall_filament_id", wall_filament },
         { "xy_contour_compensation", 0. },
@@ -2090,7 +2090,7 @@ TEST_CASE("Filament shrinkage compensation follows the filaments the object prin
 TEST_CASE("Applying the same model again keeps the filament shrinkage compensation", "[Print][Regression]")
 {
     DynamicPrintConfig config = DynamicPrintConfig::full_print_config();
-    config.set_deserialize_strict({ { "filament_shrink", "90%" }, { "xy_contour_compensation", 0. } });
+    config.set_deserialize_strict({ { "filament_shrinkage_compensation_x", "90%" }, { "filament_shrinkage_compensation_y", "90%" }, { "xy_contour_compensation", 0. } });
 
     Print print;
     Model model;
@@ -2113,7 +2113,7 @@ TEST_CASE("Height ranges and modifiers count for the filament shrinkage compensa
     // The object prints with the filament that shrinks to 90 %, the other one does not shrink.
     const bool object_on_filament_2 = setup == Setup::ModifierInheritingObjectFilament;
     DynamicPrintConfig config = multifilament_config(2, {
-        { "filament_shrink", object_on_filament_2 ? "100%,90%" : "90%,100%" },
+        { "filament_shrinkage_compensation_x", object_on_filament_2 ? "100%,90%" : "90%,100%" }, { "filament_shrinkage_compensation_y", object_on_filament_2 ? "100%,90%" : "90%,100%" },
         { "xy_contour_compensation", 0. },
         { "layer_change_gcode", "G92 E0\n" }, // validate() relative-E reset
     });

@@ -386,6 +386,10 @@ std::string AdaptivePAProcessor::validate_adaptive_pa_model(const std::string& m
                 return Slic3r::format(_u8L("Line %1%: missing acceleration value"), line_number);
             double accel = std::stod(value);
             
+            // Orca: an all-zero row is the placeholder an extruder variant without measurements holds
+            if (pa == 0. && flow == 0. && accel == 0.)
+                continue;
+
             // Validate constraints
             if (pa >= 2.0) {
                 return Slic3r::format(_u8L("Line %1%: PA value must be less than 2"), line_number);

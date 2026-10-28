@@ -28,6 +28,10 @@ struct Settings
 		float dim_previous_layers_brightness{ 0.4f };
 		// ORCA: when disabled, the filaments are drawn opaque whatever their color's opacity
 		bool translucent_filaments{ true };
+		// ORCA: when enabled and the preview shows a single layer, the color ranges of the
+		// current view type are computed from the values found in that layer only, instead of
+		// the whole print, so that the palette resolves the details of the inspected layer
+		bool rescale_colors_to_visible_layer{ false };
 		bool spiral_vase_mode{ false };
 		//
 		// Required update flags

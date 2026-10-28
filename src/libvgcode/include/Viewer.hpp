@@ -149,6 +149,13 @@ public:
     bool is_translucent_filaments() const;
     void set_translucent_filaments(bool value);
     //
+    // Rescale colors to the visible layer (ORCA)
+    // Whether the color ranges of the current view type are computed from the values found in
+    // the layer currently shown alone, instead of those found in the whole print.
+    //
+    bool is_rescale_colors_to_visible_layer() const;
+    void set_rescale_colors_to_visible_layer(bool value);
+    //
     // Returns true if the given option is visible.
     //
     bool is_option_visible(EOptionType type) const;

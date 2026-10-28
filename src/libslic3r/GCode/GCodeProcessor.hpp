@@ -601,6 +601,14 @@ inline constexpr float DEFAULT_FILAMENT_DENSITY = 1.245f;
         // Size of the blocks the post-processing passes write the G-code in
         static constexpr size_t Output_Block_Size = 65536;
 
+        // Orca: a temperature command trailed by "; FEATURE_TEMP R<ramp> F<opens> S<to>" asks
+        // the post-processor to move it `ramp` seconds earlier in the output, so the hotend has
+        // reached the requested temperature by the time this point is printed, and to drop it
+        // altogether when the feature it opens is shorter than the ramp. The tag is dropped along
+        // with the original position; a command that never reaches the post-processor still acts
+        // where it stands, un-anticipated and unfiltered.
+        static const std::string Feature_Temp_Tag;
+
         // Orca: SKIPPABLE region tags, stored as static strings (the FLUSH idiom above) rather than
         // a CustomETags/CustomTags array. Public so the emission sites (WipeTower / change_filament
         // path) can reference them single-sourced.
@@ -1371,6 +1379,9 @@ inline constexpr float DEFAULT_FILAMENT_DENSITY = 1.245f;
         bool m_g29_time_added {false};
         bool m_single_extruder_multi_material;
         float m_preheat_time;
+        // Orca: any filament asks for a bridge temperature and the hotend ramp rates are known,
+        // so the export cache has to keep enough history for the lookahead to backtrace into.
+        bool  m_feature_temp_lookahead{ false };
         int m_preheat_steps;
         bool m_disable_m73;
         std::string m_printer_model;

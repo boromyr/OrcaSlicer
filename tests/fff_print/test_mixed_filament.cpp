@@ -345,7 +345,7 @@ TEST_CASE("Filament shrinkage compensation compares the physical filaments of a 
     // The mixed slot 3 blends filament 1 (90 %) and filament 2 (100 %); its own 90 % does not count.
     DynamicPrintConfig config = mixed_config(false);
     config.set_deserialize_strict({
-        { "filament_shrink", "90%,100%,90%" },
+        { "filament_shrinkage_compensation_x", "90%,100%,90%" }, { "filament_shrinkage_compensation_y", "90%,100%,90%" },
         { "xy_contour_compensation", 0. },
         { "layer_change_gcode", "G92 E0\n" }, // validate() relative-E reset
     });
@@ -387,7 +387,7 @@ TEST_CASE("Filament shrinkage compensation counts the wipe tower filament next t
         {"prime_tower_width",               "35"},
         {"wipe_tower_x",                    "50"}, // inside the 200x200 test bed
         {"wipe_tower_y",                    "50"},
-        {"filament_shrink",                 "90%,90%,100%,90%"},
+        { "filament_shrinkage_compensation_x", "90%,90%,100%,90%" }, { "filament_shrinkage_compensation_y", "90%,90%,100%,90%" },
         {"xy_contour_compensation",         "0"},
         {"layer_change_gcode",              "G92 E0\n"}, // validate() relative-E reset
     });

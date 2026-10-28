@@ -858,6 +858,7 @@ void ConfigManipulation::toggle_print_fff_options(DynamicPrintConfig *config, in
     // gyroid_optimized only applies when the sparse infill pattern is gyroid without adaptive density;
     // hide the whole line otherwise.
     toggle_line("gyroid_optimized", have_infill && pattern == ipGyroid && !have_adaptive_infill, -1, _L("Select Gyroid infill with nonzero sparse infill density and disable adaptive density to use this setting."));
+    toggle_line("gyroid_saddle_bridges", have_infill && pattern == ipGyroid);
 
     // If there is infill, enable/disable fill_multiline according to whether the pattern supports multiline infill.
     if (have_infill) {
@@ -944,7 +945,7 @@ void ConfigManipulation::toggle_print_fff_options(DynamicPrintConfig *config, in
     toggle_line("bottom_surface_fill_order", has_bottom_shell && is_centered_fill(config->opt_enum<InfillPattern>("bottom_surface_pattern")), -1, _L("Use bottom shell layers and the Concentric, Spiral Inset, Archimedean Chords or Octagram Spiral surface pattern."));
 
     const wxString infill_or_shell_reason = _L("Use nonzero sparse infill density or top or bottom shell layers to edit this setting.");
-    for (auto el : { "infill_direction", "sparse_infill_line_width", "gap_fill_target","filter_out_gap_fill","infill_wall_overlap",
+    for (auto el : { "infill_direction", "sparse_infill_line_width", "gap_fill_target","filter_out_gap_fill","infill_wall_overlap","bridge_infill_wall_overlap",
         "bridge_angle", "internal_bridge_angle", "relative_bridge_angle",
         "solid_infill_direction", "solid_infill_rotate_template", "internal_solid_infill_pattern", "internal_solid_filament_id", "top_surface_filament_id", "bottom_surface_filament_id",
         })
