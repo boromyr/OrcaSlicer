@@ -291,6 +291,9 @@ bool Print::invalidate_state_by_config_options(const ConfigOptionResolver & /* n
         "enable_overhang_bridge_fan",
         "overhang_fan_speed",
         "overhang_fan_threshold",
+        // Orca: per-feature nozzle temperature overrides
+        "overhang_temperature",
+        "bridge_temperature",
         "slow_down_for_layer_cooling",
         "default_acceleration",
         "deretraction_speed",
@@ -371,6 +374,9 @@ bool Print::invalidate_state_by_config_options(const ConfigOptionResolver & /* n
         "slow_down_layer_time",
         "standby_temperature_delta",
         "preheat_time",
+        // Orca: hotend ramp rates for the per-feature temperature lookahead
+        "nozzle_heating_rate",
+        "nozzle_cooling_rate",
         "preheat_steps",
         "machine_start_gcode",
         "filament_start_gcode",
@@ -486,7 +492,8 @@ bool Print::invalidate_state_by_config_options(const ConfigOptionResolver & /* n
             || opt_key == "print_plugin_config_overrides"
             || opt_key == "initial_layer_print_height"
             || opt_key == "nozzle_diameter"
-            || opt_key == "filament_shrink"
+            || opt_key == "filament_shrinkage_compensation_x"
+            || opt_key == "filament_shrinkage_compensation_y"
             || opt_key == "filament_shrinkage_compensation_z"
             || opt_key == "resolution"
             || opt_key == "precise_z_height"

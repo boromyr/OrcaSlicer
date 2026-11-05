@@ -98,6 +98,10 @@ struct FillParams
     float                adaptive_infill_interior_density { 0.f };
     AdaptiveInfillGradient adaptive_infill_gradient { AdaptiveInfillGradient::Linear };
 
+    // For Gyroid: when true, weld the pattern's in-plane saddle points with a small patch of
+    // internal bridge infill on the single layer where each of them opens up.
+    bool        gyroid_saddle_bridges { false };
+
     // Orca: corner smoothing factor in the range [0, 1].
     double      smooth_factor { 0. };
     // The corner smoothing in scaled coordinates.
