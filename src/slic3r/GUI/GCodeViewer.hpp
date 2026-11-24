@@ -27,6 +27,7 @@
 #include <libvgcode/include/Types.hpp>
 
 #include <array>
+#include <cassert>
 #include <optional>
 #include <cstdint>
 #include <float.h>
@@ -131,7 +132,8 @@ public:
             void set_color(const ColorRGBA& color) { m_model.set_color(color); }
 
             void render(int canvas_width, int canvas_height, const libvgcode::EViewType& view_type);
-            void render_position_window(const libvgcode::Viewer* viewer, int canvas_width, int canvas_height, const libvgcode::EViewType& view_type);
+            // Orca: Hide overhang properties when the loaded file has no metadata, rather than reporting false zeros.
+            void render_position_window(const libvgcode::Viewer* viewer, int canvas_width, int canvas_height, const libvgcode::EViewType& view_type, bool has_overhang_metadata);
             void on_change_color_mode(bool is_dark) { m_is_dark = is_dark; }
         };
 
@@ -184,7 +186,7 @@ public:
         // The tool marker at the current move, drawn in 3D.
         void render_marker(const bool has_render_path, int canvas_width, int canvas_height, const libvgcode::EViewType& view_type);
         // The marker's position window and the G-code window, both ImGui.
-        void render_overlay(const bool has_render_path, float legend_height, const libvgcode::Viewer* viewer, uint32_t gcode_id, int canvas_width, int canvas_height, int right_margin, const libvgcode::EViewType& view_type);
+        void render_overlay(const bool has_render_path, float legend_height, const libvgcode::Viewer* viewer, uint32_t gcode_id, int canvas_width, int canvas_height, int right_margin, const libvgcode::EViewType& view_type, bool has_overhang_metadata);
     };
     struct ExtruderFilament
     {
@@ -220,7 +222,9 @@ private:
     // Belt printers: the print Z of each viewer layer, in the viewer's layer numbering.
     std::vector<double> m_belt_layer_zs;
     //BBS: save m_gcode_result as well
-    const GCodeProcessorResult* m_gcode_result;
+    const GCodeProcessorResult* m_gcode_result{ nullptr };
+    // Orca: Cache metadata availability for constructing the preview-mode menu.
+    bool m_has_overhang_metadata{ false };
     std::array<unsigned int, static_cast<size_t>(EMoveType::Count)> m_move_type_counts{};
     std::array<std::array<float, static_cast<size_t>(PrintEstimatedStatistics::ETimeMode::Count)>, static_cast<size_t>(EMoveType::Count)> m_move_type_times{};
     std::array<float, static_cast<size_t>(EMoveType::Count)> m_move_type_distances{};
@@ -541,6 +545,47 @@ public:
     static bool view_type_from_config_name(const std::string& name, libvgcode::EViewType& type);
     // ORCA: (config value, translated label) pairs for the "preview_default_view_type" preference combo box
     static std::vector<std::pair<std::string, std::string>> default_view_type_choices();
+    // Orca: The view types the legend's menu offers, in order, without the first layer inspection entry. The Overhang
+    // view needs G-code with overhang metadata.
+    static std::vector<libvgcode::EViewType> view_type_menu(bool has_overhang_metadata);
+    // Orca: The view type the preview shows when `type` is asked for: Line Type for the Overhang view of G-code without
+    // overhang metadata, otherwise `type`.
+    static libvgcode::EViewType available_view_type(libvgcode::EViewType type, bool has_overhang_metadata);
+    // Orca: A line's overhang in percent and in degrees.
+    struct LineOverhang
+    {
+        float share;
+        float degree;
+        float in(bool percentage) const { return percentage ? share : degree; }
+    };
+    // Orca: The overhang of vertex `id`'s G-code line, none when no vertex of the line is measured. A line with a local
+    // profile is drawn as several vertices, each with the value and the width of its part, and reads as its largest one
+    // in each unit, which may be different parts. `vertex_at(i)` gives the vertex `i` of `count`.
+    template<typename VertexAt>
+    static std::optional<LineOverhang> line_overhang(size_t id, size_t count, const VertexAt &vertex_at)
+    {
+        assert(id < count);
+        const libvgcode::PathVertex &line = vertex_at(id);
+        const auto on_line = [&line, &vertex_at](size_t i) {
+            const libvgcode::PathVertex &vertex = vertex_at(i);
+            return vertex.gcode_id == line.gcode_id && vertex.type == line.type;
+        };
+        size_t first = id;
+        while (first > 0 && on_line(first - 1))
+            --first;
+        std::optional<LineOverhang> largest;
+        for (size_t i = first; i < count && on_line(i); ++i) {
+            const libvgcode::PathVertex &vertex = vertex_at(i);
+            if (!vertex.has_overhang())
+                continue;
+            const LineOverhang value{vertex.overhang_share(), vertex.overhang_degree()};
+            if (!largest)
+                largest = value;
+            else
+                largest = LineOverhang{std::max(largest->share, value.share), std::max(largest->degree, value.degree)};
+        }
+        return largest;
+    }
     void reset_visible(libvgcode::EViewType type) {
         if (type == libvgcode::EViewType::FeatureType) {
             auto roles = m_viewer.get_extrusion_roles();
