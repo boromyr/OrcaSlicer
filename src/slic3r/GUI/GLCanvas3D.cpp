@@ -524,6 +524,11 @@ void GLCanvas3D::LayersEditing::render_variable_layer_height_dialog(GLCanvas3D& 
     ImGui::SameLine();
     ImGui::AlignTextToFramePadding();
     imgui.text(_L("Keep min"));
+    ImGui::SameLine();
+    imgui.bbl_checkbox("##limit_max_layer_height", m_limit_max_layer_height);
+    ImGui::SameLine();
+    ImGui::AlignTextToFramePadding();
+    imgui.text(_L("Limit to layer height"));
 
     if (!m_other_object_ids.empty()) {
         // Several objects are selected: by default they share one profile, which the prime tower requires.
@@ -1240,7 +1245,12 @@ void GLCanvas3D::LayersEditing::adjust_layer_height_profile()
 {
     this->update_slicing_parameters();
     PrintObject::update_layer_height_profile(*m_model_object, *m_slicing_parameters, m_layer_height_profile);
-    Slic3r::adjust_layer_height_profile(*m_model_object, *m_slicing_parameters, m_layer_height_profile, this->last_z, this->strength, this->band_width, this->last_action);
+    //ORCA: Limit max layer height if requested
+    SlicingParameters params = *m_slicing_parameters;
+    if (m_limit_max_layer_height) {
+        params.max_layer_height = std::max(params.min_layer_height, params.layer_height);
+    }
+    Slic3r::adjust_layer_height_profile(*m_model_object, params, m_layer_height_profile, this->last_z, this->strength, this->band_width, this->last_action);
     m_layers_texture.valid = false;
 }
 
@@ -1284,6 +1294,12 @@ void GLCanvas3D::LayersEditing::reset_layer_height_profile(GLCanvas3D & canvas)
 void GLCanvas3D::LayersEditing::adaptive_layer_height_profile(GLCanvas3D & canvas, float quality_factor)
 {
     this->update_slicing_parameters();
+    //ORCA: Limit max layer height if requested
+    auto limit_params = [this](SlicingParameters params) {
+        if (m_limit_max_layer_height)
+            params.max_layer_height = std::max(params.min_layer_height, params.layer_height);
+        return params;
+    };
     const std::vector<int> object_ids = this->edited_object_ids();
     std::vector<std::vector<double>> profiles;
     // The objects that share one profile: all of them by default, but an object that starts its layers
@@ -1291,7 +1307,7 @@ void GLCanvas3D::LayersEditing::adaptive_layer_height_profile(GLCanvas3D & canva
     std::vector<size_t> sharing;
     for (size_t i = 0; i < object_ids.size(); ++i) {
         const ModelObject&      model_object       = *m_model->objects[object_ids[i]];
-        const SlicingParameters slicing_parameters = this->slicing_parameters_of(model_object);
+        const SlicingParameters slicing_parameters = limit_params(this->slicing_parameters_of(model_object));
         profiles.emplace_back(layer_height_profile_adaptive(slicing_parameters, model_object, quality_factor));
         if (profiles.back().size() >= 4 && (i == 0 || this->follows_shown_object(slicing_parameters)))
             sharing.emplace_back(i);
@@ -1311,12 +1327,18 @@ void GLCanvas3D::LayersEditing::adaptive_layer_height_profile(GLCanvas3D & canva
 void GLCanvas3D::LayersEditing::smooth_layer_height_profile(GLCanvas3D & canvas, const HeightProfileSmoothingParams & smoothing_params)
 {
     this->update_slicing_parameters();
+    //ORCA: Limit max layer height if requested
+    auto limit_params = [this](SlicingParameters params) {
+        if (m_limit_max_layer_height)
+            params.max_layer_height = std::max(params.min_layer_height, params.layer_height);
+        return params;
+    };
     const std::vector<int> object_ids = this->edited_object_ids();
     // The object shown is the tallest one, so its profile covers the others when they share one.
-    std::vector<std::vector<double>> profiles{ smooth_height_profile(m_layer_height_profile, *m_slicing_parameters, smoothing_params) };
+    std::vector<std::vector<double>> profiles{ smooth_height_profile(m_layer_height_profile, limit_params(*m_slicing_parameters), smoothing_params) };
     for (size_t i = 1; i < object_ids.size(); ++i) {
         const ModelObject&      model_object       = *m_model->objects[object_ids[i]];
-        const SlicingParameters slicing_parameters = this->slicing_parameters_of(model_object);
+        const SlicingParameters slicing_parameters = limit_params(this->slicing_parameters_of(model_object));
         if (this->follows_shown_object(slicing_parameters))
             profiles.emplace_back(layer_height_profile_fit_to_height(profiles.front(), model_object.max_z()));
         else {
