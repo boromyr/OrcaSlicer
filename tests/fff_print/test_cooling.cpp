@@ -204,6 +204,24 @@ double lowest_outer_wall_feedrate(const std::string &gcode)
 }
 } // namespace
 
+namespace {
+// An enum vector option cannot be deserialized from a string in a config made from the static print config,
+// as its keys map is not set. Set the option directly.
+std::string slice_cooling(const char *slow_down_layer_time, CoolingSlowdownLogicType logic, const char *transition_distance = nullptr)
+{
+    DynamicPrintConfig config = DynamicPrintConfig::full_print_config();
+    config.set_deserialize_strict({
+        { "slow_down_for_layer_cooling", true },
+        { "slow_down_layer_time",        slow_down_layer_time },
+        { "slow_down_min_speed",         "10" },
+    });
+    config.set_key_value("cooling_slowdown_logic", new ConfigOptionEnumsGeneric{ logic });
+    if (transition_distance != nullptr)
+        config.set_deserialize_strict({ { "cooling_perimeter_transition_distance", transition_distance } });
+    return slice({ cube(20) }, config);
+}
+} // namespace
+
 // Without a required slow down both logics must produce identical G-code.
 TEST_CASE("Consistent surface does not alter layers that need no slow down", "[Cooling]")
 {
@@ -229,16 +247,8 @@ TEST_CASE("Consistent surface does not alter layers that need no slow down", "[C
 // are never slower than with the uniform logic.
 TEST_CASE("Consistent surface protects outer walls from the slow down", "[Cooling]")
 {
-    const auto outer_wall_feedrate = [](const char *logic) {
-        return lowest_outer_wall_feedrate(slice({ cube(20) }, {
-            { "slow_down_for_layer_cooling", true },
-            { "slow_down_layer_time",        "30" },
-            { "slow_down_min_speed",         "10" },
-            { "cooling_slowdown_logic",      logic },
-        }));
-    };
-    const double uniform    = outer_wall_feedrate("uniform_cooling");
-    const double consistent = outer_wall_feedrate("consistent_surface");
+    const double uniform    = lowest_outer_wall_feedrate(slice_cooling("30", cslUniformCooling));
+    const double consistent = lowest_outer_wall_feedrate(slice_cooling("30", cslConsistentSurface));
     REQUIRE(uniform < std::numeric_limits<double>::max());
     REQUIRE(consistent < std::numeric_limits<double>::max());
     CHECK(consistent >= uniform);
@@ -248,15 +258,6 @@ TEST_CASE("Consistent surface protects outer walls from the slow down", "[Coolin
 // insert feedrate commands and must not touch the extrusion moves nor leak the internal markers.
 TEST_CASE("Consistent surface transition keeps the extrusion moves", "[Cooling]")
 {
-    const auto sliced = [](const char *distance) {
-        return slice({ cube(20) }, {
-            { "slow_down_for_layer_cooling",          true },
-            { "slow_down_layer_time",                 "30" },
-            { "slow_down_min_speed",                  "10" },
-            { "cooling_slowdown_logic",               "consistent_surface" },
-            { "cooling_perimeter_transition_distance", distance },
-        });
-    };
     const auto count_extrusion_moves = [](const std::string &gcode) {
         size_t count = 0;
         std::istringstream input(gcode);
@@ -266,10 +267,11 @@ TEST_CASE("Consistent surface transition keeps the extrusion moves", "[Cooling]"
                 ++ count;
         return count;
     };
-    const std::string without_transition = sliced("0");
-    const std::string with_transition    = sliced("10");
+    const std::string without_transition = slice_cooling("30", cslConsistentSurface, "0");
+    const std::string with_transition    = slice_cooling("30", cslConsistentSurface, "10");
     CHECK(count_extrusion_moves(without_transition) == count_extrusion_moves(with_transition));
     CHECK(with_transition.find(";_EXTRUDE_SET_SPEED") == std::string::npos);
+    CHECK(with_transition.find(";_INTERNAL_PERIMETER1") == std::string::npos);
 }
 
 
