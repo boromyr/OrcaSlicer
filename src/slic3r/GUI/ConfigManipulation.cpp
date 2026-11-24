@@ -1008,10 +1008,11 @@ void ConfigManipulation::toggle_print_fff_options(DynamicPrintConfig *config, in
     // Belt printer: disable skirt, brim, raft, and draft shield controls.
     bool have_skirt = config->opt_int("skirt_loops") > 0 && !is_belt_printer;
     const wxString skirt_reason = _L("Use a non-belt printer with skirt loops above zero to use this setting.");
+    toggle_line("skirt_height", have_skirt, -1, skirt_reason);
     toggle_field("skirt_height", have_skirt && config->opt_enum<DraftShield>("draft_shield") != dsEnabled, -1, _L("Use a non-belt printer with skirt loops above zero and disable the full-height draft shield to edit skirt height."));
     toggle_line("single_loop_draft_shield", have_skirt, -1, skirt_reason); // ORCA: Display one wall if skirt enabled
     for (auto el : {"skirt_type", "min_skirt_length", "skirt_distance", "skirt_start_angle", "skirt_speed", "draft_shield"})
-        toggle_field(el, have_skirt, -1, skirt_reason);
+        toggle_line(el, have_skirt, -1, skirt_reason);
     if (is_belt_printer) {
         const wxString belt_skirt_reason = _L("Skirts are unavailable for belt printers.");
         toggle_field("skirt_loops", false, -1, belt_skirt_reason);
@@ -1024,17 +1025,17 @@ void ConfigManipulation::toggle_print_fff_options(DynamicPrintConfig *config, in
     // is_belt_tilted test.
     bool have_brim = config->opt_enum<BrimType>("brim_type") != btNoBrim;
     const wxString brim_reason = _L("Select a brim type other than No brim to use this setting.");
-    toggle_field("brim_object_gap", have_brim, -1, brim_reason);
+    toggle_line("brim_object_gap", have_brim, -1, brim_reason);
     // Both are first-layer-only concepts that the belt path cannot honour.
     const wxString flat_bed_brim_reason = _L("Enable a brim on a printer without a tilted belt to use this setting.");
-    toggle_field("brim_use_efc_outline", have_brim && !is_belt_tilted, -1, flat_bed_brim_reason);
-    toggle_field("combine_brims", have_brim && !is_belt_tilted, -1, flat_bed_brim_reason);
+    toggle_line("brim_use_efc_outline", have_brim && !is_belt_tilted, -1, flat_bed_brim_reason);
+    toggle_line("combine_brims", have_brim && !is_belt_tilted, -1, flat_bed_brim_reason);
     bool have_brim_width = have_brim && config->opt_enum<BrimType>("brim_type") != btAutoBrim &&
                            config->opt_enum<BrimType>("brim_type") != btPainted;
     // On a tilted belt Auto / Mouse ear / Painted all collapse to outer-only at the
     // configured width, so the width field has to stay live for them too.
-    toggle_field("brim_width", have_brim_width || (have_brim && is_belt_tilted), -1, _L("Select a brim type with an editable width, or enable a brim on a tilted belt printer."));
-    toggle_field("brim_flow_ratio", have_brim, -1, brim_reason);
+    toggle_line("brim_width", have_brim_width || (have_brim && is_belt_tilted), -1, _L("Select a brim type with an editable width, or enable a brim on a tilted belt printer."));
+    toggle_line("brim_flow_ratio", have_brim, -1, brim_reason);
     toggle_field("brim_filament_id", have_brim, -1, brim_reason);
     // Paired toggle_line + toggle_field: cb_toggle_line is null in the per-object
     // override panel, so the row cannot be hidden there and greying out is the
@@ -1078,19 +1079,18 @@ void ConfigManipulation::toggle_print_fff_options(DynamicPrintConfig *config, in
                                                     _L("Enable support or add raft layers to edit this setting.");
 
     SupportType support_type = config->opt_enum<SupportType>("support_type");
-    bool have_support_interface = config->opt_int("support_interface_top_layers") > 0 || config->opt_int("support_interface_bottom_layers") > 0;
-    bool have_support_soluble = have_support_material && config->opt_float("support_top_z_distance") == 0;
+    
     auto support_style = config->opt_enum<SupportMaterialStyle>("support_style");
     for (auto el : { "support_style", "support_base_pattern",
         "support_base_pattern_spacing", "support_expansion", "support_angle",
         "support_interface_pattern", "support_interface_top_layers", "support_interface_bottom_layers",
         "bridge_no_support", "max_bridge_length", "support_top_z_distance", "support_bottom_z_distance",
-        "support_type", "support_on_build_plate_only", "support_critical_regions_only", "support_interface_not_for_body",
+        "support_type", "support_on_build_plate_only", "support_critical_regions_only", "support_remove_small_overhang", "support_interface_not_for_body",
         "support_object_xy_distance", "support_object_first_layer_gap", "independent_support_layer_height"})
-        toggle_field(el, have_support_material, -1, support_reason);
-    toggle_field("support_threshold_angle", have_support_material && is_auto(support_type), -1,
+        toggle_line(el, have_support_material, -1, support_reason);
+    toggle_line("support_threshold_angle", have_support_material && is_auto(support_type), -1,
                  !have_support_material ? support_reason : _L("Select an automatic support type to edit the threshold angle."));
-    toggle_field("support_threshold_overlap", config->opt_int("support_threshold_angle") == 0 && have_support_material && is_auto(support_type), -1,
+    toggle_line("support_threshold_overlap", config->opt_int("support_threshold_angle") == 0 && have_support_material && is_auto(support_type), -1,
                  !have_support_material ? support_reason : _L("Select an automatic support type and set the threshold angle to zero to edit threshold overlap."));
     //toggle_field("support_closing_radius", have_support_material && support_style == smsSnug);
 
@@ -1118,9 +1118,11 @@ void ConfigManipulation::toggle_print_fff_options(DynamicPrintConfig *config, in
     toggle_line("bridge_no_support", !support_is_tree, -1, _L("Tree supports use maximum bridge length instead of the bridge support setting."));
     toggle_line("support_critical_regions_only", is_auto(support_type) && support_is_tree, -1, _L("Enable automatic tree supports to show this setting."));
 
+    //Support interfaces and ironing
+    bool have_support_interface = config->opt_int("support_interface_top_layers") > 0 || config->opt_int("support_interface_bottom_layers") > 0;
     for (auto el : { "support_interface_filament",
         "support_interface_loop_pattern", "support_bottom_interface_spacing" })
-        toggle_field(el, have_support_material && have_support_interface, -1,
+        toggle_line(el, have_support_material && have_support_interface, -1,
                      !have_support_material ? support_reason : _L("Set top or bottom support interface layers above zero to edit this setting."));
 
     bool can_ironing_support = have_raft || (have_support_material && config->opt_int("support_interface_top_layers") > 0);
@@ -1129,12 +1131,13 @@ void ConfigManipulation::toggle_print_fff_options(DynamicPrintConfig *config, in
     for (auto el : {"support_ironing_pattern", "support_ironing_flow", "support_ironing_spacing" })
         toggle_line(el, has_support_ironing, -1, _L("Enable support ironing with a raft or top support interface layers to show this setting."));
     // Orca: Force solid support interface when using support ironing
-    toggle_field("support_interface_spacing", have_support_material && have_support_interface && !has_support_ironing, -1,
+    toggle_line("support_interface_spacing", have_support_material && have_support_interface && !has_support_ironing, -1,
                  !have_support_material ? support_reason :
                  !have_support_interface ? _L("Set top or bottom support interface layers above zero to edit interface spacing.") :
                                           _L("Support ironing requires a solid interface, so interface spacing cannot be edited."));
 
-//    see issue #10915
+//    see issue #10915 - don't hide support speed settings based on settings in other tabs
+//    hiding settings based on other tabs makes it diffcult to find how to toggle them when creating profiles
 //    bool have_skirt_height = have_skirt &&
 //    (config->opt_int("skirt_height") > 1 || config->opt_enum<DraftShield>("draft_shield") != dsEnabled);
 //    toggle_line("support_speed", have_support_material || have_skirt_height);
@@ -1148,7 +1151,7 @@ void ConfigManipulation::toggle_print_fff_options(DynamicPrintConfig *config, in
     //toggle_field("support_material_synchronize_layers", have_support_soluble);
 
     toggle_field("inner_wall_line_width", have_perimeters || have_skirt || have_brim, -1, _L("Enable walls, a skirt or a brim to edit inner wall line width."));
-    toggle_field("support_filament", have_support_material || have_skirt, -1, _L("Enable support, a raft, or a skirt to select the support filament."));
+    toggle_line("support_filament", have_support_material || have_skirt, -1, _L("Enable support, a raft, or a skirt to select the support filament."));
 
     toggle_line("raft_contact_distance", have_raft && !have_support_soluble, -1,
                 !have_raft ? _L("Add raft layers to show raft contact distance.") : _L("Raft contact distance is unavailable when the top support Z distance is zero."));
@@ -1159,10 +1162,10 @@ void ConfigManipulation::toggle_print_fff_options(DynamicPrintConfig *config, in
                  _L("Slim, Strong and Hybrid tree supports use first layer expansion instead of raft expansion."));
 
     // Orca: First-layer density is available for supports broadly.
-    toggle_field("raft_first_layer_density", have_support_material, -1, support_reason);
+    toggle_line("raft_first_layer_density", have_support_material, -1, support_reason);
     // Orca: For regular tree (Slim/Strong) without raft, hide first-layer expansion.
     // Keep it enabled for non-tree supports, organic tree, hybrid tree, and any raft case.
-    toggle_field("raft_first_layer_expansion",
+    toggle_line("raft_first_layer_expansion",
                  have_support_material && ((!support_is_normal_tree || support_style == smsTreeHybrid) || have_raft), -1,
                  !have_support_material ? support_reason : _L("Add a raft or choose a tree support style other than Slim or Strong to edit first layer expansion."));
 
