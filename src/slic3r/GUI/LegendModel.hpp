@@ -174,6 +174,7 @@ struct LegendModel
     LegendModeChoice                                      choice;
     // The tool view, which no mode of the menu offers.
     bool                                                  tool_view{false};
+    bool                                                  has_overhang{false}; // ORCA
     std::array<LegendModeSummary, LEGEND_MODE_COUNT>      modes;
     std::vector<LegendRow>                                rows;
     // Line types and moves hidden, against the moves hidden by default.

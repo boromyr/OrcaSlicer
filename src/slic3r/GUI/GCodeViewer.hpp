@@ -200,6 +200,7 @@ private:
     //BBS: add shell bounding box
     BoundingBoxf3 m_shell_bounding_box;
     float m_max_print_height{ 0.0f };
+    bool m_has_overhang_metadata{ false }; // ORCA
     bool  m_machine_frame_transform_active{ false };
     float m_z_offset{ 0.0f };
 
@@ -564,6 +565,7 @@ public:
         }
         return largest;
     }
+    bool has_overhang_metadata() const { return m_has_overhang_metadata; } // ORCA
     bool is_legend_shown() const;
     bool is_summary_shown() const;
     void enable_legend(bool enable) { m_legend_enabled = enable; }

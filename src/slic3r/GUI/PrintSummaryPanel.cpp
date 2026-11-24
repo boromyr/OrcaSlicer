@@ -416,6 +416,7 @@ void PrintSummaryPanel::render(const PreviewPanelPlacement& place, float bottom,
     options.right     = place.is_right();
     options.room      = bottom - place.top;
     options.collapsed = collapse.collapsed();
+    options.width     = std::round(m.px(CanvasUi::space<370>())); // ORCA: wider than G-code panel so translations are not cut
     const CanvasUi::PanelCard frame("Print summary", options, m_body_content);
     render_header(frame, s, model);
     frame.body("##summary_body", m.inline_gap, [&](const CanvasUi::Painter& paint, float left, float top, float width) {

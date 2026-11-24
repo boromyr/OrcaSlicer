@@ -1423,6 +1423,7 @@ void GCodeViewer::load_as_gcode(const GCodeProcessorResult& gcode_result, const 
     m_panels->drop_path_focus();
     m_last_belt_show_designed = m_belt_show_designed;
     m_gcode_result = &gcode_result;
+    m_has_overhang_metadata = gcode_result.has_overhang_metadata; // ORCA
     m_move_type_counts.fill(0);
     for (auto& move_type_times : m_move_type_times)
         move_type_times.fill(0.0f);
@@ -1698,6 +1699,7 @@ void GCodeViewer::reset()
     m_paths_bounding_box = BoundingBoxf3();
     m_max_bounding_box = BoundingBoxf3();
     m_max_print_height = 0.0f;
+    m_has_overhang_metadata = false;
     m_machine_frame_transform_active = false;
     m_z_offset = 0.0f;
     m_extruders_count = 0;

@@ -187,6 +187,7 @@ LegendModel PreviewPanels::legend_model()
     if (const std::optional<LegendModeChoice> choice = legend_mode_of(type))
         model.choice = *choice;
     model.tool_view = type == libvgcode::EViewType::Tool;
+    model.has_overhang = m_gcode.has_overhang_metadata();
 
     add_legend_lines(model);
     add_mode_summaries(model);

@@ -127,7 +127,7 @@ inline constexpr TextRole TextRole::caption{font_size<11>(), space<14>()};
 inline constexpr TextRole TextRole::label{font_size<13>(), space<18>()};
 inline constexpr TextRole TextRole::body{font_size<INTERFACE_FONT_SIZE>(), space<20>()};
 inline constexpr TextRole TextRole::title{font_size<INTERFACE_FONT_SIZE>(), space<20>()};
-inline constexpr TextRole TextRole::code{font_size<14>(), space<18>()};
+inline constexpr TextRole TextRole::code{font_size<14>(), space<20>()};
 
 // How high a surface stands over what is under it: how far its shadow spreads and how dark it is, against the shadow role
 // of the theme. A card stands on the scene, a popup over the card it opens from. A flat surface has no shadow.
@@ -146,7 +146,7 @@ inline constexpr Elevation Elevation::overlay{space<6>(), 1.25f};
 // How far a rounded corner stretches into a curve of continuous curvature, from 0, a circular arc, to 1.
 inline constexpr float CORNER_SMOOTHING = .6f;
 
-inline constexpr std::array<int, 3> MONO_FONT_SIZES = {11, 12, 14};
+inline constexpr std::array<int, 3> MONO_FONT_SIZES = {14, 15, 16};
 
 namespace duration {
 inline constexpr std::chrono::milliseconds tooltip{500};

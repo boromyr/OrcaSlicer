@@ -108,7 +108,7 @@ struct Metrics
     float swatch_radius{px(Radius::sm)};
 
     // A panel of a column over the scene: its width, the height of its header and the side of the header's buttons.
-    float panel_width{std::round(px(space<300>()))};
+    float panel_width{std::round(px(space<370>()))}; // ORCA: was 300
     float panel_header{whole_px(TextRole::title.leading, space<12>())};
     float panel_header_button{px(space<24>())};
     // Above the first component of a panel's body and under its last, and between the body's sections.

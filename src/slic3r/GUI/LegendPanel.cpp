@@ -493,6 +493,9 @@ void LegendPanel::render_header(const CanvasUi::PanelCard& frame, const Sizes& s
     std::optional<LegendModeGroup>  group;
     for (size_t i = 0; i < LEGEND_MODE_COUNT; ++i) {
         const LegendMode mode = LegendMode(i);
+        // ORCA: the Overhang view needs G-code with overhang metadata
+        if (mode == LegendMode::Overhang && !model.has_overhang)
+            continue;
         if (group != legend_mode_group(mode)) {
             group = legend_mode_group(mode);
             items.push_back(CanvasUi::MenuItem::group_label(group_name(*group)));
@@ -600,6 +603,7 @@ void LegendPanel::render(const PreviewPanelPlacement& place, float bottom, const
     options.right     = place.is_right();
     options.room      = bottom - place.top;
     options.collapsed = collapse.collapsed();
+    options.width     = std::round(m.px(CanvasUi::space<370>())); // ORCA: wider than G-code panel so translations are not cut
     std::optional<CanvasUi::SettingsFormOptions> form;
     if (m_settings_open && !collapse.collapsed())
         form = settings_form(options.card_width(m));

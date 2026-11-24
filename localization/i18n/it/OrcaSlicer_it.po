@@ -39332,3 +39332,654 @@ msgstr ""
 # AI Translated
 #~ msgid "import SVG failed: could not parse imported svg data."
 #~ msgstr "importazione SVG non riuscita: impossibile analizzare i dati SVG importati."
+
+msgctxt "Legend"
+msgid "Filament %1%"
+msgstr "Filamento %1%"
+
+msgctxt "G-code window"
+msgid "View"
+msgstr "Vista"
+
+msgctxt "G-code window"
+msgid "Highlighting"
+msgstr "Evidenziazione"
+
+msgctxt "G-code window"
+msgid "Auto"
+msgstr "Auto"
+
+msgctxt "G-code window"
+msgid "Lines"
+msgstr "Righe"
+
+msgctxt "G-code window"
+msgid "Font size"
+msgstr "Dimensione font"
+
+msgctxt "G-code window"
+msgid "Current line"
+msgstr "Riga corrente"
+
+msgctxt "G-code window"
+msgid "Center"
+msgstr "Centro"
+
+msgctxt "G-code window"
+msgid "Upper third"
+msgstr "Terzo superiore"
+
+msgctxt "G-code window"
+msgid "Long lines"
+msgstr "Righe lunghe"
+
+msgctxt "G-code window"
+msgid "Clip"
+msgstr "Taglia"
+
+msgctxt "G-code window"
+msgid "Wrap"
+msgstr "A capo"
+
+msgctxt "G-code window"
+msgid "Comments"
+msgstr "Commenti"
+
+msgctxt "G-code window"
+msgid "All"
+msgstr "Tutti"
+
+msgctxt "G-code window"
+msgid "Tags"
+msgstr "Tag"
+
+msgctxt "G-code window"
+msgid "None"
+msgstr "Nessuno"
+
+msgctxt "G-code window"
+msgid "Align parameters in columns"
+msgstr "Allinea i parametri in colonne"
+
+msgctxt "G-code window"
+msgid "Color axis letters"
+msgstr "Colora le lettere degli assi"
+
+msgctxt "G-code window"
+msgid "Line type stripe"
+msgstr "Striscia del tipo di linea"
+
+msgctxt "G-code window"
+msgid "Shade lines not yet printed"
+msgstr "Ombreggia le righe non ancora stampate"
+
+msgctxt "G-code window"
+msgid "Changed: %1%"
+msgstr "Modificati: %1%"
+
+msgctxt "G-code window"
+msgid "Reset"
+msgstr "Ripristina"
+
+msgctxt "G-code window"
+msgid "Copy line"
+msgstr "Copia riga"
+
+msgctxt "G-code window"
+msgid "Copy visible lines"
+msgstr "Copia righe visibili"
+
+msgctxt "G-code window"
+msgid "Expand"
+msgstr "Espandi"
+
+msgctxt "G-code window"
+msgid "Collapse"
+msgstr "Comprimi"
+
+msgctxt "G-code window"
+msgid "Settings"
+msgstr "Impostazioni"
+
+msgctxt "Move details"
+msgid "LINE"
+msgstr "RIGA"
+
+msgid "W × H"
+msgstr "L × A"
+
+msgctxt "Move details"
+msgid "MOTION"
+msgstr "MOVIMENTO"
+
+msgctxt "Move details"
+msgid "EXTRUSION"
+msgstr "ESTRUSIONE"
+
+msgctxt "Move details"
+msgid "THERMAL"
+msgstr "TERMICO"
+
+msgid "Move %1% of %2%"
+msgstr "Movimento %1% di %2%"
+
+msgid "Speed profile"
+msgstr "Profilo di velocità"
+
+msgid "Actual speed profile · %1% mm · %2% s"
+msgstr "Profilo di velocità reale · %1% mm · %2% s"
+
+msgid "No speed profile for this move"
+msgstr "Nessun profilo di velocità per questo movimento"
+
+msgctxt "Navigator"
+msgid "Available only in Prepare"
+msgstr "Disponibile solo in Prepara"
+
+msgctxt "Navigator"
+msgid "Not available in Preview"
+msgstr "Non disponibile in Anteprima"
+
+msgctxt "Navigator"
+msgid "Not available in Assembly View"
+msgstr "Non disponibile nella vista Assemblaggio"
+
+msgctxt "Navigator"
+msgid "Not available in Design"
+msgstr "Non disponibile in Design"
+
+msgctxt "Navigator"
+msgid "Model"
+msgstr "Modello"
+
+msgctxt "Navigator"
+msgid "Realistic view"
+msgstr "Vista realistica"
+
+msgctxt "Navigator"
+msgid "Scene"
+msgstr "Scena"
+
+msgctxt "Navigator"
+msgid "Navigator background"
+msgstr "Sfondo del navigatore"
+
+msgctxt "Navigator"
+msgid "Belt printer"
+msgstr "Stampante a nastro"
+
+msgid "Single layer"
+msgstr "Singolo layer"
+
+msgid "Overhang"
+msgstr "Sporgenza"
+
+msgctxt "Legend modes"
+msgid "Categories"
+msgstr "Categorie"
+
+msgctxt "Legend modes"
+msgid "Motion"
+msgstr "Movimento"
+
+msgctxt "Legend modes"
+msgid "Extrusion"
+msgstr "Estrusione"
+
+msgctxt "Legend modes"
+msgid "Cooling and heat"
+msgstr "Raffreddamento e calore"
+
+msgctxt "Legend modes"
+msgid "Time"
+msgstr "Tempo"
+
+msgctxt "Legend"
+msgid "Linear"
+msgstr "Lineare"
+
+msgctxt "Legend"
+msgid "Log"
+msgstr "Log"
+
+msgctxt "Legend"
+msgid "Planned"
+msgstr "Pianificata"
+
+msgctxt "Legend"
+msgid "Actual"
+msgstr "Reale"
+
+msgctxt "Legend"
+msgid "layer %1%"
+msgstr "layer %1%"
+
+msgctxt "Legend"
+msgid "layers %1%–%2%"
+msgstr "layer %1%–%2%"
+
+msgctxt "Legend"
+msgid "Filament: %1%, %2%"
+msgstr "Filamento: %1%, %2%"
+
+msgctxt "Legend"
+msgid "Time: %1%, %2% of the print"
+msgstr "Tempo: %1%, %2% della stampa"
+
+msgctxt "Legend"
+msgid "Distance: %1%"
+msgstr "Distanza: %1%"
+
+msgctxt "Legend"
+msgid "Count: %1%"
+msgstr "Numero: %1%"
+
+msgctxt "Legend"
+msgid "Click hides or shows it, Alt+click shows only it."
+msgstr "Clic per nasconderlo o mostrarlo, Alt+clic per mostrare solo questo."
+
+msgctxt "Legend"
+msgid "Time"
+msgstr "Tempo"
+
+msgctxt "Legend"
+msgid "Line type"
+msgstr "Tipo di linea"
+
+msgctxt "Legend"
+msgid "Include travel"
+msgstr "Includi spostamenti"
+
+msgctxt "Legend"
+msgid "on every move"
+msgstr "su ogni movimento"
+
+msgctxt "Legend"
+msgid "Constant in the visible layers, so there is no scale"
+msgstr "Costante nei layer visibili, quindi senza scala"
+
+msgctxt "Legend"
+msgid "Constant in this file, so there is no scale"
+msgstr "Costante in questo file, quindi senza scala"
+
+msgctxt "Legend"
+msgid "Value"
+msgstr "Valore"
+
+msgctxt "Legend"
+msgid "Value, %1%"
+msgstr "Valore, %1%"
+
+msgctxt "Legend"
+msgid "Layers"
+msgstr "Layer"
+
+msgctxt "Legend"
+msgid "Moves"
+msgstr "Movimenti"
+
+msgctxt "Legend"
+msgid "weight · length"
+msgstr "peso · lunghezza"
+
+msgctxt "Legend"
+msgid "Extruder %1%"
+msgstr "Estrusore %1%"
+
+msgctxt "Legend"
+msgid "The line types keep at least one column"
+msgstr "I tipi di linea mantengono almeno una colonna"
+
+msgctxt "Legend"
+msgid "Time column"
+msgstr "Colonna tempo"
+
+msgctxt "Legend"
+msgid "Share column"
+msgstr "Colonna percentuale"
+
+msgctxt "Legend"
+msgid "Weight column"
+msgstr "Colonna peso"
+
+msgctxt "Legend"
+msgid "Length column"
+msgstr "Colonna lunghezza"
+
+msgctxt "Legend"
+msgid "Histogram on scales"
+msgstr "Istogramma sulle scale"
+
+msgctxt "Legend"
+msgid "Highlight in 3D on hover"
+msgstr "Evidenzia in 3D al passaggio del mouse"
+
+msgctxt "Legend"
+msgid "Scale range"
+msgstr "Intervallo della scala"
+
+msgctxt "Legend"
+msgid "Whole print"
+msgstr "Intera stampa"
+
+msgctxt "Legend"
+msgid "Visible layers"
+msgstr "Layer visibili"
+
+msgctxt "Legend"
+msgid "Palette"
+msgstr "Tavolozza"
+
+msgctxt "Legend"
+msgid "Classic"
+msgstr "Classica"
+
+msgctxt "Legend"
+msgid "Perceptual"
+msgstr "Percettiva"
+
+msgctxt "Legend"
+msgid "Changed: %1%"
+msgstr "Modificati: %1%"
+
+msgctxt "Legend"
+msgid "Reset"
+msgstr "Ripristina"
+
+msgctxt "Legend"
+msgid "Expand"
+msgstr "Espandi"
+
+msgctxt "Legend"
+msgid "Collapse"
+msgstr "Comprimi"
+
+msgctxt "Legend"
+msgid "Hidden: %1%"
+msgstr "Nascosti: %1%"
+
+msgctxt "Legend"
+msgid "Click shows them all again."
+msgstr "Clic per mostrarli di nuovo tutti."
+
+msgctxt "Legend"
+msgid "Nothing is hidden"
+msgstr "Nulla è nascosto"
+
+msgctxt "Legend"
+msgid "Legend settings"
+msgstr "Impostazioni legenda"
+
+msgctxt "Legend"
+msgid "Show only %1%"
+msgstr "Mostra solo %1%"
+
+msgctxt "Legend"
+msgid "Alt+click"
+msgstr "Alt+clic"
+
+msgctxt "Legend"
+msgid "Hide"
+msgstr "Nascondi"
+
+msgctxt "Legend"
+msgid "Show"
+msgstr "Mostra"
+
+msgctxt "Legend"
+msgid "Click"
+msgstr "Clic"
+
+msgctxt "Legend"
+msgid "Show all line types"
+msgstr "Mostra tutti i tipi di linea"
+
+msgctxt "Legend"
+msgid "Hide all moves"
+msgstr "Nascondi tutti i movimenti"
+
+msgctxt "Legend"
+msgid "Copy statistics"
+msgstr "Copia statistiche"
+
+msgctxt "Legend"
+msgid "Highlight %1% · %2% of the layers"
+msgstr "Evidenzia %1% · %2% dei layer"
+
+msgctxt "Legend"
+msgid "Highlight %1% · %2% of the time"
+msgstr "Evidenzia %1% · %2% del tempo"
+
+msgctxt "Legend"
+msgid "%1% of the print runs at the filament limit: speed there is capped by flow, not by the speed settings."
+msgstr "%1% della stampa è al limite del filamento: lì la velocità è limitata dal flusso, non dalle impostazioni di velocità."
+
+msgctxt "Legend"
+msgid "No part of the print reaches the filament limit."
+msgstr "Nessuna parte della stampa raggiunge il limite del filamento."
+
+msgctxt "Legend"
+msgid "%1%, %2% of the time"
+msgstr "%1%, %2% del tempo"
+
+msgctxt "Legend"
+msgid "Max volumetric speed %1%"
+msgstr "Velocità volumetrica max %1%"
+
+msgctxt "Legend"
+msgid "Layer time %1%"
+msgstr "Tempo layer %1%"
+
+msgctxt "Legend"
+msgid "filament %1%"
+msgstr "filamento %1%"
+
+msgctxt "Legend"
+msgid "filaments %1%"
+msgstr "filamenti %1%"
+
+msgctxt "Legend"
+msgid "From"
+msgstr "Da"
+
+msgctxt "Legend"
+msgid "To"
+msgstr "A"
+
+msgctxt "Legend"
+msgid "Apply"
+msgstr "Applica"
+
+msgctxt "Legend"
+msgid "Highlight range"
+msgstr "Evidenzia intervallo"
+
+msgid "Show Legend"
+msgstr "Mostra legenda"
+
+msgid "Show the legend in Preview scene."
+msgstr "Mostra la legenda nella scena Anteprima."
+
+msgid "Show Print Summary"
+msgstr "Mostra riepilogo stampa"
+
+msgid "Show the print summary in Preview scene."
+msgstr "Mostra il riepilogo di stampa nella scena Anteprima."
+
+msgctxt "Navigator"
+msgid "Default view"
+msgstr "Vista predefinita"
+
+msgctxt "Navigator"
+msgid "Reset home view"
+msgstr "Ripristina vista home"
+
+msgctxt "Navigator"
+msgid "No home view is set"
+msgstr "Nessuna vista home impostata"
+
+msgid "Orthographic"
+msgstr "Ortografica"
+
+msgctxt "Navigator"
+msgid "Auto perspective"
+msgstr "Prospettiva automatica"
+
+msgctxt "Navigator"
+msgid "Set current view as home"
+msgstr "Imposta vista corrente come home"
+
+msgctxt "Navigator"
+msgid "Home view"
+msgstr "Vista home"
+
+msgctxt "Navigator"
+msgid "Rotate left by 90°"
+msgstr "Ruota a sinistra di 90°"
+
+msgctxt "Navigator"
+msgid "Rotate right by 90°"
+msgstr "Ruota a destra di 90°"
+
+msgctxt "Navigator"
+msgid "Views"
+msgstr "Viste"
+
+msgctxt "Navigator"
+msgid "Fit view"
+msgstr "Adatta vista"
+
+msgctxt "Navigator"
+msgid "Display"
+msgstr "Visualizzazione"
+
+msgid "Legend on the Left"
+msgstr "Legenda a sinistra"
+
+msgid "Show the legend at the left edge of the Preview scene."
+msgstr "Mostra la legenda sul bordo sinistro della scena Anteprima."
+
+msgid "G-code Window on the Left"
+msgstr "Finestra G-code a sinistra"
+
+msgid "Show the G-code window at the left edge of the Preview scene."
+msgstr "Mostra la finestra G-code sul bordo sinistro della scena Anteprima."
+
+msgid "Print Summary on the Left"
+msgstr "Riepilogo stampa a sinistra"
+
+msgid "Show the print summary at the left edge of the Preview scene."
+msgstr "Mostra il riepilogo di stampa sul bordo sinistro della scena Anteprima."
+
+msgid "G-code Window Above the Legend"
+msgstr "Finestra G-code sopra la legenda"
+
+msgid "When the legend and the G-code window are on the same side, show the G-code window first."
+msgstr "Quando la legenda e la finestra G-code sono sullo stesso lato, mostra prima la finestra G-code."
+
+msgid "Preview Layout"
+msgstr "Layout anteprima"
+
+msgid "Choose where the legend, the print summary and the G-code window stand in the Preview scene."
+msgstr "Scegli dove posizionare legenda, riepilogo di stampa e finestra G-code nella scena Anteprima."
+
+msgctxt "Legend"
+msgid "Click shows every filament again."
+msgstr "Clic per mostrare di nuovo tutti i filamenti."
+
+msgctxt "Legend"
+msgid "Click keeps only this filament in colour."
+msgstr "Clic per tenere a colori solo questo filamento."
+
+msgctxt "Print summary"
+msgid "cost"
+msgstr "costo"
+
+msgctxt "Print summary"
+msgid "Model filament: %1%"
+msgstr "Filamento modello: %1%"
+
+msgctxt "Print summary"
+msgid "Normal"
+msgstr "Normale"
+
+msgctxt "Print summary"
+msgid "Stealth"
+msgstr "Silenziosa"
+
+msgctxt "Print summary"
+msgid "Prepare %1% · printing %2%"
+msgstr "Preparazione %1% · stampa %2%"
+
+msgctxt "Print summary"
+msgid "model %1%"
+msgstr "modello %1%"
+
+msgctxt "Print summary"
+msgid "support %1%"
+msgstr "supporto %1%"
+
+msgctxt "Print summary"
+msgid "flush %1%"
+msgstr "spurgo %1%"
+
+msgctxt "Print summary"
+msgid "tower %1%"
+msgstr "torre %1%"
+
+msgctxt "Print summary"
+msgid "Filaments · %1%"
+msgstr "Filamenti · %1%"
+
+msgctxt "Print summary"
+msgid "Changes"
+msgstr "Cambi"
+
+msgctxt "Print summary"
+msgid "Events"
+msgstr "Eventi"
+
+msgctxt "Print summary"
+msgid "Layer"
+msgstr "Layer"
+
+msgctxt "Print summary"
+msgid "Time"
+msgstr "Tempo"
+
+msgctxt "Print summary"
+msgid "Go to its layer"
+msgstr "Vai al suo layer"
+
+msgctxt "Print summary"
+msgid "How grouping works"
+msgstr "Come funziona il raggruppamento"
+
+msgctxt "Print summary"
+msgid "Profiles in this file"
+msgstr "Profili in questo file"
+
+msgctxt "Print summary"
+msgid "Filament %1%"
+msgstr "Filamento %1%"
+
+msgctxt "Print summary"
+msgid "Expand"
+msgstr "Espandi"
+
+msgctxt "Print summary"
+msgid "Collapse"
+msgstr "Comprimi"
+
+msgctxt "Print summary"
+msgid "Print summary"
+msgstr "Riepilogo stampa"
+
+msgid "On/Off legend"
+msgstr "Attiva/Disattiva legenda"
+
+msgid "On/Off print summary"
+msgstr "Attiva/Disattiva riepilogo stampa"
+
+msgid "Show/Hide the G-code legend"
+msgstr "Mostra/Nascondi la legenda G-code"
