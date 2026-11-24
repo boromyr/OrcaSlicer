@@ -10,6 +10,7 @@ add_executable(${_TEST_NAME}_tests
 	test_calib.cpp
 	test_conflict_checker.cpp
 	test_cooling.cpp
+	test_islands.cpp
 	test_extrusion_entity.cpp
 	test_extrusion_processor.cpp
 	test_exclusion_volumes.cpp
