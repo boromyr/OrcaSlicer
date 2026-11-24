@@ -430,6 +430,7 @@ bool Print::invalidate_state_by_config_options(const ConfigOptionResolver & /* n
         "islands_clearance_height",
         "support_material_interface_fan_speed",
         "internal_bridge_fan_speed", // ORCA: Add support for separate internal bridge fan speed control
+        "external_bridge_fan_speed", // ORCA: Add support for separate external bridge fan speed control
         "ironing_fan_speed",
         "single_extruder_multi_material_priming",
         "activate_air_filtration",
