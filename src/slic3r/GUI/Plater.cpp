@@ -4183,6 +4183,10 @@ void Sidebar::update_presets(Preset::Type preset_type)
     // Synchronize config.ini with the current selections.
     wxGetApp().preset_bundle->export_selections(*wxGetApp().app_config);
 
+    // ORCA the tab bar shows a few of these settings as well
+    if (wxGetApp().mainframe != nullptr)
+        wxGetApp().mainframe->update_quick_settings();
+
     BOOST_LOG_TRIVIAL(debug) << __FUNCTION__ << boost::format(": exit.");
 }
 
@@ -4400,7 +4404,8 @@ void Sidebar::update_mixed_filament_list()
     }
 
     bool at_limit = (wxGetApp().preset_bundle->filament_presets.size() >= size_t(EnforcerBlockerType::ExtruderMax));
-    p->m_btn_add_mixed_filament->Show(can_mix && !has_mixed && !at_limit);
+    const bool hide_mm = wxGetApp().app_config->get_bool("hide_multi_material");
+    p->m_btn_add_mixed_filament->Show(can_mix && !has_mixed && !at_limit && !hide_mm);
     p->m_panel_mixed_title->Show(has_mixed);
     p->m_mixed_scroll_area->Show(has_mixed);
     p->m_panel_mixed_content->Show(has_mixed);
@@ -6641,7 +6646,9 @@ void Sidebar::show_SEMM_buttons()
     bool is_multi  = single_or_bbl && is_multi_material;  // MULTI MATERIAL WITH SINGLE EXTRUDER
     bool is_fixed  = !is_single && !is_multi;             // MULTI EXTRUDER / TOOLCHANGER / IDEX WITH FIXED MATERIAL
 
-    p->m_bpButton_add_filament->Show(single_or_bbl);
+    // Orca fork: with multi-material hidden, a project that already has several filaments can still be reduced.
+    const bool hide_mm = wxGetApp().app_config->get_bool("hide_multi_material");
+    p->m_bpButton_add_filament->Show(single_or_bbl && !hide_mm);
     p->m_bpButton_del_filament->Show(is_multi);
     p->m_flushing_volume_btn->Show(  is_multi);
 
@@ -14388,6 +14395,8 @@ void Plater::priv::on_plate_selected(SimpleEvent&)
 {
     BOOST_LOG_TRIVIAL(debug) << __FUNCTION__ << ":received plate selected event\n" ;
     sidebar->obj_list()->on_plate_selected(partplate_list.get_curr_plate_index());
+    // ORCA plates can carry their own bed type, which the tab bar shows the temperature of
+    main_frame->update_quick_settings();
 }
 
 void Plater::priv::on_action_request_model_id(wxCommandEvent& evt)
@@ -17377,6 +17386,23 @@ void Plater::_calib_pa_pattern(const Calib_Params& params)
         new ConfigOptionEnum<BrimType>(SuggestedConfigCalibPAPattern().brim_pair.second));
 
     print_config.set_key_value("enable_wrapping_detection", new ConfigOptionBool(false));
+
+    // Orca: the user enters volumetric flow rates (mm3/s); convert them to print speeds using the
+    // same flow model the pattern itself uses: speed = flow / (mm3_per_mm * flow_ratio).
+    // line_width has just been set above (nozzle_ratio_pairs), so the conversion matches what the
+    // pattern will actually print with. The speed is rounded to an integer because the pattern's
+    // speed_adjust() truncates to int when emitting the feedrate; rounding here keeps the resulting
+    // flow as close as possible to the requested value (otherwise e.g. 10 prints as ~9.9 mm³/s).
+    if (!speeds.empty()) {
+        const double line_width   = print_config.get_abs_value("line_width", nozzle_diameter);
+        const double layer_height = print_config.get_abs_value("layer_height");
+        const double flow_ratio   = filament_config->option<ConfigOptionFloatsNullable>("filament_flow_ratio")->get_at(0);
+        const double mm3_per_mm   = Flow(line_width, layer_height, nozzle_diameter).mm3_per_mm() * flow_ratio;
+        if (mm3_per_mm > EPSILON) {
+            for (double& v : speeds)
+                v = std::round(v / mm3_per_mm);
+        }
+    }
 
     // Orca: Set the outer wall speed to the optimal speed for the test, cap it with max volumetric speed
     if (speeds.empty()) {
@@ -22272,6 +22298,9 @@ void Plater::on_config_change(const DynamicPrintConfig &config)
         update_title_dirty_status();
         p->schedule_auto_reslice_if_needed();
     }
+
+    // ORCA the bed temperature shown in the tab bar depends on the plate type
+    p->main_frame->update_quick_settings();
 }
 
 void Plater::update_flush_volume_matrix(size_t old_nozzle_size, size_t new_nozzle_size)
@@ -23796,6 +23825,8 @@ void Plater::open_platesettings_dialog(wxCommandEvent& evt) {
         wxGetApp().plater()->config_change_notification(plate_config, std::string("print_sequence"));
         update();
         wxGetApp().obj_list()->update_selections();
+        // ORCA the bed temperature shown in the tab bar follows the plate type
+        wxGetApp().mainframe->update_quick_settings();
         });
     dlg.set_plate_name(from_u8(curr_plate->get_plate_name()));
 

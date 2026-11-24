@@ -1734,6 +1734,7 @@ bool PrintObject::invalidate_state_by_config_options(
             || opt_key == "small_area_infill_flow_compensation"
             || opt_key == "lateral_lattice_angle_1"
             || opt_key == "lateral_lattice_angle_2"
+            || opt_key == "gyroid_saddle_bridges"
             || opt_key == "infill_overhang_angle"
             || opt_key == "sparse_infill_strategy") {
             steps.emplace_back(posInfill);

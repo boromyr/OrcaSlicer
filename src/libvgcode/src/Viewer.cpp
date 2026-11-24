@@ -149,6 +149,16 @@ void Viewer::set_translucent_filaments(bool value)
     m_impl->set_translucent_filaments(value);
 }
 
+bool Viewer::is_rescale_colors_to_visible_layer() const
+{
+    return m_impl->is_rescale_colors_to_visible_layer();
+}
+
+void Viewer::set_rescale_colors_to_visible_layer(bool value)
+{
+    m_impl->set_rescale_colors_to_visible_layer(value);
+}
+
 void Viewer::set_reduced_detail_mode(EReducedDetailMode mode)
 {
     m_impl->set_reduced_detail_mode(mode);

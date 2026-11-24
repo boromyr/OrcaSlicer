@@ -264,6 +264,10 @@ void AppConfig::set_defaults()
     if (get("preview_default_view_type").empty())
         set("preview_default_view_type", "auto");
 
+    // ORCA: scale the preview colors to the layer shown alone
+    if (get("preview_rescale_colors_to_layer").empty())
+        set_bool("preview_rescale_colors_to_layer", true);
+
     if (get("filaments_area_preferred_count").empty())
         set("filaments_area_preferred_count", "10");
 
@@ -520,6 +524,10 @@ void AppConfig::set_defaults()
     }
 
     // Orca
+    // Orca fork: single-nozzle users hide the multi-material GUI by default.
+    if (get("hide_multi_material").empty())
+        set_bool("hide_multi_material", true);
+
     if(get("show_splash_screen").empty()) {
         set_bool("show_splash_screen", true);
     }
