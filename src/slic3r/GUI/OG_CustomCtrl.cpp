@@ -647,6 +647,8 @@ void OG_CustomCtrl::msw_rescale()
     if (m_bmp_multi_extruder.bmp().IsOk())
         m_bmp_multi_extruder.msw_rescale();
 
+    m_multi_extruder.msw_rescale();
+
     m_max_win_width = 0;
 
     wxCoord    h_pos = (ctrlWidth + get_title_width() - titleWidth) * m_em_unit;
@@ -740,7 +742,7 @@ void OG_CustomCtrl::CtrlLine::msw_rescale()
 {
     // if we have a single option with no label, no sidetext
     if (draw_just_act_buttons)
-        height = get_bitmap_size(create_scaled_bitmap("empty")).GetHeight();
+        height = get_bitmap_size(create_scaled_bitmap("empty")).GetHeight() + ctrl->m_v_gap;
 
     if (ctrl->opt_group->label_width != 0 && !og_line.label.IsEmpty()) {
         wxSize label_sz = ctrl->GetTextExtent(og_line.label);

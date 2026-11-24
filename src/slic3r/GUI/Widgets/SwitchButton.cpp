@@ -317,6 +317,7 @@ void ModeSwitchButton::SelectAndNotify(int selection)
 
 void ModeSwitchButton::Rescale()
 {
+    StaticBox::Rescale();
     const wxSize button_size = FromDIP(wxSize(48, 18));
     SetMinSize(button_size);
     SetMaxSize(button_size);
@@ -667,7 +668,7 @@ MultiSwitchButton::MultiSwitchButton(wxWindow *parent, wxWindowID id, const wxPo
     , m_button_radius(10.0)
     , m_button_padding(11, 3)
 {
-    SetCornerRadius(m_button_radius);
+    SetCornerRadius(parent->FromDIP(m_button_radius));
     SetBorderWidth(0);
 
     // Orca: a switch can hold more buttons than the layout has room for (a toolchanger lists one per
@@ -908,10 +909,10 @@ void MultiSwitchButton::SetTextColor(const StateColor &color)
 
 void MultiSwitchButton::SetButtonCornerRadius(double radius)
 {
-    m_button_radius = radius;
-    SetCornerRadius(radius);
+    m_button_radius = m_parent->FromDIP(radius);
+    SetCornerRadius(m_button_radius);
     for (auto *btn : btns)
-        btn->SetCornerRadius(radius);
+        btn->SetCornerRadius(m_button_radius);
     Layout();
     Refresh();
 }
@@ -935,6 +936,7 @@ void MultiSwitchButton::SetModified(int index, bool modified){
 
 void MultiSwitchButton::Rescale()
 {
+    StaticBox::Rescale();
     for (auto *btn : btns) {
         btn->SetPaddingSize(FromDIP(m_button_padding));
         btn->Rescale();

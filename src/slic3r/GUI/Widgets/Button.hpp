@@ -112,7 +112,7 @@ public:
 
     void SetVertical(bool vertical = true);
 
-    void Rescale();
+    void Rescale() override;
 
     // Programmatically activate the button, as if it had been clicked. Used by the
     // accessibility layer to trigger the button from a screen reader.

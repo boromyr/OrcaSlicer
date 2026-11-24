@@ -156,6 +156,7 @@ void ImageSwitchButton::render(wxDC& dc)
 
 void ImageSwitchButton::Rescale()
 {
+    StaticBox::Rescale();
 	messureSize();
 }
 
@@ -357,6 +358,7 @@ void FanSwitchButton::render(wxDC& dc)
 
 void FanSwitchButton::Rescale()
 {
+    StaticBox::Rescale();
     messureSize();
 }
 

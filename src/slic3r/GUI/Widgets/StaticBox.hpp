@@ -55,6 +55,8 @@ public:
 
     void ShowBadge(bool show);
 
+    virtual void Rescale();
+
 protected:
     void eraseEvent(wxEraseEvent& evt);
 
