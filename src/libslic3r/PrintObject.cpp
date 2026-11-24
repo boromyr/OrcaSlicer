@@ -1873,6 +1873,7 @@ bool PrintObject::invalidate_state_by_config_options(
             || opt_key == "support_interface_volumetric_flow"
             || opt_key == "bridge_volumetric_flow"
             || opt_key == "internal_bridge_volumetric_flow"
+            || opt_key == "wo_bridge_speed"
             || opt_key == "outer_wall_speed"
             || opt_key == "small_perimeter_speed"
             || opt_key == "small_perimeter_threshold"
