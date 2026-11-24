@@ -3201,12 +3201,13 @@ void PerimeterGenerator::process_arachne()
             }
       }
     });
-    for (ArachneSurfaceResult &result : results) {
+    for (size_t surface_idx = 0; surface_idx < results.size(); ++surface_idx) {
+        ArachneSurfaceResult &result = results[surface_idx];
         if (result.has_loops)
             // Moved, not copied: append(const ExtrusionEntity &) clones the whole wall tree of the island.
             this->loops->append(std::move(result.loops));
         this->fill_surfaces->append(result.infill, stInternal);
-        apply_extra_perimeters(result.infill);
+        apply_extra_perimeters(result.infill, all_surfaces[surface_idx].expolygon);
         append(*this->fill_no_overlap, std::move(result.no_overlap));
     }
 }

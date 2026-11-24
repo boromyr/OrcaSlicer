@@ -69,7 +69,7 @@ public:
         return {};
     }
 
-    int ShowModal();
+    int ShowModal() override;
     void set_modal_btn_labels(const wxString& left_label, const wxString& right_label);
     void on_dpi_changed(const wxRect& suggested_rect) override;
 

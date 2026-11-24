@@ -1158,6 +1158,7 @@ void ConfigManipulation::toggle_print_fff_options(DynamicPrintConfig *config, in
     toggle_field("inner_wall_line_width", have_perimeters || have_skirt || have_brim, -1, _L("Enable walls, a skirt or a brim to edit inner wall line width."));
     toggle_line("support_filament", have_support_material || have_skirt, -1, _L("Enable support, a raft, or a skirt to select the support filament."));
 
+    bool have_support_soluble = have_support_material && config->opt_float("support_top_z_distance") == 0;
     toggle_line("raft_contact_distance", have_raft && !have_support_soluble, -1,
                 !have_raft ? _L("Add raft layers to show raft contact distance.") : _L("Raft contact distance is unavailable when the top support Z distance is zero."));
     // Orca:Hide raft expansion when raft is not enabled

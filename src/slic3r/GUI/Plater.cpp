@@ -849,7 +849,7 @@ struct ExtruderGroup : StaticBox
 
     void Rescale() override
     {
-        StaticGroup::Rescale();
+        StaticBox::Rescale();
 
         SetCornerRadius(FromDIP(PRINTER_PANEL_RADIUS)); // ORCA match radius with other boxes
         if (hover_label)

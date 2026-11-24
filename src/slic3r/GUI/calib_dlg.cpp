@@ -707,7 +707,6 @@ void Temp_Calibration_Dlg::on_show(wxShowEvent& event) {
 }
 
 void Temp_Calibration_Dlg::on_dpi_changed(const wxRect& suggested_rect) {
-    m_rbFilamentType->Rescale();
     m_tiStart->Rescale();
     m_tiEnd->Rescale();
     m_tiStep->Rescale();

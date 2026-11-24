@@ -1,4 +1,5 @@
 #include "Tab.hpp"
+#include <wx/dcbuffer.h>
 #include "Auxiliary.hpp"
 #include "libslic3r/Utils.hpp"
 #include "libslic3r/Model.hpp"
