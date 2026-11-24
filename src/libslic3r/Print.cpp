@@ -58,6 +58,7 @@
 #include "IMEXHelpers.hpp"
 #include "IMEXZones.hpp"
 #include "Print.hpp"
+#include "Memory.hpp"
 #include "BoundingBox.hpp"
 #include "Brim.hpp"
 #include "ClipperUtils.hpp"
@@ -3688,6 +3689,7 @@ void Print::process(long long *time_cost_with_cache, bool use_cache)
             }, [](PrintObject *obj) {
                 if (obj->set_started(posSlice)) obj->set_done(posSlice);   // shared/duplicate — no hook
             });
+        trim_process_memory();
         for_each_object_step(needs_slicing, [&](PrintObject *obj) {
                 const bool was_done = obj->is_step_done(posPerimeters);
                 obj->make_perimeters();   // slice() inside is a no-op: posSlice already DONE
@@ -3703,6 +3705,7 @@ void Print::process(long long *time_cost_with_cache, bool use_cache)
                 if (obj->set_started(posEstimateCurledExtrusions))
                     obj->set_done(posEstimateCurledExtrusions);
             });
+        trim_process_memory();
         for_each_object_step(needs_slicing, [&](PrintObject *obj) {
                 // split prepare_infill (fill-surface prep) from infill (make_fills) so a
                 // plugin can mutate fill surfaces at the PrepareInfill seam and have make_fills
@@ -3742,6 +3745,7 @@ void Print::process(long long *time_cost_with_cache, bool use_cache)
                     obj->set_done(posContouring);
             }
         }
+        trim_process_memory();
 
         // SlicingPipeline: support runs in the parallel block below; the hook must fire in a
         // sequential loop afterward. Snapshot per-object done-state just before the parallel_for.
@@ -3784,6 +3788,7 @@ void Print::process(long long *time_cost_with_cache, bool use_cache)
                 if (obj->set_started(posDetectOverhangsForLift))
                     obj->set_done(posDetectOverhangsForLift);
             });
+        trim_process_memory();
     }
     else {
         for (PrintObject *obj : m_objects) {
@@ -4143,6 +4148,7 @@ void Print::process(long long *time_cost_with_cache, bool use_cache)
         this->finalize_first_layer_convex_hull();
         this->set_done(psSkirtBrim);
         if (m_pipeline_plugin_active) run_pipeline_hook(SlicingPipelineStepPlugin::psSkirtBrim, nullptr);
+        trim_process_memory();
 
         if (time_cost_with_cache) {
             end_time = (long long)Slic3r::Utils::get_current_time_utc();
@@ -4199,6 +4205,7 @@ void Print::process(long long *time_cost_with_cache, bool use_cache)
     }
 
     BOOST_LOG_TRIVIAL(info) << "Slicing process finished." << log_memory_info();
+    trim_process_memory();
 
     {
         LifecycleEventContext ctx;
