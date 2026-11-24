@@ -158,10 +158,12 @@ constexpr std::array<ShortcutInfo, size_t(Shortcut::Count)> shortcut_table = {{
     SHORTCUT(ShowCollisionVolumes, "show_collision_volumes", L("Show all collision volumes"),                   GLOBAL,  { 'K', CTRL_SHIFT }),
     SHORTCUT(ShowWireframe,     "show_wireframe",     L("Show/Hide wireframe"),                                  CANVAS,  { WXK_RETURN, CTRL_SHIFT }),
     SHORTCUT(ToggleGcodeWindow,   "toggle_gcode_window",   L("On/Off G-code window"),                            PREVIEW, { 'C' }),
+    SHORTCUT(ToggleLegend,        "toggle_legend",         L("On/Off legend"),                                   PREVIEW, {}),
+    SHORTCUT(TogglePrintSummary,  "toggle_print_summary",  L("On/Off print summary"),                            PREVIEW, {}),
     SHORTCUT(ToggleOneLayerMode,  "toggle_one_layer_mode", L("On/Off one layer mode of the vertical slider"),    PREVIEW, { 'L' }),
     SHORTCUT(ToggleBeltRawGcode,  "toggle_belt_raw_gcode", L("Show raw G-code (belt only)"),                     PREVIEW, { 'B' }),
     // ORCA: shares Space with the Speed Dial on purpose; in Preview the legend wins and the dial opens with AltGr+Space
-    SHORTCUT(ToggleLegendFold,    "toggle_legend_fold",    L("Fold/Unfold the G-code legend"),                   PREVIEW, { WXK_SPACE }),
+    SHORTCUT(ToggleLegendFold,    "toggle_legend_fold",    L("Show/Hide the G-code legend"),                   PREVIEW, { WXK_SPACE }),
 
     // Application
     SHORTCUT(Preferences,       "preferences",        L("Preferences"),                                          GLOBAL, PREFERENCES_CHORD),

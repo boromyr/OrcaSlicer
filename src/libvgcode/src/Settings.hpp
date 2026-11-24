@@ -9,6 +9,7 @@
 
 #include <array>
 #include <cstddef>
+#include <limits>
 #include <map>
 
 namespace libvgcode {
@@ -36,6 +37,8 @@ struct Settings
 		// current view type are computed from the values found in that layer only, instead of
 		// the whole print, so that the palette resolves the details of the inspected layer
 		bool rescale_colors_to_visible_layer{ false };
+		// ORCA: the layers the color ranges span; all of them by default
+		Interval ranges_layers{ 0, std::numeric_limits<std::size_t>::max() };
 		bool spiral_vase_mode{ false };
 		// what the reduced set holds and whether it is drawn. Ignored on the OpenGL ES path.
 		EReducedDetailMode reduced_detail_mode{ EReducedDetailMode::Off };
